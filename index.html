@@ -4,6 +4,8 @@
 <title>Nhà Xe Thịnh Phát – Quản lý vận tải</title>
 <meta name="theme-color" content="#0f766e">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+ <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root{--bg:#f4f6f5;--card:#fff;--tx:#14201d;--mu:#5b6b66;--bd:#dbe3e0;--pr:#0f766e;--prt:#fff;--dg:#b42318;--wn:#b54708;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1513;--card:#17211e;--tx:#e8efed;--mu:#9bb0aa;--bd:#2a3a36;--pr:#2dd4bf;--prt:#042f2a;--dg:#f97066;--wn:#fdb022;color-scheme:dark}}
@@ -92,9 +94,9 @@ async function login(){const er=m=>{$('#err').textContent=m},p=phn($('#ph').valu
 const DEV=(()=>{let d='';try{d=localStorage.getItem('tpx_dev')||''}catch(e){}if(!d){d=uid()+uid();try{localStorage.setItem('tpx_dev',d)}catch(e){}}return d})(),
 phn=x=>String(x||'').replace(/\D/g,'').replace(/^0/,''),
 hs=async(p,w)=>{try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(p+'|'+w));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return p+'|'+w}},
-dbErr=e=>e&&e.code==='invalid_argument'?'Tài khoản Claude của bạn chưa có quyền ghi (cần quyền Cộng tác viên)':'Lỗi kết nối dùng chung, thử lại sau';
+dbErr=e=>e&&e.code==='permission-denied'?'Tài khoản Claude của bạn chưa có quyền ghi (cần quyền Cộng tác viên)':'Lỗi kết nối dùng chung, thử lại sau';
 let DBX=null,UN=[],DV=[],NT=[],ntInit=0;
-if(typeof claude!=='undefined')claude.use('db').then(d=>{DBX=d;if(d&&U)startSync()}).catch(()=>{});
+try{firebase.initializeApp({apiKey:"AIzaSyB7fQ893K6NhYeN8jG2o2H9ay8slLAk6hk",authDomain:"nhaxethinhphat-48610.firebaseapp.com",projectId:"nhaxethinhphat-48610",storageBucket:"nhaxethinhphat-48610.firebasestorage.app",messagingSenderId:"531757729489",appId:"1:531757729489:web:86411e469ddf6f946b67f0"});DBX=firebase.firestore()}catch(e){console.error(e)}
 function enter(u){U=u;if(admin())genCodes();if(DBX&&!admin()&&u.KEY)logDev();view='home';render();startSync()}
 function pend(code){$('#app').innerHTML=`<div class="card login" id="pk"><h2>Chờ kích hoạt</h2><p>Máy của bạn đã gửi yêu cầu tới admin.</p><div class="mu">Mã kích hoạt của bạn</div><p class="k" style="letter-spacing:3px">${esc(code||'—')}</p><div class="mu">Mã máy: <b>${DEV.slice(0,6).toUpperCase()}</b></div><p class="mu">Khi admin kích hoạt, bạn sẽ nhận thông báo ngay tại đây.</p><button style="width:100%" onclick="render()">Quay lại đăng nhập</button></div>`;
  try{UN.push(DBX.doc('dev/'+DEV).onSnapshot(s=>{const d=s.exists&&s.data();if(d&&d.status==='active'&&!U&&$('#pk'))$('#pk').innerHTML=`<h2><span class="nbd g" style="font-size:20px;padding:2px 10px">🔔</span> Đã kích hoạt</h2><p>Admin đã kích hoạt máy của bạn. Bấm Đăng nhập, để trống mật khẩu và đặt mật khẩu mới.</p><button class="p" style="width:100%;background:#16a34a;border-color:#16a34a;color:#fff" onclick="render()">Đăng nhập</button>`}))}catch(e){}}
@@ -104,7 +106,7 @@ async function pwSv(p,f){const a=$('#n1').value;if(a.length<4)return toast('Mậ
 function stopSync(){UN.forEach(f=>{try{f()}catch(e){}});UN=[];DV=[];NT=[];ntInit=0}
 function startSync(){if(!DBX||!U)return;stopSync();
  if(admin()){genCodes();logDev();if(DB.nv.length)syncDir();UN.push(DBX.collection('dev').onSnapshot(s=>{DV=s.docs.map(d=>({id:d.id,...d.data()}));try{const j=JSON.stringify(DV);if(window._dj!==j){window._dj=j;DB.cfg.devs=DV;save()}}catch(e){}if(ntInit)s.docChanges().forEach(c=>{if(c.type==='added'&&c.doc.data().status==='pending')toast('🔴 Yêu cầu kích hoạt mới: '+c.doc.data().name+' ('+(c.doc.data().code||'')+')','card rdt')});ntInit=1;if(!$('#dlg').open)render()},()=>{}))}
- else{let first=1;UN.push(DBX.collection('nt').where('to','==',phn(U['SỐ ĐIỆN THOẠI'])).orderBy('at','desc').limit(40).onSnapshot(s=>{NT=s.docs.map(d=>({id:d.id,...d.data()}));if(!first)s.docChanges().forEach(c=>{if(c.type==='added')pushN(c.doc.data().text)});first=0;if(!$('#dlg').open)render()},()=>{}))}}
+ else{let first=1;UN.push(DBX.collection('nt').where('to','==',phn(U['SỐ ĐIỆN THOẠI'])).onSnapshot(s=>{NT=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,40);if(!first)s.docChanges().forEach(c=>{if(c.type==='added')pushN(c.doc.data().text)});first=0;if(!$('#dlg').open)render()},()=>{}))}}
 function pushN(t){toast('🔔 '+t,'card gnt');try{if(window.Notification&&Notification.permission==='granted')new Notification('Nhà Xe Thịnh Phát',{body:t})}catch(e){}}
 const lrK=()=>'tpx_nr_'+phn(U['SỐ ĐIỆN THOẠI']),lrG=()=>{try{return localStorage.getItem(lrK())||''}catch(e){return ''}},unread=()=>U&&!admin()?NT.filter(n=>n.at>lrG()).length:0;
 function tb(){const lr=lrG(),it=NT.map(n=>`<div class="card" style="${n.at>lr?'border-color:var(--pr)':''}"><div>${esc(n.text)}</div><div class="mu">${esc(String(n.at).slice(0,16).replace('T',' '))}</div></div>`).join('');
