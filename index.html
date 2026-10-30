@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T23:43:27.484Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T23:50:33.967Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -10311,7 +10311,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-10-31T06:55';
+const APP_BUILD = '2026-10-31T07:00';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
@@ -10348,23 +10348,24 @@ const UPD = {
 addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
 window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
 
-/* ===== Màn hình đăng nhập: báo rõ khi file app chưa có cấu hình kết nối (nhân viên sẽ không đăng nhập được) ===== */
+/* ===== Màn hình đăng nhập gọn: ẩn mọi ghi chú (kể cả gợi ý tài khoản lần đầu); chỉ còn nút bánh răng nhỏ để quản lý nhập cấu hình ===== */
 {
   const l0 = Auth.login; Auth.login = function () {
     const r = l0.apply(this, arguments);
     try {
-      const c = GS.cfg(), shell = DB && DB._meta && DB._meta.shell, noCfg = !(c.url || (c.fb && c.fb.projectId));
-      const f = document.querySelector('.au-wrap form');
-      if (f && shell && noCfg && !f.querySelector('.au-nocfg')) {
-        f.insertAdjacentHTML('beforeend', `<div class="au-nocfg">${ic('alert')}<div><b>App trên máy này chưa được kết nối dữ liệu.</b> Nhân viên chưa đăng nhập được bằng số điện thoại.<br>Quản lý: trên máy đang kết nối Firebase vào <b>Điều hành → Lưu trữ Google → Cập nhật lên GitHub → Đẩy bản đang chạy</b>. Hoặc bấm nút dưới nếu có file cấu hình.</div></div>
-          <button class="btn" type="button" data-nocfg style="width:100%;justify-content:center;margin-top:8px;font-size:12.5px;height:34px">${ic('upload')} Nhập file cấu hình Firebase</button>`);
-        f.querySelector('[data-nocfg]').onclick = () => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json'; inp.onchange = async () => { try { const t = await inp.files[0].text(); let j = null; try { j = JSON.parse(t); } catch (e) { } const fb = j && (j.fb || (j.apiKey ? j : null)) || FB.parseCfg(t), email = (j && j.email) || ''; if (!fb || !fb.projectId) throw new Error('File không có cấu hình Firebase'); const l = (() => { try { return JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; } catch (e) { return {}; } })(); GS.saveCfg({ ...l, mode: 'fb', fb, email: email || l.email || '', url: 'firebase:' + fb.projectId, acct: true, off: false }); location.reload(); } catch (e) { toast(esc(e.message), 'err', 6000); } }; inp.click(); };
+      const f = document.querySelector('.au-wrap form'); if (!f) return r;
+      f.querySelectorAll('.au-hint').forEach(x => x.remove());
+      const c = GS.cfg(), noCfg = !(c.url || (c.fb && c.fb.projectId));
+      if (noCfg && !f.querySelector('.au-gear')) {
+        f.style.position = 'relative';
+        f.insertAdjacentHTML('beforeend', `<button type="button" class="au-gear" title="Quản lý: nhập file cấu hình kết nối">${ic('settings')}</button>`);
+        f.querySelector('.au-gear').onclick = () => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json'; inp.onchange = async () => { try { const t = await inp.files[0].text(); let j = null; try { j = JSON.parse(t); } catch (e) { } const fb = j && (j.fb || (j.apiKey ? j : null)) || FB.parseCfg(t), email = (j && j.email) || ''; if (!fb || !fb.projectId) throw new Error('File không có cấu hình kết nối'); const l = (() => { try { return JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; } catch (e) { return {}; } })(); GS.saveCfg({ ...l, mode: 'fb', fb, email: email || l.email || '', url: 'firebase:' + fb.projectId, acct: true, off: false }); location.reload(); } catch (e) { toast(esc(e.message), 'err', 6000); } }; inp.click(); };
       }
     } catch (e) { }
     return r;
   };
 }
-addCSS(`.au-nocfg{display:flex;gap:8px;align-items:flex-start;margin-top:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.5;text-align:left}.au-nocfg svg{width:16px;height:16px;flex:none;margin-top:2px}`);
+addCSS(`.au-hint{display:none!important}.au-gear{position:absolute;right:12px;top:12px;width:26px;height:26px;border:0;background:transparent;color:#cbd5e1;cursor:pointer;border-radius:6px;display:grid;place-items:center;padding:0}.au-gear:hover{color:#64748b;background:#f1f5f9}.au-gear svg{width:15px;height:15px}`);
 </script>
 
 
