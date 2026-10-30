@@ -5188,7 +5188,7 @@ const vDV = {
         const rows = L.map(l => { const bb = dvBook(l.id); return { l, n: bb.length, c: dvCap(l), t: sum(bb, x => dvTot(x)), p: sum(bb.filter(x => x.tt === 'tra'), x => dvTot(x)) }; });
         body = `<table class="dv-tbl"><tr><th>Giờ</th><th>Tuyến</th><th>Số xe</th><th>Lái xe</th><th class="r">Đã bán</th><th class="r">Còn trống</th><th class="r">Doanh thu</th><th class="r">Đã thu</th></tr>${rows.map(r => `<tr><td><b>${esc(r.l.gio)}</b></td><td>${esc(r.l.tuyen)}</td><td>${esc(lcXe(r.l).bks || '')}</td><td>${esc(lcEmp(r.l).ten || '')}</td><td class="r">${r.n}/${r.c}</td><td class="r">${r.c - r.n}</td><td class="r">${F.money(r.t)}</td><td class="r">${F.money(r.p)}</td></tr>`).join('')}<tr><th colspan="4">Tổng ngày ${F.date(day)}</th><th class="r">${sum(rows, r => r.n)}/${sum(rows, r => r.c)}</th><th class="r">${sum(rows, r => r.c - r.n)}</th><th class="r">${F.money(sum(rows, r => r.t))}</th><th class="r">${F.money(sum(rows, r => r.p))}</th></tr></table>`;
       }
-      main = `<div class="dv-main"><div class="dm-mh" style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center"><b style="font-size:16px">${esc(cur.gio)} · ${esc(cur.tuyen)}</b>${Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="ltEdit" data-t="${esc(cur.tuyen)}" title="Điểm dừng và giờ dự kiến của tuyến">${ic('arrow')} Lộ trình</button>` : ''}${LT.get(cur.tuyen).length ? `<div style="flex-basis:100%">${LT.strip(cur, '', '', true)}</div>` : ''}${lcGone(cur) ? '<span class="badge b-red">ĐÃ XUẤT BẾN</span>' : ''}<button class="btn sm${DV.pkMode ? ' on' : ''}" data-act="dvPkMode" title="Bật để chạm chọn nhiều vé, in một lượt">${ic('check')} Chọn nhiều</button><button class="btn sm" data-act="dvPrintMap" data-id="${cur.id}">${ic('printer')} In phơi</button>${lcCan(cur) && Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="lcQuick" data-id="${cur.id}">${ic('edit')} Sửa nhanh xe, lái xe</button>` : lcGone(cur) ? '<span class="muted small">Đã khóa chỉnh sửa (chỉ Admin)</span>' : ''}<span class="muted small">Xe: <b>${esc(xe.bks || 'chưa gán')}</b> · Lái xe: <b>${esc(lai || 'chưa gán')}</b> · ${B.length}/${cap} ghế khách đã bán · ${cap - B.length} trống · tổng ${cap + sdDriver(dvSO(cur))} chỗ kể cả ghế lái xe</span></div>${dvTabBar(cur)}<div class="dv-body">${body}</div></div>`;
+      main = `<div class="dv-main"><div class="dm-mh" style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center"><b style="font-size:16px">${esc(cur.gio)} · ${esc(cur.tuyen)}</b>${Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="ltEdit" data-t="${esc(cur.tuyen)}" title="Điểm dừng và giờ dự kiến của tuyến">${ic('arrow')} Lộ trình</button>` : ''}${LT.get(cur.tuyen).length ? `<div style="flex-basis:100%">${LT.strip(cur, '', '', true)}</div>` : ''}${lcGone(cur) ? '<span class="badge b-red">ĐÃ XUẤT BẾN</span>' : ''}<button class="btn sm${DV.pkMode ? ' on' : ''}" data-act="dvPkMode" title="Bật để chạm chọn nhiều vé, in một lượt">${ic('check')} Chọn nhiều</button><button class="btn sm" data-act="dvPrintMap" data-id="${cur.id}">${ic('printer')} In phơi</button>${lcCan(cur) && Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="lcQuick" data-id="${cur.id}">${ic('edit')} Sửa nhanh xe, lái xe</button><button class="btn sm" data-act="mvTrip" data-id="${cur.id}" title="Xe hư, hủy chuyến: chuyển toàn bộ vé và hàng sang chuyến khác">${ic('arrow')} Dời cả chuyến</button>` : lcGone(cur) ? '<span class="muted small">Đã khóa chỉnh sửa (chỉ Admin)</span>' : ''}${cur.doiSang ? (() => { const n2 = DB.lichchay.find(l => l.id === cur.doiSang); return n2 ? `<span class="badge b-amber" title="${esc(cur.lyDoHuy || '')}">Đã chuyển sang ${esc(n2.gio)} ${F.date(n2.ngay)} · ${esc(cur.lyDoHuy || '')}</span>` : ''; })() : ''}<span class="muted small">Xe: <b>${esc(xe.bks || 'chưa gán')}</b> · Lái xe: <b>${esc(lai || 'chưa gán')}</b> · ${B.length}/${cap} ghế khách đã bán · ${cap - B.length} trống · tổng ${cap + sdDriver(dvSO(cur))} chỗ kể cả ghế lái xe</span></div>${dvTabBar(cur)}<div class="dv-body">${body}</div></div>`;
     }
     const R = dvRoutes(), rc = dvRoute();
     const chips = R.length ? `<div class="row dm-hide" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="dvRoute" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '';
@@ -8455,7 +8455,13 @@ const GH = {
   // số phiếu: GH + yymmdd + số thứ tự trong ngày
   nextSo(ngay) { const k = 'GH' + String(ngay || D.today()).replace(/-/g, '').slice(2); const n = (DB.guihang || []).filter(x => String(x.so || '').startsWith(k + '-')).reduce((m, x) => Math.max(m, +String(x.so).split('-').pop() || 0), 0); return k + '-' + String(n + 1).padStart(3, '0'); },
   meEmp: () => { const u = Auth.user; return u ? DB.employees.find(x => x.sdt && normUser(x.sdt) === normUser(u.user)) || null : null; },
-  tien: x => Math.round((+x.sl || 0) * (+x.donGia || 0)),
+  // các dòng hàng của phiếu (phiếu cũ chỉ có 1 dòng thì tự chuyển)
+  items: x => (x.items && x.items.length ? x.items : [{ tenHang: x.tenHang || '', dvt: x.dvt || '', sl: +x.sl || 0, donGia: +x.donGia || 0 }]),
+  lineTien: it => Math.round((+it.sl || 0) * (+it.donGia || 0)),
+  tien: x => GH.items(x).reduce((a, it) => a + GH.lineTien(it), 0),
+  slTong: x => GH.items(x).reduce((a, it) => a + (+it.sl || 0), 0),
+  dvtTong: x => { const u = [...new Set(GH.items(x).map(it => it.dvt).filter(Boolean))]; return u.length === 1 ? u[0] : 'món'; },
+  hangTxt: x => GH.items(x).map(it => it.tenHang + (GH.items(x).length > 1 ? ` (${+it.sl || 0} ${it.dvt || ''})`.replace(' )', ')') : '')).filter(Boolean).join('; '),
 
   tab(cur) {
     const L = GH.list(cur.id), T = GH.trip(cur), can = lcCan(cur), cA = can && Auth.can('lichchay', 'add'), cE = can && Auth.can('lichchay', 'edit'), cD = can && Auth.can('lichchay', 'del');
@@ -8464,9 +8470,9 @@ const GH = {
     if (!L.length) return info + bar + '<div class="muted" style="padding:12px 0">Chuyến này chưa có hàng gửi.</div>';
     const tot = sum(L, x => GH.tien(x)), tg = sum(L.filter(x => x.nguoiThu !== 'nhan'), x => GH.tien(x));
     return info + bar + `<div class="tbl-wrap free"><table class="dv-tbl gh-t"><tr><th>Số phiếu</th><th>SĐT người gửi</th><th>SĐT người nhận</th><th>Tên hàng</th><th>ĐVT</th><th class="r">SL</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th><th>Người thu</th><th>Nơi gửi</th><th>Nơi nhận</th><th>Nhân viên</th><th></th></tr>
-      ${L.map(x => `<tr><td><b>${esc(x.so)}</b></td><td>${esc(x.sdtGui || '')}</td><td>${esc(x.sdtNhan || '')}</td><td>${esc(x.tenHang || '')}</td><td>${esc(x.dvt || '')}</td><td class="r">${F.num ? F.num(+x.sl || 0) : +x.sl || 0}</td><td class="r">${F.money(+x.donGia || 0)}</td><td class="r"><b>${F.money(GH.tien(x))}</b></td><td>${esc(GH.THU[x.nguoiThu] || '')}</td><td>${esc(x.noiGui || '')}</td><td>${esc(x.noiNhan || '')}</td><td>${esc(x.nhanVien || '')}${x.chuKy ? ' <span class="badge b-green" title="Đã ký">Đã ký</span>' : ''}</td>
-        <td class="gh-a"><button class="ibtn" data-act="ghPrint" data-id="${x.id}" data-tip="In phiếu K80">${ic('printer')}</button>${cE ? `<button class="ibtn" data-act="ghEdit" data-id="${x.id}" data-tip="Sửa">${ic('edit')}</button>` : ''}${cD ? `<button class="ibtn" data-act="ghDel" data-id="${x.id}" data-tip="Xóa">${ic('trash')}</button>` : ''}</td></tr>`).join('')}
-      <tr><th colspan="7">Tổng ${L.length} phiếu · ${sum(L, x => +x.sl || 0)} kiện/món</th><th class="r">${F.money(tot)}</th><th colspan="5" style="text-align:left;font-weight:600">Người gửi đã trả ${F.money(tg)} · Thu người nhận ${F.money(tot - tg)}</th></tr></table></div>`;
+      ${L.map(x => `<tr><td><b>${esc(x.so)}</b></td><td>${esc(x.sdtGui || '')}</td><td>${esc(x.sdtNhan || '')}</td><td class="gh-hn">${GH.items(x).map(it => esc(it.tenHang || '')).join('<br>')}</td><td>${GH.items(x).map(it => esc(it.dvt || '')).join('<br>')}</td><td class="r">${GH.items(x).map(it => +it.sl || 0).join('<br>')}</td><td class="r">${GH.items(x).map(it => F.money(+it.donGia || 0)).join('<br>')}</td><td class="r"><b>${F.money(GH.tien(x))}</b></td><td>${esc(GH.THU[x.nguoiThu] || '')}</td><td>${esc(x.noiGui || '')}</td><td>${esc(x.noiNhan || '')}</td><td>${esc(x.nhanVien || '')}${x.chuKy ? ' <span class="badge b-green" title="Đã ký">Đã ký</span>' : ''}${x.doiChuyen ? ` <span class="badge b-amber" title="${esc(x.doiChuyen.lyDo || '')}">Dời từ chuyến khác</span>` : ''}</td>
+        <td class="gh-a"><button class="ibtn" data-act="ghPrint" data-id="${x.id}" data-tip="In phiếu K80">${ic('printer')}</button>${cE ? `<button class="ibtn" data-act="ghEdit" data-id="${x.id}" data-tip="Sửa">${ic('edit')}</button><button class="ibtn" data-act="ghMove" data-id="${x.id}" data-tip="Dời sang chuyến khác">${ic('arrow')}</button>` : ''}${cD ? `<button class="ibtn" data-act="ghDel" data-id="${x.id}" data-tip="Xóa">${ic('trash')}</button>` : ''}</td></tr>`).join('')}
+      <tr><th colspan="7">Tổng ${L.length} phiếu · ${sum(L, x => GH.slTong(x))} kiện/món</th><th class="r">${F.money(tot)}</th><th colspan="5" style="text-align:left;font-weight:600">Người gửi đã trả ${F.money(tg)} · Thu người nhận ${F.money(tot - tg)}</th></tr></table></div>`;
   },
 
   // khung ký tên trên màn hình (chuột / ngón tay)
@@ -8485,43 +8491,61 @@ const GH = {
 
   form(t, g) {
     const isNew = !g, T = GH.trip(t), me = GH.meEmp(), stops = LT.get(t.tuyen).map(p => p.ten);
-    const v = g ? { ...g } : { so: GH.nextSo(t.ngay), sdtGui: '', sdtNhan: '', tenHang: '', dvt: 'Kiện', sl: 1, donGia: 0, nguoiThu: 'gui', noiGui: stops[0] || '', noiNhan: stops[stops.length - 1] || '', nhanVien: dvLog.who(), chuKy: '' };
+    const v = g ? { ...g, items: GH.items(g).map(it => ({ ...it })) } : { so: GH.nextSo(t.ngay), sdtGui: '', sdtNhan: '', items: [{ tenHang: '', dvt: 'Kiện', sl: 1, donGia: 0 }], nguoiThu: 'gui', noiGui: stops[0] || '', noiNhan: stops[stops.length - 1] || '', nhanVien: dvLog.who(), chuKy: '' };
     const sig0 = v.chuKy || (isNew && me && me.chuKy) || '';
     const inp = (k, l, a = '') => `<div class="field"><label>${l}</label><input class="inp" data-f="${k}" value="${esc(v[k] ?? '')}" ${a}></div>`;
+    const lineH = (it = {}) => `<tr class="gh-ln"><td><input class="inp" data-i="tenHang" value="${esc(it.tenHang || '')}" placeholder="Tên hàng"></td><td><input class="inp" data-i="dvt" list="ghDvt" value="${esc(it.dvt || 'Kiện')}"></td><td><input class="inp r" data-i="sl" type="number" min="0" step="any" inputmode="decimal" value="${esc(it.sl ?? 1)}"></td><td><input class="inp r" data-i="donGia" type="number" min="0" step="1000" inputmode="numeric" value="${esc(it.donGia ?? 0)}"></td><td class="r gh-lt" data-lt>0</td><td><button type="button" class="ibtn" data-rm title="Xóa dòng">${ic('trash')}</button></td></tr>`;
     const m = Modal.open({
-      title: isNew ? 'Phiếu gửi hàng mới' : 'Sửa phiếu gửi hàng ' + esc(v.so), width: 680,
-      body: `<div class="gh-info sm"><span><b>${esc(T.gio)}</b> · ${F.date(T.ngay)}</span><span>${esc(T.tuyen)}</span><span>Xe <b>${esc(T.bks || '—')}</b></span><span>Lái xe <b>${esc(T.laiXe || '—')}</b>${T.sdtLai ? ' · ' + esc(T.sdtLai) : ''}</span></div>
+      title: isNew ? 'Phiếu gửi hàng mới' : 'Sửa phiếu gửi hàng ' + esc(v.so), width: 1120,
+      body: `<div class="gh-fw"><div class="gh-fl">
+      <div class="gh-info sm"><span><b>${esc(T.gio)}</b> · ${F.date(T.ngay)}</span><span>${esc(T.tuyen)}</span><span>Xe <b>${esc(T.bks || '—')}</b></span><span>Lái xe <b>${esc(T.laiXe || '—')}</b>${T.sdtLai ? ' · ' + esc(T.sdtLai) : ''}</span></div>
       <datalist id="ghStops">${stops.map(s => `<option value="${esc(s)}">`).join('')}</datalist><datalist id="ghDvt">${GH.DVT.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
       <div class="form gh-f">
         ${inp('so', 'Số phiếu', 'readonly style="font-weight:700"')}
         ${inp('nhanVien', 'Nhân viên')}
         ${inp('sdtGui', 'SĐT người gửi <i class="req">*</i>', 'type="tel" inputmode="tel"')}
         ${inp('sdtNhan', 'SĐT người nhận <i class="req">*</i>', 'type="tel" inputmode="tel"')}
-        <div class="field full"><label>Tên hàng <i class="req">*</i></label><input class="inp" data-f="tenHang" value="${esc(v.tenHang || '')}" placeholder="VD: Thùng trái cây, phong bì giấy tờ..."></div>
-        ${inp('dvt', 'ĐVT', 'list="ghDvt"')}
-        ${inp('sl', 'Số lượng', 'type="number" min="0" step="any" inputmode="decimal"')}
-        ${inp('donGia', 'Đơn giá (đ)', 'type="number" min="0" step="1000" inputmode="numeric"')}
-        <div class="field"><label>Thành tiền</label><div class="inp gh-tt" data-tt>${F.money(GH.tien(v))} đ</div></div>
-        <div class="field"><label>Người thu (ai trả tiền cước)</label><select class="inp" data-f="nguoiThu">${Object.entries(GH.THU).map(([k, s]) => `<option value="${k}" ${v.nguoiThu === k ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-        <div></div>
         ${inp('noiGui', 'Nơi gửi', 'list="ghStops"')}
         ${inp('noiNhan', 'Nơi nhận', 'list="ghStops"')}
+        <div class="field full"><label>Hàng gửi <i class="req">*</i></label>
+          <div class="gh-lw"><table class="gh-lines"><thead><tr><th>Tên hàng</th><th style="width:112px">ĐVT</th><th style="width:64px">SL</th><th style="width:104px">Đơn giá</th><th style="width:100px" class="r">Thành tiền</th><th style="width:34px"></th></tr></thead><tbody>${v.items.map(lineH).join('')}</tbody>
+          <tfoot><tr><td colspan="2"><button type="button" class="btn sm" data-addln>${ic('plus')} Thêm dòng hàng</button></td><td class="r" data-sl></td><td class="r">Tổng</td><td class="r"><b data-tt></b></td><td></td></tr></tfoot></table></div></div>
+        <div class="field"><label>Người thu (ai trả tiền cước)</label><select class="inp" data-f="nguoiThu">${Object.entries(GH.THU).map(([k, s]) => `<option value="${k}" ${v.nguoiThu === k ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div></div>
         <div class="field full"><label>Chữ ký nhân viên nhận hàng</label><div class="gh-sig"><canvas></canvas><button type="button" class="btn sm" data-clr>Ký lại</button></div><small class="muted">${me && me.chuKy ? 'Đã điền sẵn chữ ký trong hồ sơ của bạn. Bấm "Ký lại" nếu muốn ký tay.' : 'Ký bằng chuột hoặc ngón tay. Có thể để trống và ký tay trên phiếu in.'}</small></div>
-      </div>`,
+      </div></div>
+      <div class="gh-pv"><div class="gh-pvh">Xem trước phiếu K80</div><div class="gh-pvb"><div class="gh-pvp" data-pv></div></div></div></div>`,
       foot: `<button class="btn" data-no>Hủy</button><button class="btn" data-okp>${ic('printer')} Lưu & in K80</button><button class="btn pri" data-ok>${ic('check')} Lưu</button>`
     });
-    const q = s => m.el.querySelector(s), val = k => q(`[data-f="${k}"]`).value.trim();
+    const q = s => m.el.querySelector(s), val = k => q(`[data-f="${k}"]`).value.trim(), tb = q('.gh-lines tbody');
     const sig = GH.pad(q('.gh-sig'), sig0);
-    const upd = () => { q('[data-tt]').textContent = F.money(Math.round((+val('sl') || 0) * (+val('donGia') || 0))) + ' đ'; };
-    m.el.addEventListener('input', upd);
+    const lines = () => [...tb.rows].map(r => { const g2 = k => r.querySelector(`[data-i="${k}"]`).value.trim(); return { tenHang: g2('tenHang'), dvt: g2('dvt'), sl: +g2('sl') || 0, donGia: +g2('donGia') || 0 }; });
+    const draft = () => ({ ...(g || {}), so: v.so, chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, tg: (g && g.tg) || dvLog.now(), nguoiLap: (g && g.nguoiLap) || dvLog.who(), sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), nguoiThu: val('nguoiThu'), items: lines().filter(it => it.tenHang || it.donGia), chuKy: sig.val() });
+    let pt = 0;
+    const upd = () => {
+      [...tb.rows].forEach((r, i) => { const it = lines()[i]; r.querySelector('[data-lt]').textContent = F.money(GH.lineTien(it)); });
+      const L = lines(); q('[data-tt]').textContent = F.money(L.reduce((a, it) => a + GH.lineTien(it), 0)) + ' đ'; q('[data-sl]').textContent = L.reduce((a, it) => a + it.sl, 0);
+      tb.querySelectorAll('[data-rm]').forEach(b => b.disabled = tb.rows.length < 2);
+      clearTimeout(pt); pt = setTimeout(() => { const d = draft(); if (!d.items.length) d.items = [{ tenHang: '', dvt: '', sl: 0, donGia: 0 }]; q('[data-pv]').innerHTML = T80_CSS + GH.CSS + GH.html80(d, 0, 1); }, 120);
+    };
+    m.el.addEventListener('input', upd); m.el.addEventListener('change', upd);
+    q('.gh-sig canvas').addEventListener('pointerup', () => setTimeout(upd, 30)); q('[data-clr]').addEventListener('click', () => setTimeout(upd, 30));
+    q('[data-addln]').onclick = () => { const last = lines().pop() || {}; tb.insertAdjacentHTML('beforeend', lineH({ dvt: last.dvt || 'Kiện', sl: 1, donGia: 0 })); upd(); tb.rows[tb.rows.length - 1].querySelector('[data-i="tenHang"]').focus(); };
+    tb.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b && tb.rows.length > 1) { b.closest('tr').remove(); upd(); } });
+    tb.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-i]')) { e.preventDefault(); const r = e.target.closest('tr'); if (r === tb.rows[tb.rows.length - 1]) q('[data-addln]').click(); else r.nextElementSibling.querySelector('[data-i="tenHang"]').focus(); } });
+    upd();
     q('[data-no]').onclick = () => m.close();
     const save = pr => {
       if (!lcCan(t)) return lcLockMsg();
-      const d = { sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), tenHang: val('tenHang'), dvt: val('dvt'), sl: +val('sl') || 0, donGia: +val('donGia') || 0, nguoiThu: val('nguoiThu'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), chuKy: sig.val() };
+      const all = lines(), bad = all.findIndex(it => (it.tenHang || it.donGia) && !(it.sl > 0));
+      const items = all.filter(it => it.tenHang || it.donGia);
+      const d = { sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), items, nguoiThu: val('nguoiThu'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), chuKy: sig.val() };
       if (!d.sdtGui || !d.sdtNhan) return toast('Nhập SĐT người gửi và người nhận', 'err');
-      if (!d.tenHang) return toast('Nhập tên hàng', 'err');
-      if (!(d.sl > 0)) return toast('Số lượng phải lớn hơn 0', 'err');
-      d.thanhTien = GH.tien(d); Object.assign(d, { bks: T.bks, laiXe: T.laiXe, sdtLai: T.sdtLai });   // lưu lại thông tin chuyến lúc lập phiếu
+      if (!items.length) return toast('Nhập ít nhất 1 dòng hàng', 'err');
+      if (items.some(it => !it.tenHang)) return toast('Có dòng hàng chưa nhập tên hàng', 'err');
+      if (bad >= 0) return toast('Dòng hàng ' + (bad + 1) + ': số lượng phải lớn hơn 0', 'err');
+      // giữ các trường tóm tắt để tìm kiếm / xuất danh sách
+      Object.assign(d, { tenHang: GH.hangTxt(d), dvt: GH.dvtTong(d), sl: GH.slTong(d), donGia: items.length === 1 ? items[0].donGia : 0, thanhTien: GH.tien(d), bks: T.bks, laiXe: T.laiXe, sdtLai: T.sdtLai });
       let x;
       if (isNew) { DB.guihang = DB.guihang || []; x = { id: uid(), so: GH.nextSo(t.ngay), chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, tg: dvLog.now(), nguoiLap: dvLog.who(), ...d }; DB.guihang.push(x); }
       else { x = g; Object.assign(g, d, { sua: dvLog.now() }); }
@@ -8543,14 +8567,14 @@ const GH = {
   <div class="t8-tt">PHIẾU GỬI HÀNG${n > 1 ? ` <small>(${i + 1}/${n})</small>` : ''}</div>
   <div class="t8-ma">Số phiếu <b>${esc(x.so)}</b></div>
   ${ln}
-  <div class="t8-big"><div><small>GIỜ CHẠY</small><b>${esc(T.gio || '')}</b><em>${esc(dow)} ${F.date(T.ngay)}</em></div><div class="t8-seat"><small>SL</small><b>${esc(String(+x.sl || 0))}</b><em style="display:block;font-size:10px;font-style:normal">${esc(x.dvt || '')}</em></div></div>
+  <div class="t8-big"><div><small>GIỜ CHẠY</small><b>${esc(T.gio || '')}</b><em>${esc(dow)} ${F.date(T.ngay)}</em></div><div class="t8-seat"><small>SL</small><b>${esc(String(GH.slTong(x)))}</b><em style="display:block;font-size:10px;font-style:normal">${esc(GH.dvtTong(x))}</em></div></div>
   <div class="t8-route">${esc(T.tuyen || '')}</div>
   ${row('Biển số xe', esc(T.bks))}${row('Lái xe', esc(T.laiXe))}${row('SĐT lái xe', esc(T.sdtLai))}
   ${ln}
   <div class="t8-pt"><small>GỬI</small><b>${esc(x.noiGui || '................................')}</b><em>SĐT: ${esc(x.sdtGui || '')}</em></div>
   <div class="t8-pt"><small>NHẬN</small><b>${esc(x.noiNhan || '................................')}</b><em>SĐT: ${esc(x.sdtNhan || '')}</em></div>
   ${ln}
-  ${row('Tên hàng', esc(x.tenHang || ''))}${row('ĐVT', esc(x.dvt || ''))}${row('Số lượng', esc(String(+x.sl || 0)))}${row('Đơn giá', F.money(+x.donGia || 0) + ' đ')}
+  ${GH.items(x).map((it, j, A) => `<div class="gh8-it"><b>${A.length > 1 ? (j + 1) + '. ' : ''}${esc(it.tenHang || '...............')}</b><div class="t8-r"><span>${esc(String(+it.sl || 0))} ${esc(it.dvt || '')} × ${F.money(+it.donGia || 0)}</span><b>${F.money(GH.lineTien(it))} đ</b></div></div>`).join('')}
   <div class="t8-r t8-sum"><span>THÀNH TIỀN</span><b>${F.money(tt)} đ</b></div>
   <div class="t8-pay${paid ? ' ok' : ''}">${paid ? 'NGƯỜI GỬI ĐÃ TRẢ CƯỚC' : `THU NGƯỜI NHẬN ${F.money(tt)} đ`}</div>
   ${ln}
@@ -8560,17 +8584,20 @@ const GH = {
   <div class="t8-cut">✂ - - - - - - - - - - - - - - - - - - - -</div>
 </div>`;
   },
-  CSS: `<style>.gh8-sg{display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center;margin:4px 0}.gh8-sg small{display:block;font-size:9.5px;font-weight:800;letter-spacing:.05em}.gh8-sg b{display:block;font-size:11px}.gh8-sp{height:15mm}.gh8-sg img{display:block;height:15mm;max-width:100%;object-fit:contain;margin:0 auto}</style>`,
+  CSS: `<style>.gh8-sg{display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center;margin:4px 0}.gh8-sg small{display:block;font-size:9.5px;font-weight:800;letter-spacing:.05em}.gh8-sg b{display:block;font-size:11px}.gh8-sp{height:15mm}.gh8-sg img{display:block;height:15mm;max-width:100%;object-fit:contain;margin:0 auto}.gh8-it{padding:2px 0;border-bottom:1px dotted #000}.gh8-it:last-of-type{border-bottom:0}.gh8-it>b{display:block;font-size:12.5px;word-break:break-word}.gh8-it .t8-r{font-size:11.5px}</style>`,
   print(L) { if (!L.length) return; Print.run(T80_CSS + GH.CSS + L.map((x, i) => GH.html80(x, i, L.length)).join(''), { title: L.length === 1 ? 'Phieu gui hang ' + L[0].so : 'Phieu gui hang', paper: '80' }); },
   // bảng kê A4 giao lái xe, có chỗ ký nhận
   printList(t) {
     const L = GH.list(t.id), T = GH.trip(t); if (!L.length) return;
     Print.report({ title: 'Bảng kê hàng gửi theo xe', sub: `Chuyến ${T.gio} ngày ${F.date(T.ngay)} · ${T.tuyen} · Xe ${T.bks || '—'} · Lái xe ${T.laiXe || '—'}${T.sdtLai ? ' (' + T.sdtLai + ')' : ''}`,
       cols: [{ key: 'so', label: 'Số phiếu' }, { key: 'sdtGui', label: 'SĐT gửi' }, { key: 'sdtNhan', label: 'SĐT nhận' }, { key: 'tenHang', label: 'Tên hàng' }, { key: 'dvt', label: 'ĐVT' }, { key: 'sl', label: 'SL', align: 'r' }, { key: 'tt', label: 'Thành tiền', align: 'r' }, { key: 'thu', label: 'Người thu' }, { key: 'noiNhan', label: 'Nơi nhận' }],
-      rows: L.map(x => ({ ...x, tt: F.money(GH.tien(x)), thu: GH.THU[x.nguoiThu] || '' })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
+      rows: L.map(x => ({ ...x, tenHang: GH.items(x).map(it => it.tenHang).join('; '), dvt: GH.dvtTong(x), sl: GH.slTong(x), tt: F.money(GH.tien(x)), thu: GH.THU[x.nguoiThu] || '' })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
   }
 };
 addCSS(`.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#0c4a6e}.gh-info.sm{font-size:12.5px}
+.gh-fw{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}.gh-pv{position:sticky;top:0;background:#525659;border-radius:10px;overflow:hidden}.gh-pvh{color:#fff;font-size:12px;font-weight:600;padding:7px 10px;background:#3c4043}.gh-pvb{max-height:68vh;overflow:auto;padding:12px 0}.gh-pvp{width:80mm;margin:0 auto;background:#fff;padding:3mm 2mm;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.4);zoom:.95}
+.gh-lw{overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px}.gh-lines{width:100%;border-collapse:collapse;font-size:13px}.gh-lines th{background:#f0f9ff;color:#0c4a6e;font-weight:600;text-align:left;padding:6px 6px;font-size:12px}.gh-lines td{padding:4px 4px;border-top:1px solid #eef2f7}.gh-lines .inp{height:34px;width:100%;min-width:0}.gh-lines .inp.r,.gh-lines .r{text-align:right}.gh-lines tfoot td{background:#f8fafc;padding:6px}.gh-lt{font-weight:700;color:#0369a1;white-space:nowrap}.gh-hn{white-space:normal!important;min-width:160px}
+@media(max-width:900px){.gh-fw{grid-template-columns:1fr}.gh-pv{position:static}}
 .gh-f{grid-template-columns:1fr 1fr}.gh-f .full{grid-column:1/-1}.gh-tt{display:flex;align-items:center;font-weight:800;color:#0369a1;background:#f8fafc}
 .gh-sig{position:relative;border:1.5px dashed #94a3b8;border-radius:10px;background:#fff;height:130px;touch-action:none}.gh-sig canvas{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}.gh-sig [data-clr]{position:absolute;right:6px;top:6px}
 .gh-t td,.gh-t th{white-space:nowrap}.gh-a{display:flex;gap:2px}@media(max-width:700px){.gh-f{grid-template-columns:1fr}}`);
@@ -8587,6 +8614,119 @@ addCSS(`.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;bor
   const P = { ghAdd: ['lichchay', 'add'], ghEdit: ['lichchay', 'edit'], ghDel: ['lichchay', 'del'], ghPrint: ['lichchay', 'view'], ghPrintAll: ['lichchay', 'view'], ghList: ['lichchay', 'view'] };
   Object.assign(Auth.ACT_PERM, P);
   Object.keys(P).forEach(k => { const fn = ACT[k], [mo, a] = P[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
+}
+
+/* ===== DỜI CHUYẾN: xe hư / hủy chuyến → chuyển toàn bộ vé và hàng gửi sang chuyến khác; dời từng phiếu hàng ===== */
+const MV = {
+  LYDO: ['Xe hư, không chạy được', 'Thiếu lái xe', 'Gộp chuyến (ít khách)', 'Thời tiết / đường sá', 'Khách yêu cầu đổi giờ', 'Lý do khác'],
+  fut: t => !lcGone(t) && !t.khoa,
+  label: t => `${F.date(t.ngay)} ${t.gio} · ${t.tuyen}`,
+  // chọn ngày + chuyến đích (dùng chung)
+  pickHTML: (cur, extra = '') => `<div class="form" style="grid-template-columns:1fr 1fr">
+      <div class="field"><label>Ngày chuyến mới</label><input class="inp" type="date" id="mvD" min="${D.today()}" value="${cur.ngay >= D.today() ? cur.ngay : D.today()}"></div>
+      <div class="field"><label>Lý do</label><select class="inp" id="mvL">${MV.LYDO.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="field full"><label>Chuyển sang chuyến</label><select class="inp" id="mvT"></select></div>
+      <div class="field full" id="mvLk" hidden><label>Ghi rõ lý do</label><input class="inp" id="mvLx" placeholder="VD: xe nổ lốp ở Bảo Lộc"></div>${extra}</div>`,
+  bind(m, cur, onT) {
+    const q = s => m.el.querySelector(s);
+    const fill = () => {
+      const ts = DB.lichchay.filter(l => l.ngay === q('#mvD').value && l.id !== cur.id && MV.fut(l)).sort((a, b) => (+(b.tuyen === cur.tuyen) - +(a.tuyen === cur.tuyen)) || String(a.gio).localeCompare(String(b.gio)));
+      q('#mvT').innerHTML = ts.length ? ts.map(l => { const v = lcXe(l), n = dvBook(l.id).length, c = dvSeatList(l).length; return `<option value="${l.id}">${esc(l.gio)} · ${esc(l.tuyen)} · Xe ${esc(v.bks || 'chưa gán')} · trống ${c - n}/${c} ghế</option>`; }).join('') : '<option value="">Ngày này chưa có chuyến khác (tạo thêm chuyến trước)</option>';
+      onT && onT();
+    };
+    q('#mvD').onchange = fill; q('#mvT').onchange = () => onT && onT();
+    q('#mvL').onchange = () => { q('#mvLk').hidden = q('#mvL').value !== 'Lý do khác'; };
+    fill();
+    return { t: () => DB.lichchay.find(l => l.id === q('#mvT').value), why: () => q('#mvL').value === 'Lý do khác' ? (q('#mvLx').value.trim() || 'Lý do khác') : q('#mvL').value };
+  },
+  // gán ghế ở chuyến mới: giữ đúng số ghế nếu còn trống, nếu không lấy ghế trống tiếp theo; nhóm vé đi liền nhau
+  plan(B, t) {
+    const seats = dvSeatList(t), used = new Set(dvBook(t.id).map(x => x.ghe)), out = new Map();
+    const lock = g => Lock.other(t.id, g);
+    B.forEach(b => { if (seats.includes(b.ghe) && !used.has(b.ghe) && !lock(b.ghe)) { out.set(b, b.ghe); used.add(b.ghe); } });
+    const free = seats.filter(g => !used.has(g) && !lock(g));
+    B.forEach(b => { if (!out.has(b) && free.length) out.set(b, free.shift()); });
+    return { map: out, miss: B.filter(b => !out.has(b)) };
+  },
+
+  /* chuyển toàn bộ chuyến */
+  trip(cur) {
+    if (!Auth.guard('lichchay', 'edit')) return;
+    if (!lcCan(cur)) return lcLockMsg();
+    const B = dvBook(cur.id).slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true })), H = GH.list(cur.id), xe = lcXe(cur);
+    const m = Modal.open({
+      title: 'Dời / chuyển cả chuyến ' + esc(cur.gio), width: 620,
+      body: `<div class="mv-cur"><b>Chuyến hiện tại:</b> ${esc(MV.label(cur))} · Xe ${esc(xe.bks || '—')} · Lái xe ${esc(lcEmp(cur).ten || '—')}<div class="mv-cnt"><span><b>${B.length}</b> vé khách</span><span><b>${H.length}</b> phiếu gửi hàng</span></div></div>
+      ${MV.pickHTML(cur, `<div class="field full"><label class="ppd-chk"><input type="checkbox" id="mvB" ${B.length ? 'checked' : 'disabled'}> Chuyển ${B.length} vé khách</label><label class="ppd-chk"><input type="checkbox" id="mvH" ${H.length ? 'checked' : 'disabled'}> Chuyển ${H.length} phiếu gửi hàng</label><label class="ppd-chk"><input type="checkbox" id="mvK" checked> Khóa chuyến cũ sau khi chuyển (không bán thêm vé)</label></div>`)}
+      <div class="mv-pv" id="mvP"></div>
+      <p class="small muted" style="margin:8px 0 0">Vé giữ nguyên số ghế nếu chuyến mới còn trống ghế đó, nếu không sẽ xếp vào ghế trống khác. Phiếu hàng giữ nguyên số phiếu; giờ chạy, xe, lái xe và SĐT lái xe in trên phiếu đổi theo chuyến mới.</p>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-ok>${ic('check')} Chuyển</button>`
+    });
+    const q = s => m.el.querySelector(s); let P = null;
+    const prev = () => {
+      if (!P) return;
+      const t = P.t(); if (!t) { q('#mvP').innerHTML = ''; return; }
+      const doB = q('#mvB').checked, pl = doB ? MV.plan(B, t) : { map: new Map(), miss: [] }, v = lcXe(t), ch = doB ? B.filter(b => pl.map.get(b) && pl.map.get(b) !== b.ghe) : [];
+      q('#mvP').innerHTML = `<b>Chuyến mới:</b> ${esc(MV.label(t))} · Xe <b>${esc(v.bks || 'chưa gán')}</b> · Lái xe <b>${esc(lcEmp(t).ten || 'chưa gán')}</b>${(DB.employees.find(e => e.id === t.laiXe) || {}).sdt ? ' · ' + esc(DB.employees.find(e => e.id === t.laiXe).sdt) : ''}
+        ${doB ? `<div>${pl.map.size} vé chuyển được${ch.length ? `, trong đó <b>${ch.length}</b> vé đổi ghế: ${ch.slice(0, 12).map(b => esc(b.ghe) + '→' + esc(pl.map.get(b))).join(', ')}${ch.length > 12 ? '…' : ''}` : ', giữ nguyên số ghế'}.</div>` : ''}
+        ${pl.miss.length ? `<div class="mv-bad">Chuyến mới thiếu ${pl.miss.length} ghế trống: ${pl.miss.slice(0, 12).map(b => esc(b.ghe + ' ' + (b.ten || ''))).join(', ')}. Hãy chọn chuyến khác, hoặc chuyển phần còn lại sang chuyến thứ hai sau.</div>` : ''}`;
+      q('[data-ok]').disabled = !!pl.miss.length;
+    };
+    P = MV.bind(m, cur, prev);
+    q('#mvB').onchange = q('#mvH').onchange = prev; prev();
+    q('[data-no]').onclick = () => m.close();
+    q('[data-ok]').onclick = async () => {
+      const t = P.t(); if (!t) return toast('Chọn chuyến mới', 'err');
+      const doB = q('#mvB').checked, doH = q('#mvH').checked; if (!doB && !doH) return toast('Chọn vé hoặc hàng cần chuyển', 'err');
+      const pl = doB ? MV.plan(B, t) : { map: new Map(), miss: [] }; if (pl.miss.length) return toast('Chuyến mới không đủ ghế trống', 'err');
+      const why = P.why(), now = dvLog.now(), who = dvLog.who();
+      if (!(await Modal.confirm(`Chuyển ${doB ? '<b>' + B.length + ' vé</b>' : ''}${doB && doH ? ' và ' : ''}${doH ? '<b>' + H.length + ' phiếu hàng</b>' : ''} từ <b>${esc(MV.label(cur))}</b> sang <b>${esc(MV.label(t))}</b>?<br><span class="muted small">Lý do: ${esc(why)}</span>`, { ok: 'Chuyển' }))) return;
+      const T2 = GH.trip(t);
+      if (doB) B.forEach(b => { const g = pl.map.get(b); (b.lichSu = b.lichSu || []).push({ tg: now, nguoi: who, nd: `Dời cả chuyến (${why}): ${cur.ngay} ${cur.gio} ${cur.tuyen} ghế ${b.ghe} → ${t.ngay} ${t.gio} ${t.tuyen} ghế ${g}` }); b.chuyen = t.id; b.ghe = g; b.doiChuyen = { tu: cur.id, lyDo: why, tg: now }; });
+      if (doH) H.forEach(x => { (x.lichSu = x.lichSu || []).push({ tg: now, nguoi: who, nd: `Dời cả chuyến (${why}): ${cur.ngay} ${cur.gio} → ${t.ngay} ${t.gio}` }); Object.assign(x, { chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, bks: T2.bks, laiXe: T2.laiXe, sdtLai: T2.sdtLai, doiChuyen: { tu: cur.id, lyDo: why, tg: now } }); });
+      if (q('#mvK').checked) { cur.khoa = true; cur.lyDoHuy = why; cur.doiSang = t.id; }
+      LC.ngay = t.ngay; DV.trip = t.id; DV.tuyen = t.tuyen; m.close(); App.changed();
+      toast(`Đã chuyển sang ${esc(MV.label(t))}. Vào tab <b>Gọi khách</b> để báo khách giờ mới.`, 'ok', 9000);
+    };
+  },
+
+  /* dời 1 phiếu gửi hàng */
+  cargo(x) {
+    const cur = DB.lichchay.find(l => l.id === x.chuyen) || { id: '', ngay: x.ngay, gio: x.gio, tuyen: x.tuyen };
+    if (cur.id && !lcCan(cur)) return lcLockMsg();
+    const m = Modal.open({ title: 'Dời phiếu hàng ' + esc(x.so), width: 520, body: `<div class="mv-cur"><b>Đang ở chuyến:</b> ${esc(MV.label(cur))}<br><b>Hàng:</b> ${esc(GH.hangTxt(x) || '')}</div>${MV.pickHTML(cur)}<div class="mv-pv" id="mvP"></div>`, foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-ok>${ic('check')} Dời phiếu</button>` });
+    const q = s => m.el.querySelector(s); let P = null;
+    P = MV.bind(m, cur, () => { const t = P && P.t(); q('#mvP').innerHTML = t ? (() => { const T2 = GH.trip(t); return `Phiếu sẽ in: <b>${esc(T2.gio)}</b> ${F.date(T2.ngay)} · Xe <b>${esc(T2.bks || '—')}</b> · Lái xe <b>${esc(T2.laiXe || '—')}</b>${T2.sdtLai ? ' · ' + esc(T2.sdtLai) : ''}`; })() : ''; });
+    q('#mvT').dispatchEvent(new Event('change'));
+    q('[data-no]').onclick = () => m.close();
+    q('[data-ok]').onclick = () => {
+      const t = P.t(); if (!t) return toast('Chọn chuyến mới', 'err');
+      const why = P.why(), T2 = GH.trip(t);
+      (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: `Dời phiếu (${why}): ${cur.ngay} ${cur.gio} → ${t.ngay} ${t.gio}` });
+      Object.assign(x, { chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, bks: T2.bks, laiXe: T2.laiXe, sdtLai: T2.sdtLai, doiChuyen: { tu: cur.id, lyDo: why, tg: dvLog.now() } });
+      LC.ngay = t.ngay; DV.trip = t.id; DV.tuyen = t.tuyen; DV.tab = 'gh'; m.close(); App.changed();
+      toast(`Đã dời phiếu ${esc(x.so)} sang ${esc(MV.label(t))}`, 'ok', 6000);
+    };
+  }
+};
+addCSS(`.mv-cur{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:13px;line-height:1.6}.mv-cnt{display:flex;gap:14px;margin-top:4px}.mv-cnt b{font-size:16px;color:#0369a1}
+.mv-pv{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:9px 12px;margin-top:10px;font-size:13px;line-height:1.6}.mv-pv:empty{display:none}.mv-bad{color:#b45309;font-weight:600;margin-top:4px}`);
+Object.assign(ACT, {
+  mvTrip: d => { const t = DB.lichchay.find(l => l.id === d.id); if (t) MV.trip(t); },
+  ghMove: d => { const x = (DB.guihang || []).find(g => g.id === d.id); if (x) MV.cargo(x); }
+});
+{
+  const P = { mvTrip: ['lichchay', 'edit'], ghMove: ['lichchay', 'edit'] };
+  Object.assign(Auth.ACT_PERM, P);
+  Object.keys(P).forEach(k => { const fn = ACT[k], [mo, a] = P[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
+  // không cho xóa chuyến còn vé / hàng: mời chuyển trước
+  const del0 = ACT.lcDel;
+  ACT.lcDel = async d => {
+    const l = lcById(d.id); if (!l) return;
+    const nb = dvBook(l.id).length, nh = GH.list(l.id).length;
+    if (nb || nh) { if (await Modal.confirm(`Chuyến <b>${esc(l.gio)}</b> ngày ${F.date(l.ngay)} còn <b>${nb} vé</b> và <b>${nh} phiếu hàng</b>. Cần chuyển sang chuyến khác trước khi xóa.`, { ok: 'Chuyển chuyến' })) MV.trip(l); return; }
+    return del0(d);
+  };
 }
 
 App.cfg = CFG; Store.load();
