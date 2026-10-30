@@ -3545,15 +3545,15 @@ async function vehPdfToBlob(dataUrl) {
 }
 async function vehAuto(key, url, root) {
   const cfg = VEH_AUTO[key]; if (!cfg || !root || !url) return;
-  const sample = (typeof claude !== 'undefined' && claude.use) ? await claude.use('sample').catch(() => null) : null;
+  const sample = await aiSampler();
   const lim = sample ? await sample.limits().catch(() => null) : null;
-  if (!sample || !lim || !lim.images) return toast('Đã tải giấy tờ. Tự đọc giấy tờ chỉ dùng được khi mở bản đã xuất bản trên Claude, bạn nhập tay các trường nhé', '', 5000);
+  if (!sample || !lim || !lim.images) return toast(lcAdmin() ? 'Đã tải giấy tờ. Muốn app tự đọc và điền thông tin: vào menu tài khoản → AI đọc ảnh để cài khóa Gemini' : 'Đã tải giấy tờ. Chưa cài AI đọc ảnh nên bạn nhập tay các trường nhé', '', 7000);
   toast('Đang đọc ' + cfg.label + ' để tự điền thông tin…', '', 15000);
   let res;
   try {
     const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob();
     res = await sample.json(cfg.ask + '\nChỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng. Ngày đúng định dạng YYYY-MM-DD.', { images: [blob], modelTier: 'default', cache: false });
-  } catch (e) { return toast(e && e.code === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không tự điền được' : fileIsPdf(url) ? 'Không đọc được file PDF này, hãy tải ảnh chụp giấy tờ để tự điền' : 'Không đọc được giấy tờ, bạn nhập tay các trường nhé', 'err', 6000); }
+  } catch (e) { return toast(sample.gemini && e && e.code && e.code !== 'invalid_json' ? AIX.msg(e) : e && e.code === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không tự điền được' : fileIsPdf(url) ? 'Không đọc được file PDF này, hãy tải ảnh chụp giấy tờ để tự điền' : 'Không đọc được giấy tờ, bạn nhập tay các trường nhé', 'err', 6000); }
   if (!res || typeof res !== 'object') return toast('Không đọc được thông tin trên giấy tờ', 'err');
   const el = n => root.querySelector(`[name="${n}"]`), got = [], isDate = k => /^(dkNgay|hh)/.test(k), okDate = x => /^\d{4}-\d{2}-\d{2}$/.test(x);
   const set = (k, val) => { const i = el(k); if (!i) return false; i.value = val; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); got.push(VEH_AUTO_LBL[k] || k); return true; };
@@ -5605,9 +5605,9 @@ addCSS('.sc-drop{position:relative}.sc-drop>svg{width:30px;height:30px;display:b
 const dhScan = {
   file: null, ctl: null,
   async open() {
-    const sample = (typeof claude !== 'undefined' && claude.use) ? await claude.use('sample').catch(() => null) : null;
+    const sample = await aiSampler();
     const lim = sample ? await sample.limits().catch(() => null) : null;
-    if (!sample || !lim || !lim.images) return toast('Tính năng quét ảnh chỉ dùng được khi mở bản đã xuất bản trên Claude (cần cho phép Claude đọc ảnh)', 'err', 6000);
+    if (!sample || !lim || !lim.images) return AIX.need('Quét ảnh điều hành xe');
     const day = lcDay(), self = this; self.file = null; self.rows = [];
     const m = Modal.open({ title: 'Quét ảnh điều hành xe · ' + F.date(day), width: 820, body: `<div class="sc-drop" data-pick>${ic('upload')} <b>Bấm để chọn ảnh từ máy / thư viện ảnh (hoặc kéo thả, dán Ctrl+V)</b><div class="small" style="margin-top:4px">Ảnh rõ nét, nên cắt riêng phần bảng. Phần mềm sẽ đọc tuyến, giờ, biển số xe, lái xe rồi điền vào lịch ngày đang chọn.</div><input type="file" accept="${lim.images.mediaTypes.join(',')},image/*" data-file class="sc-in" aria-label="Chọn ảnh"></div><div style="margin-top:8px"><label class="btn sc-cam" style="position:relative;overflow:hidden;cursor:pointer">${ic('upload')} Chụp ảnh bằng điện thoại<input type="file" accept="image/*" capture="environment" data-cam class="sc-in" aria-label="Chụp ảnh"></label></div><img class="sc-prev" data-prev hidden><div data-out></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn" data-stop hidden>Dừng</button><button class="btn pri" data-go disabled>Quét ảnh</button><button class="btn pri" data-apply hidden>Áp dụng vào lịch</button>` });
     const q = s => m.el.querySelector(s), out = q('[data-out]'), go = q('[data-go]'), ap = q('[data-apply]'), stop = q('[data-stop]'), fi = q('[data-file]'), drop = q('[data-pick]'), prev = q('[data-prev]');
@@ -5645,7 +5645,7 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
       self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh, vui lòng đợi (có thể mất 10–60 giây)…</div>';
       let res;
       try { res = await sample.json(prompt, { images: self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }); }
-      catch (e) { const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
+      catch (e) { const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
       const canAdd = Auth.can('lichchay', 'add');
@@ -8902,10 +8902,27 @@ const PRN = {
     let mx = 0; for (let i = 1; i < cuts.length; i++) mx = Math.max(mx, cuts[i] - cuts[i - 1]);
     box.remove(); return Math.ceil(mm(mx)) + 3;
   },
+  // K80: mỗi phiếu (.t8 vé, phiếu gửi hàng · .r80 phiếu dầu) là 1 trang riêng, dài vừa đúng nội dung của chính phiếu đó
+  k80(html, mv, mh) {
+    const wMM = 80 - 2 * mh, box = document.createElement('div'); box.dataset.runtime = '1';
+    box.style.cssText = `position:fixed;left:-99999px;top:0;width:${wMM}mm;visibility:hidden;background:#fff`;
+    box.innerHTML = `<div id="print-root" class="k80" style="display:block">${html}</div>`;
+    document.body.appendChild(box);
+    const root = box.firstElementChild, mm = px => px * 25.4 / 96, css = [];
+    const slips = [...root.querySelectorAll('.t8, .r80')].filter(e => !e.parentElement.closest('.t8, .r80'));
+    slips.forEach((e, i) => { const cs = getComputedStyle(e), pad = e.classList.contains('r80') ? 4 : 0, h = Math.max(40, Math.ceil(mm(e.getBoundingClientRect().height + (parseFloat(cs.marginBottom) || 0)) * 1.03) + pad + 5) + 2 * mv; e.style.page = 'k80p' + i; css.push(`@page k80p${i}{size:80mm ${h}mm;margin:${mv}mm ${mh}mm}`); });
+    root.querySelectorAll('.r80cut').forEach(c => c.remove());   // vạch cắt chỉ dùng khi xem trên màn hình
+    const out = root.innerHTML; box.remove();
+    return { html: out, css: css.join('') };
+  },
   go(html, { landscape = false, title = 'Bản in', paper = 'A4', page } = {}) {
     if (html.includes('sig-img') && !Print.sigOn()) html = `<div class="nosig">${html}</div>`;
     if (!page) {
-      if (paper === '80') { const [mv, mh] = Print.marginMM('80', 'def'), h = Math.max(50, PRN.rollH(html, 80 - 2 * mh)) + 2 * mv; page = `@page{size:80mm ${h}mm;margin:${mv}mm ${mh}mm}`; }
+      if (paper === '80') {
+        const [mv, mh] = Print.marginMM('80', 'def'), k = PRN.k80(html, mv, mh);
+        const h = Math.max(50, PRN.rollH(k.html, 80 - 2 * mh)) + 2 * mv;   // trang mặc định cho phần không thuộc phiếu nào
+        html = `<div class="k80">${k.html}</div>`; page = `@page{size:80mm ${h}mm;margin:${mv}mm ${mh}mm}${k.css}`;
+      }
       else if (paper === 'A5') page = `@page{size:A5 ${landscape ? 'landscape' : 'portrait'};margin:8mm}`;
       else page = Print.pageCSS(landscape);
     }
@@ -8924,6 +8941,9 @@ const PRN = {
     Print.now(body, { title: o.title || 'Tài liệu', page: '@page{size:A4 portrait;margin:15mm}' });
   };
 }
+addCSS(`@media print{html,body,body.is-printing{padding:0!important;margin:0!important;min-height:0!important;height:auto!important}#print-root{padding:0!important;margin:0!important}#btmNav,.top-actions{display:none!important}}`);
+addCSS(`@media print{#print-root .k80 .t8,#print-root .k80 .r80{width:auto!important;max-width:none!important;margin:0!important;padding-left:0!important;padding-right:0!important}#print-root .k80 .t8,#print-root .k80 .r80{break-after:auto;page-break-after:auto}}
+.k80 .t8,.k80 .r80{width:auto!important;max-width:none!important;margin:0!important}`);
 addCSS(`@media print{#print-root .pd-doc{break-after:page;page-break-after:always}#print-root .pd-doc:last-child{break-after:auto;page-break-after:auto}#print-root .pd-doc .pagebreak{break-after:page;page-break-after:always;border:0;margin:0}#print-root .hd p,#print-root .hd tr{break-inside:avoid}}`);
 // bật / tắt trong menu tài khoản
 {
@@ -8963,6 +8983,109 @@ addCSS(`.dv-gone{position:relative;display:flex;flex-direction:column;align-item
   Auth.ACT_PERM.dhMk = ['lichchay', 'add'];
 }
 addCSS(`.dx-chip.dx-new{border:1.5px dashed #94a3b8!important;background:#f8fafc!important;color:#475569!important;box-shadow:none!important;opacity:.9}.dx-chip.dx-new:hover{border-color:var(--p)!important;color:var(--p)!important;opacity:1}.dx-chip.dx-new svg{width:14px;height:14px}.dx-nt{font-size:12px;color:#94a3b8}.dx-stats .mut a{color:var(--p);font-weight:600}`);
+
+/* ===== AI ĐỌC ẢNH KHI CHẠY NGOÀI CLAUDE (GitHub Pages, điện thoại…) =====
+   Dùng Google Gemini API bằng khóa (API key) quản lý tự tạo miễn phí ở aistudio.google.com.
+   Khóa lưu trong Cài đặt dữ liệu dùng chung để mọi máy (kể cả điện thoại) quét được. */
+const AIX = {
+  URL: 'https://generativelanguage.googleapis.com/v1beta',
+  MODELS: ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  cfg: () => ((DB && DB.settings && DB.settings.ai) || {}),
+  ok: () => !!AIX.cfg().key,
+  err(code, msg) { const e = new Error(msg || code); e.code = code; return e; },
+  b64: blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => no(r.error); r.readAsDataURL(blob); }),
+  parse(t) {
+    t = String(t || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    try { return JSON.parse(t); } catch (e) { }
+    const m = t.match(/[\[{][\s\S]*[\]}]/); if (m) { try { return JSON.parse(m[0]); } catch (e) { } }
+    throw AIX.err('invalid_json');
+  },
+  async call(model, body, key, signal) {
+    let r;
+    try { r = await fetch(`${AIX.URL}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal }); }
+    catch (e) { if (e && e.name === 'AbortError') throw AIX.err('cancelled'); throw AIX.err('network', 'Không kết nối được dịch vụ AI (kiểm tra mạng)'); }
+    if (r.ok) return r.json();
+    let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) { }
+    if (r.status === 404) throw AIX.err('no_model', msg);
+    if (r.status === 429) throw AIX.err('rate_limited', msg);
+    if (r.status === 400 && /api key|API_KEY/i.test(msg)) throw AIX.err('bad_key', msg);
+    if (r.status === 401 || r.status === 403) throw AIX.err('bad_key', msg);
+    if (r.status === 400 && /image|inline|mime/i.test(msg)) throw AIX.err('image_rejected', msg);
+    throw AIX.err('http_' + r.status, msg);
+  },
+  // giống sample.json của Claude: trả về đối tượng JSON đọc được
+  async json(prompt, { images, signal } = {}) {
+    const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
+    const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
+    for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
+    const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+    const list = [...new Set([c.model, AIX._good, ...AIX.MODELS].filter(Boolean))];
+    let last;
+    for (const md of list) {
+      try {
+        const j = await AIX.call(md, body, c.key, signal); AIX._good = md;
+        const txt = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(p => p.text || '').join('') : '';
+        if (!txt) throw AIX.err((j.promptFeedback && j.promptFeedback.blockReason) ? 'image_rejected' : 'invalid_json');
+        return AIX.parse(txt);
+      } catch (e) { last = e; if (e.code !== 'no_model') throw e; }
+    }
+    throw last || AIX.err('no_model');
+  },
+  sampler: () => ({ json: (p, o) => AIX.json(p, o), limits: async () => ({ images: { mediaTypes: ['image/jpeg', 'image/png', 'image/webp'] } }), gemini: true }),
+  // chưa có khóa: giải thích và mở phần cài đặt
+  need(what) {
+    const ad = lcAdmin();
+    const m = Modal.open({ title: 'Cần cài AI đọc ảnh', width: 480, body: `<p style="margin-top:0">${esc(what || 'Quét ảnh')} cần một dịch vụ AI để đọc chữ trong ảnh. Khi mở app từ GitHub Pages (máy tính hoặc điện thoại), app dùng <b>Google Gemini</b> bằng khóa miễn phí của nhà xe.</p>${ad ? '<p class="muted small">Chỉ cần cài 1 lần, mọi máy đăng nhập vào dữ liệu dùng chung đều dùng được.</p>' : '<p class="muted small">Nhờ quản lý (Admin) cài khóa Gemini một lần trong menu tài khoản → <b>AI đọc ảnh</b>.</p>'}`, foot: `<button class="btn" data-no>Đóng</button>${ad ? `<button class="btn pri" data-ok>${ic('settings')} Cài ngay</button>` : ''}` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    const b = m.el.querySelector('[data-ok]'); if (b) b.onclick = () => { m.close(); AIX.setup(); };
+  },
+  setup() {
+    if (!lcAdmin()) return toast('Chỉ Admin cài được khóa AI', 'err');
+    const c = AIX.cfg();
+    const m = Modal.open({ title: 'AI đọc ảnh (Google Gemini)', width: 560, body: `<ol class="small" style="margin:0 0 10px;padding-left:18px;line-height:1.7">
+        <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"><b>aistudio.google.com/apikey</b></a>, đăng nhập Google của nhà xe.</li>
+        <li>Bấm <b>Create API key</b> (Tạo khóa API), chép khóa (bắt đầu bằng <code>AIza…</code>).</li>
+        <li>Dán vào ô dưới, bấm <b>Kiểm tra</b> rồi <b>Lưu</b>.</li></ol>
+      <div class="form" style="grid-template-columns:1fr"><div class="field"><label>Khóa Gemini API</label><div class="hub-pw" style="position:relative"><input class="inp" id="aiK" type="password" autocomplete="off" value="${esc(c.key || '')}" placeholder="AIza..." style="padding-right:44px"><button type="button" class="ibtn" id="aiEye" style="position:absolute;right:3px;top:3px" title="Hiện / ẩn">${ic('eye')}</button></div></div>
+      <div class="field"><label>Model (để trống = tự chọn)</label><input class="inp" id="aiM" value="${esc(c.model || '')}" placeholder="${esc(AIX.MODELS.join(' / '))}"></div></div>
+      <div id="aiR" class="small" style="margin-top:8px"></div>
+      <p class="small muted" style="margin:8px 0 0">Khóa được lưu trong cài đặt dữ liệu dùng chung, nên máy nào vào được dữ liệu đều quét ảnh được. Gói miễn phí của Google có giới hạn số lần mỗi ngày, đủ cho việc quét bảng điều hành và giấy tờ xe.</p>`,
+      foot: `${c.key ? '<button class="btn danger left" data-del>Xóa khóa</button>' : ''}<button class="btn" data-test>${ic('check')} Kiểm tra</button><button class="btn pri" data-ok>Lưu</button>` });
+    const q = s => m.el.querySelector(s), R = q('#aiR');
+    q('#aiEye').onclick = () => { const i = q('#aiK'); i.type = i.type === 'password' ? 'text' : 'password'; };
+    q('[data-test]').onclick = async () => {
+      const key = q('#aiK').value.trim(); if (!key) return toast('Dán khóa trước', 'err');
+      R.innerHTML = 'Đang kiểm tra…';
+      const keep = DB.settings.ai; DB.settings.ai = { key, model: q('#aiM').value.trim() };
+      try { const r = await AIX.json('Trả về JSON {"ok":true}'); R.innerHTML = r && r.ok ? `<span style="color:#15803d">${ic('check')} Khóa dùng được (model ${esc(AIX._good || '')}).</span>` : '<span style="color:#b45309">Kết nối được nhưng kết quả lạ, vẫn có thể dùng thử.</span>'; }
+      catch (e) { R.innerHTML = `<span style="color:#b91c1c">${esc(AIX.msg(e))}</span>`; }
+      finally { DB.settings.ai = keep; }
+    };
+    const del = q('[data-del]'); if (del) del.onclick = () => { delete DB.settings.ai; App.changed(); m.close(); toast('Đã xóa khóa AI', 'ok'); };
+    q('[data-ok]').onclick = () => { const key = q('#aiK').value.trim(); if (!key) return toast('Dán khóa Gemini API', 'err'); DB.settings.ai = { key, model: q('#aiM').value.trim() }; App.changed(); m.close(); toast('Đã lưu. Từ giờ Quét ảnh và tự đọc giấy tờ xe dùng được trên mọi máy.', 'ok', 6000); };
+  },
+  msg(e) {
+    const c = e && e.code;
+    return c === 'bad_key' ? 'Khóa Gemini không đúng hoặc đã bị tắt. Vào menu tài khoản → AI đọc ảnh để kiểm tra lại.'
+      : c === 'rate_limited' ? 'Đã quét quá nhiều trong thời gian ngắn (giới hạn gói miễn phí), thử lại sau ít phút.'
+      : c === 'no_model' ? 'Không tìm thấy model AI. Vào AI đọc ảnh, để trống ô Model hoặc nhập tên model khác.'
+      : c === 'network' ? 'Không kết nối được dịch vụ AI, kiểm tra mạng.'
+      : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.'
+      : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.'
+      : c === 'cancelled' ? 'Đã dừng.' : 'Lỗi AI: ' + ((e && e.message) || c || '');
+  }
+};
+// Claude (khi app mở trên Claude) hoặc Gemini (mọi nơi khác)
+async function aiSampler() {
+  const s = (typeof claude !== 'undefined' && claude.use) ? await claude.use('sample').catch(() => null) : null;
+  if (s) { const lim = await s.limits().catch(() => null); if (lim && lim.images) return s; }
+  return AIX.ok() ? AIX.sampler() : null;
+}
+{
+  // menu tài khoản: mục cài AI (Admin)
+  const ch2 = Auth.chip; Auth.chip = function () { const r = ch2.apply(this, arguments); const box = $('#auMe .au-dd'); if (box && lcAdmin() && !box.querySelector('[data-au=ai]')) { const out = box.querySelector('[data-au=out]'); out && out.insertAdjacentHTML('beforebegin', `<button data-au="ai">${ic('sparkle')} AI đọc ảnh${AIX.ok() ? ' ✓' : ''}</button>`); } return r; };
+  document.addEventListener('click', e => { const b = e.target.closest('[data-au=ai]'); if (!b) return; e.stopImmediatePropagation(); const m = $('#auMe'); m && m.classList.remove('open'); AIX.setup(); }, true);
+}
 
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
