@@ -8264,6 +8264,101 @@ try { const m0 = CFG.migrate; CFG.migrate = function (db) { const r = m0.apply(t
 try { if (DB && ARROW.fix(DB)) { Store.dirty = true; } } catch (e) { }
 window.addEventListener('load', () => { try { const c0 = App.changed; App.changed = function () { try { ARROW.fix(DB); } catch (e) { } return c0.apply(this, arguments); }; } catch (e) { } });
 
+
+/* ===== Sao lưu tự động sang Google Drive (máy chủ dự phòng, 1 chiều) – chỉ Admin =====
+   - Bản chính vẫn là nơi lưu đang dùng (Firebase). Máy admin tự gửi bản sao sang Apps Script + Drive.
+   - Cấu hình chỉ lưu trên máy này (localStorage), không nằm trong dữ liệu chung nên nhân viên không thấy mã. */
+const BK = {
+  K: 'bk.cfg', KS: 'bk.st', busy: false, sig: '', t: null, list: null,
+  cfg() { try { return Object.assign({ url: '', key: '', on: false, every: 30 }, JSON.parse(localStorage.getItem(BK.K) || '{}') || {}); } catch (e) { return { url: '', key: '', on: false, every: 30 }; } },
+  save(c) { try { localStorage.setItem(BK.K, JSON.stringify(c)); } catch (e) { } },
+  st() { try { return JSON.parse(localStorage.getItem(BK.KS) || '{}') || {}; } catch (e) { return {}; } },
+  setSt(o) { try { localStorage.setItem(BK.KS, JSON.stringify(Object.assign(BK.st(), o))); } catch (e) { } },
+  admin: () => { try { return !!(Auth.user && Auth.user.role === 'admin'); } catch (e) { return false; } },
+  ok: c => /^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(c.url || '') && (c.key || '').length >= 6,
+  call(body, c = BK.cfg(), ms = 90000) { return GS.call(body, { url: c.url, key: c.key, mode: 'gas' }, ms).catch(e => { throw new Error(String(e.message || e).replace('máy chủ Google', 'máy chủ sao lưu Drive')); }); },
+  hash(s) { let h = 5381; for (let i = 0; i < s.length; i += 7) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + ':' + h; },
+  async run(force) {
+    const c = BK.cfg(); if (!BK.admin() || !BK.ok(c) || (!c.on && !force) || BK.busy || !DB) return;
+    const st = BK.st(), due = !st.at || (Date.now() - new Date(st.at).getTime()) >= (+c.every || 30) * 60000;
+    const txt = JSON.stringify(DB), sg = BK.hash(txt);
+    if (!force && (!due || sg === (st.sig || ''))) return;
+    BK.busy = true; BK.paint();
+    try {
+      const j = await BK.call({ action: 'put', data: DB, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c);
+      BK.setSt({ at: new Date().toISOString(), sig: sg, err: '', ver: j.ver, kb: Math.round(txt.length / 1024) });
+      if (force) toast(`${ic('check')} Đã sao lưu sang Google Drive`, 'ok', 3500);
+    } catch (e) { BK.setSt({ err: e.message, errAt: new Date().toISOString() }); if (force) toast(esc(e.message), 'err', 8000); }
+    finally { BK.busy = false; BK.paint(); }
+  },
+  ago(iso) { if (!iso) return 'chưa có'; const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? 'vừa xong' : m < 60 ? m + ' phút trước' : m < 1440 ? Math.round(m / 60) + ' giờ trước' : new Date(iso).toLocaleString('vi-VN'); },
+  stHTML() {
+    const c = BK.cfg(), st = BK.st(), good = c.on && BK.ok(c) && !st.err;
+    const t = BK.busy ? 'Đang sao lưu…' : !BK.ok(c) ? 'Chưa cài đặt máy chủ sao lưu' : !c.on ? 'Đang tắt sao lưu tự động' : st.err ? 'Lần sao lưu gần nhất bị lỗi' : 'Đang tự sao lưu';
+    const s = st.err && c.on ? esc(st.err) : `Lần gần nhất: ${BK.ago(st.at)}${st.kb ? ' · ' + (st.kb > 1024 ? F.num(st.kb / 1024, 1) + ' MB' : st.kb + ' KB') : ''}${c.on && BK.ok(c) ? ' · tối đa ' + (c.every >= 60 ? c.every / 60 + ' giờ' : c.every + ' phút') + '/lần khi có thay đổi' : ''}`;
+    return `<div class="hub-zs ${good ? 'ok' : ''}">${ic(good ? 'check' : 'alert')}<div><b>${t}</b><small>${s}</small></div></div>`;
+  },
+  paint() { const el = document.querySelector('[data-bkst]'); if (el) el.innerHTML = BK.stHTML(); },
+  html() {
+    const c = BK.cfg(), same = GS.cfg().mode !== 'fb' && GS.cfg().url && GS.cfg().url === c.url;
+    const opt = [[15, '15 phút'], [30, '30 phút'], [60, '1 giờ'], [180, '3 giờ'], [720, '12 giờ']].map(([v, l]) => `<option value="${v}" ${+c.every === v ? 'selected' : ''}>${l}</option>`).join('');
+    return `<div class="bk-sec">
+      <div class="hub-h">Sao lưu tự động sang Google Drive <span class="badge b-violet" style="margin-left:6px">Chỉ Admin</span></div>
+      <div class="hub-card">
+        <div data-bkst style="margin-bottom:12px">${BK.stHTML()}</div>
+        <p class="hub-p">Bản chính vẫn lưu ở <b>${GS.cfg().mode === 'fb' ? 'Firebase' : 'nơi lưu hiện tại'}</b>. Máy này tự gửi <b>bản sao một chiều</b> sang Google Drive (Apps Script dùng file <b>Code.gs</b>). Drive giữ thêm 1 bản mỗi ngày trong 30 ngày. Cài đặt chỉ lưu trên máy này, nên đặt trên máy văn phòng luôn bật.</p>
+        ${same ? `<div class="banner warn" style="margin-bottom:10px">${ic('alert')} Địa chỉ này trùng với nơi lưu chính. Nên dùng một Apps Script riêng cho sao lưu.</div>` : ''}
+        <label class="hub-f"><span>Địa chỉ Web app sao lưu (Apps Script)</span><input class="inp" data-bk="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url)}"></label>
+        <label class="hub-f"><span>Mã kết nối sao lưu <small>(giống APP_KEY trong Code.gs)</small></span><div class="hub-pw"><input class="inp" data-bk="key" type="password" autocomplete="off" value="${esc(c.key)}"><button class="ibtn" data-g="bkeye">${ic('eye')}</button></div></label>
+        <div class="row" style="margin-bottom:10px"><label class="row small" style="gap:8px;font-weight:600"><input type="checkbox" data-bk="on" ${c.on ? 'checked' : ''}> Bật sao lưu tự động</label><span class="grow"></span><label class="row small" style="gap:6px">Tần suất <select class="inp sm" data-bk="every" style="width:auto">${opt}</select></label></div>
+        <div class="hub-btns"><button class="btn" data-g="bktest">${ic('check')} Thử kết nối</button><button class="btn pri" data-g="bksave">${ic('save')} Lưu cài đặt</button><button class="btn" data-g="bknow" ${BK.ok(c) ? '' : 'disabled'}>${ic('upload')} Sao lưu ngay</button></div>
+      </div>
+      <div class="hub-card" style="margin-top:10px">
+        <p class="hub-p"><b>Khôi phục từ Google Drive</b>: dùng khi dữ liệu chính bị lỗi hoặc lỡ xóa nhầm. Trước khi khôi phục, app tự lưu bản hiện tại sang Drive để có thể quay lại.</p>
+        <div class="hub-btns" style="justify-content:flex-start"><button class="btn" data-g="bklist" ${BK.ok(c) ? '' : 'disabled'}>${ic('refresh')} Xem các bản sao lưu</button></div>
+        <div data-bklist>${BK.listHTML()}</div>
+      </div></div>`;
+  },
+  listHTML() {
+    if (!BK.list) return '';
+    if (!BK.list.length) return '<p class="hub-p" style="margin-top:8px">Chưa có bản sao lưu nào trên Drive.</p>';
+    return `<div class="bk-l">${BK.list.map(f => `<div class="bk-r"><div><b>${esc(f.label || f.name)}</b><small>${f.at ? new Date(f.at).toLocaleString('vi-VN') : ''}${f.size ? ' · ' + (f.size > 1048576 ? F.num(f.size / 1048576, 1) + ' MB' : Math.round(f.size / 1024) + ' KB') : ''}</small></div><button class="btn sm" data-g="bkrest" data-n="${esc(f.name)}">${ic('download')} Khôi phục</button></div>`).join('')}</div>`;
+  },
+  form() { const q = k => HUB.el.querySelector(`[data-bk="${k}"]`); return { url: (q('url') || {}).value.trim(), key: (q('key') || {}).value.trim(), on: !!(q('on') || {}).checked, every: +((q('every') || {}).value || 30) }; },
+  async act(a, b) {
+    if (!BK.admin()) return toast('Chỉ Admin được thao tác sao lưu', 'err');
+    const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
+    const need = c => { if (!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(c.url)) throw new Error('Nhập đúng địa chỉ Web app (dạng https://script.google.com/macros/s/…/exec)'); if (c.key.length < 6) throw new Error('Mã kết nối sao lưu phải từ 6 ký tự'); };
+    if (a === 'bkeye') { const i = b.parentElement.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; return; }
+    if (a === 'bktest') return busy(async () => { const c = BK.form(); need(c); const j = await BK.call({ action: 'info' }, c, 30000); toast(`Kết nối được máy chủ sao lưu${j.at ? ' · lần lưu gần nhất ' + new Date(j.at).toLocaleString('vi-VN') : ' · chưa có bản sao lưu'}`, 'ok', 6000); });
+    if (a === 'bksave') return busy(async () => { const c = BK.form(); if (c.url || c.key || c.on) need(c); if (c.on) await BK.call({ action: 'info' }, c, 30000); const old = BK.cfg(); BK.save(c); if (old.url !== c.url) BK.setSt({ at: '', sig: '', err: '' }); BK.list = null; HUB.setTab('gdata'); toast(c.on ? 'Đã lưu. Đang sao lưu lần đầu…' : 'Đã lưu cài đặt sao lưu', 'ok'); if (c.on) BK.run(true); });
+    if (a === 'bknow') return busy(async () => { const c = BK.cfg(); need(c); await BK.run(true); });
+    if (a === 'bklist') return busy(async () => { const j = await BK.call({ action: 'list' }); BK.list = j.files || []; const el = HUB.el.querySelector('[data-bklist]'); if (el) el.innerHTML = BK.listHTML(); });
+    if (a === 'bkrest') return busy(async () => {
+      const n = b.dataset.n, f = (BK.list || []).find(x => x.name === n) || { name: n };
+      if (!await Modal.confirm(`Khôi phục dữ liệu từ bản <b>${esc(f.label || n)}</b>${f.at ? ' (' + new Date(f.at).toLocaleString('vi-VN') + ')' : ''}?<br><span class="small muted">Toàn bộ dữ liệu hiện tại ${GS.on ? 'trên mọi máy ' : ''}sẽ được thay bằng bản này. Bản hiện tại được tự lưu sang Drive trước để có thể quay lại.</span>`, { ok: 'Khôi phục', danger: true, title: 'Khôi phục từ Google Drive' })) return;
+      toast('Đang lưu bản hiện tại sang Drive…', '', 3000);
+      await BK.call({ action: 'snap', data: DB, who: GS.who() });
+      const j = await BK.call({ action: 'getbk', name: n });
+      if (!j.data || !j.data.settings) throw new Error('Bản sao lưu này không có dữ liệu hợp lệ');
+      const gs = DB.settings.gsync, me = Auth.user && Auth.user.id;
+      DB = j.data; DB._meta = DB._meta || {}; delete DB._meta.shell; delete DB._meta.sample;
+      App.cfg.migrate && App.cfg.migrate(DB); if (gs) DB.settings.gsync = gs;
+      try { Auth.user = DB.users.find(u => u.id === me) || Auth.user; Auth.chip(); } catch (e) { }
+      if (GS.on) { await GS.push(true); if (GS.err) throw new Error('Đã khôi phục trên máy này nhưng chưa đưa lên được nơi lưu chính: ' + GS.err); }
+      App.changed(); BK.list = null; toast(`${ic('check')} Đã khôi phục dữ liệu từ Google Drive`, 'ok', 6000); HUB.setTab('gdata');
+    });
+  },
+  mount() {
+    const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { if (BK.admin() && body && !body.querySelector('.bk-sec')) body.insertAdjacentHTML('beforeend', BK.html()); } catch (e) { } return r; };
+    const a0 = GS.act; GS.act = function (a, b) { if (/^bk/.test(a || '')) return BK.act(a, b); return a0.apply(this, arguments); };
+    setInterval(() => BK.run(false), 60000); setTimeout(() => BK.run(false), 20000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') BK.run(false); });
+  }
+};
+addCSS(`.bk-l{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:300px;overflow:auto}.bk-r{display:flex;align-items:center;gap:8px;border:1px solid #eef2f7;border-radius:10px;padding:8px 10px}.bk-r>div{flex:1;min-width:0}.bk-r b{display:block;font-size:13px}.bk-r small{color:#64748b;font-size:12px}`);
+window.addEventListener('load', () => { try { BK.mount(); } catch (e) { } });
+
 </script>
 
 
