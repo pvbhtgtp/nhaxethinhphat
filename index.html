@@ -913,10 +913,100 @@ const XLSX = (() => {
     if (cur || row.length) { row.push(cur); rows.push(row); }
     return rows;
   }
+  // ----- Đọc file .xls đời cũ (Excel 97-2003, BIFF8) — Skysoft và nhiều phần mềm VN xuất dạng này -----
+  function cfbStream(buf, names) {
+    const v = new DataView(buf), u = new Uint8Array(buf);
+    const ss = 1 << v.getUint16(30, true), mss = 1 << v.getUint16(32, true), nFat = v.getUint32(44, true), dir0 = v.getUint32(48, true), cut = v.getUint32(56, true), mf0 = v.getUint32(60, true), nDif = v.getUint32(72, true);
+    let dif0 = v.getUint32(68, true);
+    const off = s => (s + 1) * ss, fatS = [];
+    for (let i = 0; i < 109 && fatS.length < nFat; i++) fatS.push(v.getUint32(76 + i * 4, true));
+    for (let k = 0; k < nDif && dif0 < 0xFFFFFFFA && fatS.length < nFat; k++) { const o = off(dif0); for (let i = 0; i < ss / 4 - 1 && fatS.length < nFat; i++) fatS.push(v.getUint32(o + i * 4, true)); dif0 = v.getUint32(o + ss - 4, true); }
+    const fat = []; fatS.forEach(s => { const o = off(s); for (let i = 0; i < ss / 4; i++) fat.push(v.getUint32(o + i * 4, true)); });
+    const chain = (s, f) => { const out = []; let g = 0; while (s < 0xFFFFFFFA && g++ < 1e6) { out.push(s); s = f[s]; } return out; };
+    const big = (s, size) => { const r = new Uint8Array(size); let p = 0; for (const x of chain(s, fat)) { const n = Math.min(ss, size - p); if (n <= 0) break; r.set(u.subarray(off(x), off(x) + n), p); p += n; } return r; };
+    const dirB = big(dir0, chain(dir0, fat).length * ss), dv = new DataView(dirB.buffer), ents = [];
+    for (let o = 0; o + 128 <= dirB.length; o += 128) { const nl = dv.getUint16(o + 64, true); let nm = ''; for (let i = 0; i < Math.max(0, nl / 2 - 1); i++) nm += String.fromCharCode(dv.getUint16(o + i * 2, true)); ents.push({ nm, t: dirB[o + 66], s: dv.getUint32(o + 116, true), size: dv.getUint32(o + 120, true) }); }
+    const e = ents.find(x => x.t === 2 && names.includes(x.nm)); if (!e) return null;
+    if (e.size >= cut) return big(e.s, e.size);
+    const root = ents[0], ms = big(root.s, root.size), mfat = [];
+    chain(mf0, fat).forEach(s => { const o = off(s); for (let i = 0; i < ss / 4; i++) mfat.push(v.getUint32(o + i * 4, true)); });
+    const r = new Uint8Array(e.size); let p = 0; for (const x of chain(e.s, mfat)) { const n = Math.min(mss, e.size - p); if (n <= 0) break; r.set(ms.subarray(x * mss, x * mss + n), p); p += n; } return r;
+  }
+  function biffRows(wb) {
+    const v = new DataView(wb.buffer, wb.byteOffset, wb.byteLength), recs = [];
+    for (let p = 0; p + 4 <= wb.length;) { const t = v.getUint16(p, true), n = v.getUint16(p + 2, true); recs.push({ t, p: p + 4, n }); p += 4 + n; }
+    if (!recs.length || recs[0].t !== 0x0809) throw new Error('File .xls không đúng định dạng Excel');
+    const b8 = v.getUint16(recs[0].p, true) === 0x0600; let cp = 1252; const dec8 = () => { try { return new TextDecoder(cp === 1200 ? 'utf-16le' : 'windows-' + cp); } catch (e) { return new TextDecoder('windows-1252'); } };
+    // chuỗi Unicode của BIFF8, có thể bị cắt sang bản ghi CONTINUE
+    function rdStr(segs, st, lenBytes) {
+      const need = k => { while (st.p >= segs[st.i].length && st.i < segs.length - 1) { st.i++; st.p = 0; } return segs[st.i]; };
+      const byte = () => need()[st.p++];
+      const u16 = () => byte() | (byte() << 8), u32 = () => (u16() + u16() * 65536);
+      const cch = lenBytes === 1 ? byte() : u16(), fl = byte(); let hi = fl & 1; const cr = fl & 8 ? u16() : 0, ce = fl & 4 ? u32() : 0;
+      let s = '';
+      for (let k = 0; k < cch;) {
+        if (st.p >= segs[st.i].length) { if (st.i >= segs.length - 1) break; st.i++; st.p = 0; hi = segs[st.i][st.p++] & 1; }
+        const g = segs[st.i]; if (hi) { s += String.fromCharCode(g[st.p] | (g[st.p + 1] << 8)); st.p += 2; } else { s += String.fromCharCode(g[st.p]); st.p++; } k++;
+      }
+      let sk = cr * 4 + ce; while (sk > 0) { need(); const a = Math.min(sk, segs[st.i].length - st.p); if (a <= 0) break; st.p += a; sk -= a; }
+      return s;
+    }
+    const sst = [], sheets = [];
+    for (let i = 0; i < recs.length; i++) {
+      const r = recs[i];
+      if (r.t === 0x0042) cp = v.getUint16(r.p, true);
+      else if (r.t === 0x0085) sheets.push({ at: v.getUint32(r.p, true), hide: wb[r.p + 4] & 3, kind: wb[r.p + 5] });
+      else if (r.t === 0x00FC) {
+        const segs = [wb.subarray(r.p, r.p + r.n)]; while (recs[i + 1] && recs[i + 1].t === 0x003C) { i++; segs.push(wb.subarray(recs[i].p, recs[i].p + recs[i].n)); }
+        const n = v.getUint32(r.p + 4, true), st = { i: 0, p: 8 }; for (let k = 0; k < n; k++) { if (st.i >= segs.length - 1 && st.p >= segs[st.i].length) break; sst.push(rdStr(segs, st, 2)); }
+      }
+    }
+    const sh = sheets.find(s => s.kind === 0 && s.hide === 0) || sheets.find(s => s.kind === 0) || { at: 0 };
+    const rk = p => { const x = v.getInt32(p, true); let n; if (x & 2) n = x >> 2; else { const b = new DataView(new ArrayBuffer(8)); b.setInt32(4, x & ~3, true); b.setInt32(0, 0, true); n = b.getFloat64(0, true); } return x & 1 ? n / 100 : n; };
+    const rows = []; const put = (r, c, val) => { (rows[r] = rows[r] || [])[c] = val; };
+    let i0 = recs.findIndex(r => r.p - 4 === sh.at); if (i0 < 0) i0 = recs.findIndex((r, k) => r.t === 0x0809 && k > 0);
+    let fr = null;
+    for (let i = i0 + 1; i < recs.length; i++) {
+      const r = recs[i], p = r.p; if (r.t === 0x000A) break;
+      if (r.t === 0x00FD) put(v.getUint16(p, true), v.getUint16(p + 2, true), sst[v.getUint32(p + 6, true)] ?? '');
+      else if (r.t === 0x0203) put(v.getUint16(p, true), v.getUint16(p + 2, true), v.getFloat64(p + 6, true));
+      else if (r.t === 0x027E) put(v.getUint16(p, true), v.getUint16(p + 2, true), rk(p + 6));
+      else if (r.t === 0x00BD) { const row = v.getUint16(p, true), c0 = v.getUint16(p + 2, true), n = (r.n - 6) / 6; for (let k = 0; k < n; k++) put(row, c0 + k, rk(p + 4 + k * 6 + 2)); }
+      else if (r.t === 0x0204 || r.t === 0x00D6) { const row = v.getUint16(p, true), c = v.getUint16(p + 2, true), n = v.getUint16(p + 6, true); put(row, c, b8 ? rdStr([wb.subarray(p + 6, p + r.n)], { i: 0, p: 0 }, 2) : dec8().decode(wb.subarray(p + 8, p + 8 + n))); }
+      else if (r.t === 0x0205) { const row = v.getUint16(p, true), c = v.getUint16(p + 2, true); put(row, c, wb[p + 7] ? '' : !!wb[p + 6]); }
+      else if (r.t === 0x0006) {
+        const row = v.getUint16(p, true), c = v.getUint16(p + 2, true);
+        if (v.getUint16(p + 12, true) !== 0xFFFF) put(row, c, v.getFloat64(p + 6, true));
+        else { const k = wb[p + 6]; if (k === 0) fr = [row, c]; else if (k === 1) put(row, c, !!wb[p + 8]); else put(row, c, ''); }
+      }
+      else if (r.t === 0x0207 && fr) { put(fr[0], fr[1], rdStr([wb.subarray(p, p + r.n)], { i: 0, p: 0 }, 2)); fr = null; }
+    }
+    return Array.from(rows, x => Array.from(x || [], y => y ?? ''));
+  }
+  // .xls thực chất là trang HTML hoặc XML Spreadsheet 2003 (nhiều web xuất kiểu này)
+  function textRows(t) {
+    const doc = new DOMParser().parseFromString(t, /<Workbook[^>]*urn:schemas-microsoft-com:office:spreadsheet/i.test(t) ? 'application/xml' : 'text/html');
+    const ws = doc.getElementsByTagNameNS('*', 'Worksheet')[0];
+    if (ws) return [...ws.getElementsByTagNameNS('*', 'Row')].map(r => { const row = []; let c = 0; [...r.getElementsByTagNameNS('*', 'Cell')].forEach(x => { const ix = x.getAttribute('ss:Index') || x.getAttributeNS('urn:schemas-microsoft-com:office:spreadsheet', 'Index'); if (ix) c = +ix - 1; const d = x.getElementsByTagNameNS('*', 'Data')[0], ty = d && (d.getAttribute('ss:Type') || d.getAttributeNS('urn:schemas-microsoft-com:office:spreadsheet', 'Type')); row[c++] = d ? (ty === 'Number' ? +d.textContent : d.textContent) : ''; }); return Array.from(row, y => y ?? ''); });
+    const tb = [...doc.querySelectorAll('table')].sort((a, b) => b.rows.length - a.rows.length)[0];
+    if (!tb) throw new Error('Không tìm thấy bảng dữ liệu trong file');
+    const out = [], span = {};
+    [...tb.rows].forEach((tr, ri) => { const row = out[ri] = out[ri] || []; let c = 0; [...tr.cells].forEach(td => { while (row[c] !== undefined) c++; const val = td.textContent.replace(/\s+/g, ' ').trim(), cs = +td.colSpan || 1, rs = +td.rowSpan || 1; for (let a = 0; a < rs; a++) { const rr = out[ri + a] = out[ri + a] || []; for (let b = 0; b < cs; b++) rr[c + b] = a === 0 && b === 0 ? val : ''; } c += cs; }); });
+    return out.map(r => Array.from(r, y => y ?? ''));
+  }
   async function read(file) {
-    if (/\.csv$/i.test(file.name)) return csvRows((await file.text()).replace(/^﻿/, ''));
-    if (/\.xls$/i.test(file.name)) throw new Error('File .xls đời cũ chưa đọc được. Mở bằng Excel rồi lưu lại thành .xlsx nhé');
-    const z = await unzip(await file.arrayBuffer());
+    const ab = await file.arrayBuffer(), h = new Uint8Array(ab.slice(0, 8));
+    if (h[0] === 0xD0 && h[1] === 0xCF && h[2] === 0x11 && h[3] === 0xE0) {   // .xls đời cũ (Excel 97-2003)
+      const wb = cfbStream(ab, ['Workbook', 'Book']); if (!wb) throw new Error('File .xls không có dữ liệu bảng tính (có thể đang đặt mật khẩu)');
+      return biffRows(wb);
+    }
+    if (!(h[0] === 0x50 && h[1] === 0x4B)) {   // không phải zip: CSV, hoặc .xls dạng HTML / XML
+      let t = new TextDecoder('utf-8').decode(ab).replace(/^﻿/, '');
+      if (/^\s*</.test(t) && /<(table|Workbook)/i.test(t)) return textRows(t);
+      if (/\.csv$/i.test(file.name) || !/<[a-z]/i.test(t.slice(0, 500))) return csvRows(t);
+      throw new Error('Không nhận ra định dạng file. Hãy chọn file Excel (.xls, .xlsx) hoặc .csv');
+    }
+    const z = await unzip(ab);
     const ss = xmlOf(z, 'xl/sharedStrings.xml'), strs = ss ? tagAll(ss.documentElement, 'si').map(si => tagAll(si, 't').map(t => t.textContent).join('')) : [];
     const wb = xmlOf(z, 'xl/workbook.xml'), rels = xmlOf(z, 'xl/_rels/workbook.xml.rels');
     let path = 'xl/worksheets/sheet1.xml';
@@ -6130,7 +6220,7 @@ function kmImport() {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
   inp.onchange = async () => {
     const f = inp.files[0]; if (!f) return;
-    let rows; try { rows = (await XLSX.read(f)).filter(r => r && r.some(c => String(c ?? '').trim() !== '')); } catch (e) { return toast('Không đọc được file', 'err'); }
+    let rows; try { rows = (await XLSX.read(f)).filter(r => r && r.some(c => String(c ?? '').trim() !== '')); } catch (e) { return toast('Không đọc được file: ' + esc(e.message || ''), 'err', 8000); }
     if (rows.length < 2) return toast('File không có dữ liệu', 'err');
     const nh = x => dvNorm(x), isH = r => r.filter(c => typeof c === 'string' && c.trim()).length >= 2;
     let hr = rows.slice(0, 15).findIndex(r => isH(r) && r.some(c => /km|quang duong|distance/.test(nh(c)))); if (hr < 0) hr = rows.slice(0, 15).findIndex(isH); if (hr < 0) hr = 0;
@@ -6147,11 +6237,11 @@ function kmImport() {
       const b = +q('#kB').value, k = +q('#kK').value, d = +q('#kD').value, byV = {}; Object.assign(byV, {}); DB.vehicles.forEach(v => { byV[kmKey(v.bks)] = v.bks; });
       q('#kR').hidden = d >= 0; const out = [], bad = new Set(); let skip = 0;
       let T = q('#kT').value, E = q('#kE').value, nd = 1; if (d < 0) { if (!T || !E || E < T) return { out, bad, skip, need: 1 }; nd = D.diff(E, T) + 1; }
-      body.forEach(r => { const bks = byV[kmKey(r[b])], km = kmNum(r[k]); if (!String(r[b] ?? '').trim()) return; if (!bks) { bad.add(String(r[b]).trim()); return; } if (!(km >= 0)) { skip++; return; }
+      body.forEach(r => { const bks = byV[kmKey(r[b])], km = kmNum(r[k]); if (!String(r[b] ?? '').trim() || /^(tong|cong|total)/.test(dvNorm(r[b]))) return; if (!bks) { bad.add(String(r[b]).trim()); return; } if (!(km >= 0)) { skip++; return; }
         if (d >= 0) { const ng = kmDate(r[d]); if (!ng) { skip++; return; } out.push({ bks, ngay: ng, km }); } else for (let i = 0; i < nd; i++) out.push({ bks, ngay: D.add(T, i), km: km / nd }); });
       return { out, bad, skip };
     };
-    const prev = () => { const r = build(); q('#kP').innerHTML = r.need ? 'Chọn khoảng ngày của báo cáo.' : `Sẽ nhập <b>${r.out.length}</b> dòng km cho <b>${new Set(r.out.map(x => x.bks)).size}</b> xe${r.out.length ? ' (' + F.date(r.out.reduce((a, x) => x.ngay < a ? x.ngay : a, '9999')) + ' → ' + F.date(r.out.reduce((a, x) => x.ngay > a ? x.ngay : a, '')) + ', ' + kmFmt(sum(r.out, x => x.km)) + ' km)' : ''}.${r.bad.size ? `<br><span style="color:#b45309">Bỏ qua biển số chưa có trong Phương tiện: ${esc([...r.bad].slice(0, 8).join(', '))}${r.bad.size > 8 ? '…' : ''}</span>` : ''}${r.skip ? `<br>${r.skip} dòng thiếu ngày hoặc km, bỏ qua.` : ''}`; return r; };
+    const prev = () => { const r = build(); q('#kP').innerHTML = r.need ? 'Chọn khoảng ngày của báo cáo.' : `Sẽ nhập <b>${r.out.length}</b> dòng km cho <b>${new Set(r.out.map(x => x.bks)).size}</b> xe${r.out.length ? ' (' + F.date(r.out.reduce((a, x) => x.ngay < a ? x.ngay : a, '9999')) + ' → ' + F.date(r.out.reduce((a, x) => x.ngay > a ? x.ngay : a, '')) + ', ' + kmFmt(sum(r.out, x => x.km)) + ' km)' : ''}.${r.bad.size ? `<br><span style="color:#b45309">Bỏ qua biển số chưa có trong Phương tiện: ${esc([...r.bad].slice(0, 8).join(', '))}${r.bad.size > 8 ? '…' : ''}</span>` : ''}${r.skip ? `<br>${r.skip} dòng không có số km (ngày xe không chạy hoặc mất tín hiệu GPS), bỏ qua.` : ''}`; return r; };
     m.el.addEventListener('change', prev); prev();
     q('[data-no]').onclick = () => m.close();
     q('[data-ok]').onclick = () => { const r = prev(); if (!r.out.length) return toast('Không có dòng nào để nhập', 'err'); const map = new Map(DB.kmxe.map(x => [x.bks + '|' + x.ngay, x])); r.out.forEach(x => { const o = map.get(x.bks + '|' + x.ngay); if (o) o.km = x.km; else { const n = { id: uid(), ...x }; DB.kmxe.push(n); map.set(x.bks + '|' + x.ngay, n); } }); App.changed(); m.close(); toast('Đã nhập ' + r.out.length + ' dòng km', 'ok'); };
@@ -8144,6 +8234,132 @@ addCSS(`.hub-btn{position:relative;display:inline-flex;align-items:center;gap:7p
 .hub-bar{height:8px;border-radius:99px;background:#e2e8f0;overflow:hidden;margin-bottom:8px}.hub-bar i{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#0ea5e9);border-radius:99px}
 @media(max-width:900px){.hub-btn span{display:none}.hub-btn{padding:0 10px;margin-left:auto}.hub-pn{width:100%}.hub-kp{grid-template-columns:repeat(3,minmax(0,1fr))}.hub-sr input{font-size:16px}}`);
 Object.assign(ACT, { hubOpen: () => HUB.open() });
+
+/* ===== Tài khoản: tạo từ danh sách nhân viên · đặt lại mật khẩu hàng loạt · cấp đăng nhập 1 lần cho nhiều người ===== */
+const ACC = {
+  phone: x => normUser(x || ''),
+  okPhone: p => /^0\d{9}$/.test(p),
+  // nhân viên đang làm, chưa có tài khoản app
+  emps() {
+    const have = new Set((DB.users || []).map(u => normUser(u.user)));
+    return (DB.employees || []).filter(e => e.trangThai !== 'Nghỉ việc').map(e => { const p = ACC.phone(e.sdt); return { e, p, ok: ACC.okPhone(p), has: have.has(p) }; }).filter(x => !x.has)
+      .sort((a, b) => (b.ok - a.ok) || String(a.e.ten || '').localeCompare(String(b.e.ten || ''), 'vi'));
+  },
+  fbAdmin: async () => { try { return FBU.on() && GS.on && await FBU.isAdmin(); } catch (e) { return false; } },
+  // cấp tài khoản Firebase lần lượt từng người (tránh tạo song song)
+  async provisionAll(list, pw, label) {
+    let ok = 0; const bad = [];
+    for (let i = 0; i < list.length; i++) {
+      const u = list[i]; toast(`${label} ${i + 1}/${list.length}: ${esc(u.ten || u.user)}…`, '', 2500);
+      try { await FBU.provision(u, pw); ok++; } catch (e) { u.fbStale = true; bad.push((u.ten || u.user) + ': ' + (e.message || e)); }
+    }
+    Store.changed(); return { ok, bad };
+  },
+  report(title, lines, pw) {
+    const m = Modal.open({ title, width: 520, body: `${pw ? `<div class="acc-pw">Mật khẩu tạm: <b>${esc(pw)}</b><small>Báo cho từng người. Lần đầu đăng nhập app sẽ bắt đổi mật khẩu mới.</small></div>` : ''}<ul class="acc-rp">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`, foot: '<button class="btn pri" data-no>Đóng</button>' });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+  },
+  pwField: (v = '') => `<div class="field"><label>Mật khẩu tạm <i class="req">*</i></label><input class="inp" id="accPw" type="text" autocomplete="off" value="${esc(v)}" placeholder="Từ 6 ký tự"><small class="muted">Giống nhau cho cả nhóm. Người dùng phải đổi ngay khi đăng nhập lần đầu.</small></div>`,
+  readPw(m) { const pw = m.el.querySelector('#accPw').value.trim(); if (pw.length < 6) { toast('Mật khẩu tạm tối thiểu 6 ký tự', 'err'); return null; } return pw; },
+
+  /* 1) Tạo tài khoản từ danh sách nhân viên (+ cấp đăng nhập 1 lần nếu máy đang có quyền quản lý Firebase) */
+  async fromEmp(after) {
+    if (!Auth.guard('users', 'add')) return;
+    const L = ACC.emps(), fbOk = await ACC.fbAdmin();
+    const roles = Object.entries(DB.roles).map(([k, r]) => `<option value="${k}" ${k === 'xem' ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
+    const body = !L.length ? `<p class="muted">${(DB.employees || []).length ? 'Tất cả nhân viên đang làm đều đã có tài khoản app.' : 'Chưa có nhân viên nào. Thêm nhân viên (kèm số điện thoại) ở màn hình Nhân viên trước.'}</p>` : `
+      <p class="muted small" style="margin-top:0">Tên đăng nhập là <b>số điện thoại</b> trong hồ sơ nhân viên. Người chưa có số điện thoại đúng 10 số thì bổ sung ở màn hình Nhân viên trước.</p>
+      <label class="acc-all"><input type="checkbox" id="accAll"> Chọn tất cả (${L.filter(x => x.ok).length} người có số điện thoại)</label>
+      <div class="acc-l">${L.map((x, i) => `<label class="acc-r ${x.ok ? '' : 'off'}"><input type="checkbox" data-i="${i}" ${x.ok ? '' : 'disabled'}><span><b>${esc(x.e.ten || '(chưa có tên)')}</b><small>${x.ok ? esc(x.p) : 'Chưa có số điện thoại hợp lệ'}${x.e.chucVu ? ' · ' + esc(x.e.chucVu) : ''}</small></span></label>`).join('')}</div>
+      <div class="form" style="grid-template-columns:1fr 1fr;margin-top:10px"><div class="field"><label>Vai trò</label><select class="inp" id="accRole">${roles}</select></div>${ACC.pwField()}</div>
+      <p class="small ${fbOk ? '' : 'muted'}" style="margin:8px 0 0">${fbOk ? `${ic('check')} Máy này đang có quyền quản lý dữ liệu dùng chung: tài khoản sẽ được <b>cấp đăng nhập 1 lần</b> luôn.` : 'Máy này chưa vào dữ liệu dùng chung bằng quyền quản lý nên chỉ tạo tài khoản app. Cấp đăng nhập 1 lần sau ở Lưu trữ → mục 5.'}</p>`;
+    const m = Modal.open({ title: 'Tạo tài khoản cho nhân viên', width: 620, body, foot: `<button class="btn" data-no>Hủy</button>${L.length ? `<button class="btn pri" data-ok>${ic('check')} Tạo tài khoản</button>` : ''}` });
+    const q = s => m.el.querySelector(s); q('[data-no]').onclick = () => m.close();
+    if (!L.length) return;
+    q('#accAll').onchange = e => m.el.querySelectorAll('[data-i]:not(:disabled)').forEach(c => c.checked = e.target.checked);
+    q('[data-ok]').onclick = async () => {
+      const pick = [...m.el.querySelectorAll('[data-i]:checked')].map(c => L[+c.dataset.i]); if (!pick.length) return toast('Chọn ít nhất 1 nhân viên', 'err');
+      const pw = ACC.readPw(m); if (!pw) return; const role = q('#accRole').value; q('[data-ok]').disabled = true;
+      const made = [];
+      for (const x of pick) { const u = { id: uid(), user: x.p, ten: x.e.ten || x.p, role, active: true, mustChange: true, empId: x.e.id }; await Auth.setPass0(u, pw); DB.users.push(u); made.push(u); }
+      Store.changed(); m.close();
+      const lines = made.map(u => `<b>${esc(u.ten)}</b> · ${esc(u.user)}`);
+      if (fbOk) { const r = await ACC.provisionAll(made, pw, 'Đang cấp'); r.bad.forEach(b => lines.push(`<span class="acc-bad">Chưa cấp được ${esc(b)}</span>`)); }
+      App.render(); after && after();
+      ACC.report(`Đã tạo ${made.length} tài khoản${fbOk ? ' và cấp đăng nhập 1 lần' : ''}`, lines, pw);
+    };
+  },
+
+  /* 2) Đặt lại mật khẩu hàng loạt */
+  resetAll() {
+    if (!Auth.guard('users', 'edit')) return;
+    const me = Auth.user, act = (DB.users || []).filter(u => u.active !== false && u !== me);
+    const n = k => act.filter(u => k === 'all' || (k === 'admin' ? u.role === 'admin' : u.role !== 'admin')).length;
+    const m = Modal.open({
+      title: 'Đặt lại mật khẩu hàng loạt', width: 480, body: `<div class="form" style="grid-template-columns:1fr">
+        <div class="field"><label>Áp dụng cho</label><select class="inp" id="accSc"><option value="all">Tất cả tài khoản: nhân viên và Admin (${n('all')})</option><option value="staff">Chỉ nhân viên, không gồm Admin (${n('staff')})</option><option value="admin">Chỉ các Admin khác (${n('admin')})</option></select></div>
+        ${ACC.pwField()}</div>
+        <p class="small muted" style="margin:8px 0 0">Bỏ qua tài khoản đã khóa và tài khoản bạn đang đăng nhập (${esc(me ? me.user : '')}): bạn tự đổi bằng nút <b>Đổi mật khẩu</b> ở góc trên. Ai đã được cấp đăng nhập 1 lần thì tài khoản dữ liệu cũng được đặt lại theo.</p>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn danger" data-ok>${ic('shield')} Đặt lại mật khẩu</button>`
+    });
+    const q = s => m.el.querySelector(s); q('[data-no]').onclick = () => m.close();
+    q('[data-ok]').onclick = async () => {
+      const sc = q('#accSc').value, L = act.filter(u => sc === 'all' || (sc === 'admin' ? u.role === 'admin' : u.role !== 'admin'));
+      if (!L.length) return toast('Không có tài khoản nào trong nhóm này', 'err');
+      const pw = ACC.readPw(m); if (!pw) return;
+      if (!(await Modal.confirm(`Đặt lại mật khẩu cho <b>${L.length}</b> tài khoản? Mật khẩu cũ của họ sẽ không dùng được nữa.`, { ok: 'Đặt lại', danger: true }))) return;
+      m.close();
+      for (const u of L) { await Auth.setPass0(u, pw); u.mustChange = true; }
+      Store.changed();
+      const lines = L.map(u => `<b>${esc(u.ten || u.user)}</b> · ${esc(u.user)} · ${esc((DB.roles[u.role] || {}).name || u.role)}`);
+      const fbL = L.filter(u => u.fb);
+      if (fbL.length) {
+        if (await ACC.fbAdmin()) { const r = await ACC.provisionAll(fbL, pw, 'Đang cập nhật tài khoản dữ liệu'); r.bad.forEach(b => lines.push(`<span class="acc-bad">Chưa cập nhật được ${esc(b)}</span>`)); }
+        else { fbL.forEach(u => u.fbStale = true); Store.changed(); lines.push(`<span class="acc-bad">${fbL.length} người có đăng nhập 1 lần cần "Cấp lại" ở Lưu trữ → mục 5 (máy này chưa vào bằng quyền quản lý).</span>`); }
+      }
+      App.render(); ACC.report(`Đã đặt lại mật khẩu cho ${L.length} tài khoản`, lines, pw);
+    };
+  },
+
+  /* 3) Cấp đăng nhập 1 lần cho tất cả tài khoản chưa cấp / cần cấp lại */
+  async giveAll(b) {
+    if (!(await ACC.fbAdmin())) return toast('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin để cấp', 'err', 7000);
+    const L = (DB.users || []).filter(u => u.active !== false && (!u.fb || u.fbStale) && u !== Auth.user);
+    if (!L.length) return toast('Mọi tài khoản đều đã được cấp', 'ok');
+    const m = Modal.open({ title: `Cấp đăng nhập 1 lần cho ${L.length} tài khoản`, width: 460, body: `<ul class="acc-rp">${L.map(u => `<li><b>${esc(u.ten || u.user)}</b> · ${esc(u.user)}</li>`).join('')}</ul><div class="form" style="grid-template-columns:1fr">${ACC.pwField()}</div>`, foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-ok>${ic('check')} Cấp tất cả</button>` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const pw = ACC.readPw(m); if (!pw) return; m.close(); if (b) b.disabled = true;
+      for (const u of L) { await Auth.setPass0(u, pw); u.mustChange = true; }
+      const r = await ACC.provisionAll(L, pw, 'Đang cấp'); HUB.setTab('gdata');
+      ACC.report(`Đã cấp ${r.ok}/${L.length} tài khoản`, L.map(u => `<b>${esc(u.ten || u.user)}</b> · ${esc(u.user)}`).concat(r.bad.map(x => `<span class="acc-bad">Chưa cấp được ${esc(x)}</span>`)), pw);
+    };
+  }
+};
+addCSS(`.acc-l{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto;margin-top:8px}.acc-r{display:flex;align-items:center;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;cursor:pointer}.acc-r input{width:18px;height:18px;flex:none}.acc-r b{display:block;font-size:13.5px}.acc-r small{color:#64748b}.acc-r.off{opacity:.55;cursor:not-allowed}.acc-all{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}.acc-all input{width:18px;height:18px}
+.acc-pw{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 12px;margin-bottom:10px}.acc-pw b{font-size:17px;color:#0369a1;letter-spacing:.5px}.acc-pw small{display:block;color:#64748b;margin-top:3px}
+.acc-rp{margin:0;padding-left:18px;max-height:300px;overflow:auto;line-height:1.7;font-size:13px}.acc-bad{color:#b45309}.fbu-note{font-size:12.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin:8px 0}.fbu-note svg{width:15px;height:15px;vertical-align:-3px;margin-right:4px}.hub-btns .btn svg,.acc-r svg{width:15px;height:15px}`);
+// Màn hình Người dùng: thêm 2 nút
+{
+  const t0 = vUsers.tools; vUsers.tools = () => `<button class="btn" data-act="userPassAll">${ic('shield')} Đặt lại mật khẩu hàng loạt</button><button class="btn" data-act="userFromEmp">${ic('plus')} Tạo từ nhân viên</button>` + t0();
+  Object.assign(ACT, { userPassAll: () => ACC.resetAll(), userFromEmp: () => ACC.fromEmp() });
+  Object.assign(Auth.ACT_PERM, { userPassAll: ['users', 'edit'], userFromEmp: ['users', 'add'] });
+  ['userPassAll', 'userFromEmp'].forEach(k => { const fn = ACT[k], [mo, a] = Auth.ACT_PERM[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
+}
+// Mục 5 (Lưu trữ → Firebase): chọn nhân viên để cấp, cấp tất cả, giải thích khi nút bị mờ
+{
+  const h0 = FBU.html; FBU.html = function () {
+    const h = h0.call(FBU), on = GS.on && GS.cfg().mode === 'fb', ne = ACC.emps().filter(x => x.ok).length, nw = (DB.users || []).filter(u => u.active !== false && (!u.fb || u.fbStale)).length;
+    const extra = `${on ? '' : `<div class="fbu-note">${ic('alert')} Các nút đang mờ vì máy này <b>chưa kết nối dữ liệu dùng chung</b>. Làm xong mục 1–3 (hoặc bấm "Quản lý: vào bằng mã kết nối" ở màn hình đăng nhập) rồi quay lại đây.</div>`}
+      <div class="hub-btns" style="justify-content:flex-start;margin-top:8px"><button class="btn sm pri" data-g="fbuEmp" ${on ? '' : 'disabled'}>${ic('plus')} Chọn nhân viên để cấp${ne ? ` (${ne} chưa có tài khoản)` : ''}</button>${nw ? `<button class="btn sm" data-g="fbuGiveAll" ${on ? '' : 'disabled'}>${ic('check')} Cấp tất cả chưa cấp (${nw})</button>` : ''}</div>`;
+    const i = h.indexOf('<div class="hub-btns">'); return i < 0 ? h + extra : h.slice(0, i) + extra + h.slice(i);
+  };
+  const a0 = FBU.act; FBU.act = function (a, b) {
+    if (a === 'fbuEmp') return ACC.fromEmp(() => HUB.setTab('gdata'));
+    if (a === 'fbuGiveAll') return ACC.giveAll(b);
+    return a0.call(FBU, a, b);
+  };
+}
 
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
