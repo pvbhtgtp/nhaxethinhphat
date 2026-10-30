@@ -3924,9 +3924,14 @@ const gcSorted = () => DB.giochay.slice().sort((a, b) => String(a.tuyen).localeC
 const gcById = id => DB.giochay.find(x => x.id === id);
 const gcXe = g => DB.vehicles.find(v => v.id === g.xeId) || {};
 const gcLai = g => (DB.employees.find(e => e.id === g.laiXe) || {}).ten || '';
-const gcRoutes = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))];
+/* thứ tự ưu tiên tuyến trong ô chọn tuyến */
+function routeKey(r) { return String(r || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim(); }
+const ROUTE_ORDER = [/bien hoa.*vung tau/, /vung tau.*bien hoa/, /ho nai.*vung tau/, /vung tau.*ho nai/];
+function routeRank(r) { const k = routeKey(r), i = ROUTE_ORDER.findIndex(re => re.test(k)); return i < 0 ? 99 : i; }
+function routeCmp(a, b) { return (routeRank(a) - routeRank(b)) || String(a).localeCompare(String(b), 'vi'); }
+const gcRoutes = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))].sort(routeCmp);
 let gcTuyen = '';
-const gcRoutesNow = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'vi'));
+const gcRoutesNow = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))].sort(routeCmp);
 const gcCur = () => { const r = gcRoutesNow(); return r.includes(gcTuyen) ? gcTuyen : (r[0] || ''); };
 function gcForm(g) {
   const isNew = !g;
@@ -3973,7 +3978,7 @@ const vGC = {
   render(el) {
     const L = gcSorted(), R = gcRoutes(), nOpen = L.filter(g => g.tt !== 'ĐÓNG').length, nUn = L.filter(g => g.tt !== 'ĐÓNG' && (!g.xeId || !g.laiXe)).length;
     const rows = gcCur() ? L.filter(g => g.tuyen === gcCur()) : L;
-    el.insertAdjacentHTML('beforeend', (R.length ? `<div class="row" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="gcRouteSel" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${gcCur() === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '') + '<div id="gcT"></div>');
+    el.insertAdjacentHTML('beforeend', (R.length ? `<div class="row" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="gcRouteSel" data-csq="1" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${gcCur() === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '') + '<div id="gcT"></div>');
     const rs = $('#gcRouteSel', el); if (rs) rs.onchange = () => { gcTuyen = rs.value; App.render(); };
     table($('#gcT', el), {
       id: 'gc', columns: gcCols, rows, ph: 'Tìm tuyến, giờ, số xe, lái xe...', empty: 'Chưa có giờ chạy. Bấm "Thêm giờ chạy".', onRow: gcForm,
@@ -4251,7 +4256,7 @@ const lockMsg = (g, o) => 'Ghế ' + g + ' đang được ' + ((o && o.name) || 
 function dvSetB(b) { const o = DB.datve.find(x => x.id === DV.selB); if (o) dvGrp(o).forEach(x => Lock.release(x.chuyen, x.ghe)); DV.selB = b ? b.id : null; return b ? Promise.all(dvGrp(b).map(x => Lock.take(x.chuyen, x.ghe))).then(r => r.every(Boolean)) : Promise.resolve(true); }
 const DV = { ngay: null, trip: null, tab: 'ghe', tuyen: '', multi: false, sel: [], selTrip: null };
 const dvAllDay = () => DB.lichchay.filter(l => l.ngay === lcDay());
-const dvRoutes = () => [...new Set(dvAllDay().map(l => l.tuyen))].sort((a, b) => String(a).localeCompare(String(b), 'vi'));
+const dvRoutes = () => [...new Set(dvAllDay().map(l => l.tuyen))].sort(routeCmp);
 const dvRoute = () => { const r = dvRoutes(); return r.includes(DV.tuyen) ? DV.tuyen : (r[0] || ''); };
 const dvDay = () => lcDay();
 const dvTrips = () => DB.lichchay.filter(l => l.ngay === dvDay() && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.gio).localeCompare(String(b.gio)) || String(a.tuyen).localeCompare(String(b.tuyen), 'vi'));
@@ -4544,12 +4549,12 @@ function dvMove(b, kh) {
     onClose: () => { if (kh) return; DV.mvMode = null; DV.mvIds = null; const st = window.scrollY; App.render(); window.scrollTo(0, st); } });
   if (!kh) { DV.mvIds = G.map(x => x.id); const st = window.scrollY; App.render(); window.scrollTo(0, st); }
   const el = m.el, $d = el.querySelector('#mvD'), $t = el.querySelector('#mvT'), $gs = [...el.querySelectorAll('.mvg')];
-  const trips = () => DB.lichchay.filter(l => l.ngay === $d.value && fut(l) && free(l).length >= G.length).sort((x, y) => kh ? ((+(y.tuyen === rev(cur.tuyen)) - +(x.tuyen === rev(cur.tuyen))) || (x.gio || '').localeCompare(y.gio || '')) : (x.gio || '').localeCompare(y.gio || ''));
+  const trips = () => DB.lichchay.filter(l => l.ngay === $d.value && fut(l) && (kh || LT.nm(l.tuyen) === LT.nm(cur.tuyen)) && free(l).length >= G.length).sort((x, y) => kh ? ((+(y.tuyen === rev(cur.tuyen)) - +(x.tuyen === rev(cur.tuyen))) || (x.gio || '').localeCompare(y.gio || '')) : (x.gio || '').localeCompare(y.gio || ''));
   const fillG = () => {
     const t = DB.lichchay.find(l => l.id === $t.value), fs = t ? free(t) : [], taken = new Set();
     $gs.forEach((sel, i) => { const want = !kh && t && t.id === cur.id && fs.includes(G[i].ghe) ? G[i].ghe : fs.find(g => !taken.has(g)); sel.innerHTML = fs.length ? fs.map(g => `<option value="${esc(g)}"${g === want ? ' selected' : ''}>${esc(g)}</option>`).join('') : '<option value="">Hết ghế</option>'; if (want) taken.add(want); });
   };
-  const fillT = () => { const ts = trips(); $t.innerHTML = ts.length ? ts.map(l => `<option value="${esc(l.id)}"${!kh && l.id === cur.id ? ' selected' : ''}>${esc(l.gio)} · ${esc(l.tuyen)} · còn ${free(l).length} ghế</option>`).join('') : '<option value="">Không có chuyến đủ ghế trống</option>'; fillG(); };
+  const fillT = () => { const ts = trips(); $t.innerHTML = ts.length ? ts.map(l => `<option value="${esc(l.id)}"${!kh && l.id === cur.id ? ' selected' : ''}>${esc(l.gio)} · ${esc(l.tuyen)} · còn ${free(l).length} ghế</option>`).join('') : (kh ? '<option value="">Không có chuyến đủ ghế trống</option>' : `<option value="">Không có chuyến cùng tuyến ${esc(cur.tuyen)} đủ ghế trống</option>`); fillG(); };
   $d.onchange = fillT; $t.onchange = fillG; fillT();
   el.querySelector('[data-cancel]').onclick = () => m.close();
   el.querySelector('[data-ok]').onclick = () => {
@@ -4563,6 +4568,7 @@ function dvMove(b, kh) {
       G.forEach((x, i) => DB.datve.push({ id: uid(), chuyen: t.id, ghe: gs[i], ten: x.ten, sdt: x.sdt, diemDon: x.diemTra || '', diemTra: x.diemDon || '', gia: x.gia, tt: 'giu', ghiChu: x.ghiChu || '', nguoiBan: (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg, ...(nh ? { nhom: nh } : {}), lichSu: [{ tg: dvLog.now(), nguoi: dvLog.who(), nd: `Vé khứ hồi của ghế ${x.ghe} (${cur.ngay} ${cur.gio} ${cur.tuyen})` }] }));
       LC.ngay = t.ngay; DV.trip = t.id; DV.tuyen = t.tuyen; m.close(); App.changed(); toast('Đã tạo ' + G.length + ' vé khứ hồi: ' + t.ngay + ' ' + t.gio + ' · ghế ' + gs.join(', '), 'ok'); return;
     }
+    if (LT.nm(t.tuyen) !== LT.nm(cur.tuyen)) return toast('Chỉ được dời vé sang chuyến cùng tuyến', 'err');
     if (t.id === cur.id && G.every((x, i) => x.ghe === gs[i])) return toast('Vé đang ở đúng vị trí này', 'err');
     if (gs.some(g => dvBook(t.id).some(x => !G.includes(x) && x.ghe === g))) return toast('Có ghế vừa có người đặt, chọn lại', 'err');
     if (gs.some(g => Lock.other(t.id, g))) return toast('Có ghế đang được nhân viên khác thao tác', 'err');
@@ -5026,6 +5032,7 @@ const callWho = () => { const u = Auth.user || {}, r = (DB.roles && DB.roles[u.r
 function callLast(b) { const L = (b && b.goi) || []; if (!L.length) return null; const x = L[L.length - 1]; let n = 0; for (let i = L.length - 1; i >= 0 && L[i].kq === x.kq; i--) n++; return { ...x, n }; }
 function callLog(b, kq, note) {
   if (!b || !Auth.can('lichchay', 'view')) return;
+  { const t0 = dvTripOf(b); if (t0 && t0.id && !lcCan(t0)) return lcLockMsg(); }
   const G = dvGrp(b).length ? dvGrp(b) : [b], o = callKQ(kq), now = dvLog.now(), who = dvLog.who(), vai = callWho();
   G.forEach(x => { (x.goi = x.goi || []).push({ tg: now, nguoi: who, vai, kq, note: note || '' }); (x.lichSu = x.lichSu || []).push({ tg: now, nguoi: who, nd: 'Gọi khách: ' + vai + ' · ' + o.t + (note ? ' · ' + note : '') }); });
   App.changed(false); toast(o.ic + ' ' + o.t + ' · ' + (b.ten || '') + ' (ghế ' + dvSeatsTxt(G) + ')', o.c === 'ok' ? 'ok' : 'err', 3500);
@@ -5173,7 +5180,8 @@ const vDV = {
           return `<button class="dv-seat ${b.tt === 'tra' ? 'pd' : 'bk'}${GC.isWarn(b) ? ' gcw' : ''}${(DV.pk || []).includes(b.id) ? ' pk' : ''}${b.len ? ' len' : ''}${b.xn ? ' xn' : ''}${gsel.includes(b) ? ' ms' : ''}${lk ? ' lk' : ''}${b.nhom ? ' grp' : ''}${DV.mvIds && DV.mvIds.includes(b.id) ? ' mv' : ''}" data-act="${DV.mvMode && !(DV.mvIds || []).includes(b.id) ? 'dvMvPick' : 'dvSeat'}" data-id="${cur.id}" data-g="${s}" data-b="${b.id}"><span class="no">${s}</span>${lk ? `<span class="lkn">🔒 ${esc(lk.name || 'Đang thao tác')}</span>` : ''}${b.diemDon ? `<span class="tag" style="background:${dvPtColor(b.diemDon)}">${esc(dvAbbr(b.diemDon))}</span>` : ''}${b.diemDon ? `<span class="dp"><em>Đón:</em> ${esc(b.diemDon)}</span>` : ''}${b.diemTra ? `<span class="dp"><em>Trả:</em> ${esc(b.diemTra)}</span>` : ''}<div class="pr"><b>${esc(b.ten)}</b><b>${F.money(dvTot(b))}đ</b></div><div class="pr" style="margin-top:2px">${b.sdt ? `<span class="tel" data-act="dvCall" data-p="${esc(b.sdt)}" data-id="${b.id}">${ic('phone')} ${esc(b.sdt)}</span>` : '<span></span>'}</div>${b.ghiChu ? `<span class="nt">${esc(b.ghiChu)}</span>` : ''}${b.xuatCT ? '<span class="nt">🧾 Xuất chứng từ</span>' : ''}${callTag(b)}${dvQK(b, cur)}<span class="by">${b.len ? (b.tt === 'tra' ? '✓ Đã lên xe' : '<i class="lx-due" title="Khách đã lên xe nhưng chưa thu tiền">Chưa thu</i>') : b.tt === 'tra' ? 'Đã thu' + (b.httt ? ' · ' + (b.httt === 'ck' ? 'CK' : b.httt === 'tm' ? 'TM' : dvHT(b.httt)) : '') : +b.coc > 0 ? 'Đã cọc ' + F.money(b.coc) : b.xn ? '✓ Đã xác nhận' : GC.isWarn(b) ? '⏱ Giữ chỗ · ' + GC.ltxt(GC.left(dvTripOf(b))).replace('còn ', 'còn ') : 'Giữ chỗ'}${b.nguoiBan && !b.len ? ' · ' + esc(b.nguoiBan) : ''}</span></button>`;
         };
         const so = dvSO(cur);
-        body = `<div class="dv-grid" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr));max-width:${Math.max(760, so.cols * 190)}px">${so.rows.flat().map(cell).join('')}</div>` + dvLegend() + dvHuyHTML(cur) + (dvPkBar(cur) || dvActBar(cur)) + (DV.clone && !DV.sel.length && !DV.selB ? `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>${DV.clone.nhom ? 'Thêm vé cho:' : 'Sao chép vé:'}</span> <b>${esc(DV.clone.ten)}</b>${DV.clone.nhom && DV.clone.chuyen === cur.id ? ' <span class="muted small">· vé thêm vào cùng nhóm, chung mã vé</span>' : ''}</div></div><div class="ab-ph"><span class="mv-hint">Chạm các ghế trống để đặt thêm vé với thông tin này</span></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>` : '') + (DV.sel.length ? `<div class="dv-selbar"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${DV.sel.length} vé:</span> <b>${DV.sel.map(esc).join(', ')}</b></div><button class="sb-st ${DV.selTT === 'tra' ? 'pd' : ''}" data-act="dvTT">${DV.selTT === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ'}</button><button class="sb-go" data-act="dvBookSel" aria-label="Tiếp tục">${ic('arrow')}</button></div><div class="dv-selpad"></div>` : '');
+        const gone = lcGone(cur), dI = Math.max(0, so.rows.findIndex(r => r.includes('D'))), band = gone ? `<div class="dv-gone" style="grid-column:1/-1"><b>XE ĐÃ XUẤT BẾN</b><small>${lcAdmin() ? 'Admin vẫn sửa được' : 'Đã khóa mọi thao tác sửa, xóa · chỉ Admin được chỉnh'}</small></div>` : '';
+        body = `<div class="dv-grid${gone ? ' is-gone' : ''}" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr));max-width:${Math.max(760, so.cols * 190)}px">${so.rows.map((r, i) => r.map(cell).join('') + (i === dI ? band : '')).join('')}</div>` + dvLegend() + dvHuyHTML(cur) + (dvPkBar(cur) || dvActBar(cur)) + (DV.clone && !DV.sel.length && !DV.selB ? `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>${DV.clone.nhom ? 'Thêm vé cho:' : 'Sao chép vé:'}</span> <b>${esc(DV.clone.ten)}</b>${DV.clone.nhom && DV.clone.chuyen === cur.id ? ' <span class="muted small">· vé thêm vào cùng nhóm, chung mã vé</span>' : ''}</div></div><div class="ab-ph"><span class="mv-hint">Chạm các ghế trống để đặt thêm vé với thông tin này</span></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>` : '') + (DV.sel.length ? `<div class="dv-selbar"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${DV.sel.length} vé:</span> <b>${DV.sel.map(esc).join(', ')}</b></div><button class="sb-st ${DV.selTT === 'tra' ? 'pd' : ''}" data-act="dvTT">${DV.selTT === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ'}</button><button class="sb-go" data-act="dvBookSel" aria-label="Tiếp tục">${ic('arrow')}</button></div><div class="dv-selpad"></div>` : '');
       } else if (DV.tab === 'hk') {
         const R = B.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
         body = R.length ? `<table class="dv-tbl"><tr><th>Ghế</th><th>Mã vé</th><th>Tên khách</th><th>SĐT</th><th>Điểm đón</th><th>Điểm trả</th><th class="r">Tiền vé</th><th>Tình trạng</th><th>Ghi chú</th></tr>${R.map(b => `<tr><td><b>${esc(b.ghe)}</b></td><td>${esc(b.ma || '')}</td><td>${esc(b.ten)}</td><td>${b.sdt ? `<a class="tel" href="tel:${esc(String(b.sdt).replace(/[^0-9+]/g, ''))}">${esc(b.sdt)}</a>` : ''}</td><td>${esc(b.diemDon || '')}</td><td>${esc(b.diemTra || '')}</td><td class="r">${F.money(dvTot(b))}</td><td>${b.tt === 'tra' ? 'Đã thanh toán' + (b.httt ? ' · ' + dvHT(b.httt) : '') : +b.coc ? 'Đã cọc ' + F.money(b.coc) : 'Giữ chỗ'}</td><td>${b.xuatCT ? '<b>[Xuất CT]</b> ' : ''}${callTag(b)} ${esc(b.ghiChu || '')}</td></tr>`).join('')}<tr><th colspan="6">Tổng ${R.length} khách</th><th class="r">${F.money(sum(R, b => dvTot(b)))}</th><th colspan="2"></th></tr></table>` : '<div class="muted">Chưa có hành khách.</div>';
@@ -5191,14 +5199,14 @@ const vDV = {
       main = `<div class="dv-main"><div class="dm-mh" style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center"><b style="font-size:16px">${esc(cur.gio)} · ${esc(cur.tuyen)}</b>${Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="ltEdit" data-t="${esc(cur.tuyen)}" title="Điểm dừng và giờ dự kiến của tuyến">${ic('arrow')} Lộ trình</button>` : ''}${LT.get(cur.tuyen).length ? `<div style="flex-basis:100%">${LT.strip(cur, '', '', true)}</div>` : ''}${lcGone(cur) ? '<span class="badge b-red">ĐÃ XUẤT BẾN</span>' : ''}<button class="btn sm${DV.pkMode ? ' on' : ''}" data-act="dvPkMode" title="Bật để chạm chọn nhiều vé, in một lượt">${ic('check')} Chọn nhiều</button><button class="btn sm" data-act="dvPrintMap" data-id="${cur.id}">${ic('printer')} In phơi</button>${lcCan(cur) && Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="lcQuick" data-id="${cur.id}">${ic('edit')} Sửa nhanh xe, lái xe</button><button class="btn sm" data-act="mvTrip" data-id="${cur.id}" title="Xe hư, hủy chuyến: chuyển toàn bộ vé và hàng sang chuyến khác">${ic('arrow')} Dời cả chuyến</button>` : lcGone(cur) ? '<span class="muted small">Đã khóa chỉnh sửa (chỉ Admin)</span>' : ''}${cur.doiSang ? (() => { const n2 = DB.lichchay.find(l => l.id === cur.doiSang); return n2 ? `<span class="badge b-amber" title="${esc(cur.lyDoHuy || '')}">Đã chuyển sang ${esc(n2.gio)} ${F.date(n2.ngay)} · ${esc(cur.lyDoHuy || '')}</span>` : ''; })() : ''}<span class="muted small">Xe: <b>${esc(xe.bks || 'chưa gán')}</b> · Lái xe: <b>${esc(lai || 'chưa gán')}</b> · ${B.length}/${cap} ghế khách đã bán · ${cap - B.length} trống · tổng ${cap + sdDriver(dvSO(cur))} chỗ kể cả ghế lái xe</span></div>${dvTabBar(cur)}<div class="dv-body">${body}</div></div>`;
     }
     const R = dvRoutes(), rc = dvRoute();
-    const chips = R.length ? `<div class="row dm-hide" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="dvRoute" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '';
+    const chips = R.length ? `<div class="row dm-hide" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="dvRoute" data-csq="1" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '';
     let mob = '';
     if (R.length) {
       const B2 = cur ? dvBook(cur.id) : [], cap2 = cur ? dvCap(cur) : 0, tot = sum(B2, b => dvTot(b)), paid = sum(B2.filter(b => b.tt === 'tra'), b => dvTot(b)), hold = B2.filter(b => b.tt !== 'tra').length;
       const idx = cur ? L.findIndex(l => l.id === cur.id) : -1, prv = idx > 0 ? L[idx - 1] : null, nxt = idx >= 0 && idx < L.length - 1 ? L[idx + 1] : null;
       const xe2 = cur ? lcXe(cur) : {}, lai2 = cur ? lcEmp(cur).ten || '' : '';
       const arrow = (t, dis, a) => `<button type="button" class="dm-ar" ${dis ? 'disabled' : ''} ${a}>${t === 'l' ? ic('back') : `<span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span>`}</button>`;
-      mob = `<div class="dm-hd"><div class="dm-card"><div class="dm-route"><select class="inp" id="dvRouteM">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
+      mob = `<div class="dm-hd"><div class="dm-card"><div class="dm-route"><select class="inp" id="dvRouteM" data-csq="1">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
         <div class="dm-row">${arrow('l', false, `data-act="dvDay" data-d="${D.add(day, -1)}"`)}<label class="dm-date"><b>${D.dowName[D.parse(day).getDay()]}, ${F.date(day)}</b><input type="date" id="dvDateM" value="${day}"></label>${arrow('r', false, `data-act="dvDay" data-d="${D.add(day, 1)}"`)}<div class="dm-time">${cur ? esc(cur.gio) : '--:--'}</div></div></div></div>
         ${L.length ? `<div class="dm-trip">${arrow('l', !prv, prv ? `data-act="dvTrip" data-id="${prv.id}"` : '')}<button type="button" class="dm-tx" data-act="dvPick"><span>${cur ? esc(cur.gio) + ' • ' + esc(xe2.bks || 'Chưa gán xe') + (lai2 ? ' • ' + esc(lai2) : '') : 'Chọn chuyến'}</span><em>▾</em></button>${cur ? `<span class="dm-b a">${B2.length}</span><span class="dm-b">${cap2 - B2.length}</span>` : ''}${arrow('r', !nxt, nxt ? `data-act="dvTrip" data-id="${nxt.id}"` : '')}</div>` : '<div class="muted small" style="padding:8px">Ngày này chưa có chuyến.</div>'}
         ${DV.pick && L.length ? `<div class="dm-list">${dvSortGone(L).map((l, i, A) => { const n = dvBook(l.id).length, c = dvCap(l), v = lcXe(l); return dvGoneH(l, i, A) + `<button class="dv-t ${l.id === (cur && cur.id) ? 'sel' : ''} ${n >= c ? 'full' : ''}" data-act="dvTrip" data-id="${l.id}"><div class="tm">${esc(l.gio)}</div><div class="r"><span><i class="${v.bks ? '' : 'off'}"></i>${esc(String(v.bks || '').replace(/^\d+\w-/, '') || '—')}</span><span>${n}|${c}</span></div><div class="dv-bar"><div style="width:${Math.min(100, n / c * 100)}%"></div></div></button>`; }).join('')}</div>` : ''}
@@ -5528,7 +5536,7 @@ const vDH = {
   tools: () => `${VT.pick()}<button class="btn" data-act="dhPrint">${ic('printer')} In phân công</button><button class="btn xl" data-act="dhImport">${ic('sheet')} Nhập Excel</button><button class="btn" data-act="dhScan">${ic('upload')} Quét ảnh</button><button class="btn" data-act="lcGen">${ic('refresh')} Tạo lịch từ Giờ chạy</button>`,
   render(el) {
     const day = lcDay(), T = DB.lichchay.filter(l => l.ngay === day);
-    const allR = [...new Set(T.map(l => l.tuyen))].sort((a, b) => String(a).localeCompare(String(b), 'vi')), allG = [...new Set(allR.map(dhGrp))], sel = dhSel.filter(g => allG.includes(g)), curL = sel.length ? sel : (allG[0] ? [allG[0]] : []);
+    const allR = [...new Set(T.map(l => l.tuyen))].sort(routeCmp), allG = [...new Set(allR.map(dhGrp))], sel = dhSel.filter(g => allG.includes(g)), curL = sel.length ? sel : (allG[0] ? [allG[0]] : []);
     const TR = T.filter(l => curL.includes(dhGrp(l.tuyen))), allGios = [...new Set(TR.map(l => l.gio))], gios = allGios.filter(g => TR.some(l => l.gio === g && l.laiXe) || (dhShow[day] || []).includes(g)).sort(), nHid = allGios.length - gios.length, routes = curL.flatMap(g => allR.filter(r => dhGrp(r) === g).sort((a, b) => (a.toUpperCase() === g ? -1 : 0) - (b.toUpperCase() === g ? -1 : 0)));
     const used = {}; T.forEach(l => { if (l.xeId) used[l.xeId] = (used[l.xeId] || 0) + 1; });
     const veh = DB.vehicles.filter(v => !v.ngung);
@@ -7876,17 +7884,17 @@ const CSel = {
     w.addEventListener('click', e => { if (sel.disabled) return; e.preventDefault(); CSel.open(sel); });
   },
   open(sel) {
-    const opts = [...sel.options], many = opts.length > 7;
+    const opts = [...sel.options], many = opts.length > 7 || !!sel.dataset.csq, nz = x => routeKey(x);
     const ov = document.createElement('div'); ov.className = 'cs-ov'; ov.dataset.runtime = '1';
-    ov.innerHTML = `<div class="cs-sheet"><div class="cs-h">${many ? '<input class="cs-q" type="search" placeholder="Tìm…" autocomplete="off">' : '<b>Chọn</b>'}<button type="button" class="cs-x" aria-label="Đóng">×</button></div><div class="cs-l"></div></div>`;
-    const L = ov.querySelector('.cs-l'), draw = q => { const k = (q || '').toLowerCase(); L.innerHTML = opts.filter(o => !k || o.text.toLowerCase().includes(k)).map(o => `<div class="cs-o ${o.value === sel.value ? 'on' : ''} ${o.value === '' ? 'blank' : ''}" data-v="${esc(o.value)}"><span>${esc(o.text)}</span><i>${o.value === sel.value ? '✓' : ''}</i></div>`).join('') || '<div class="cs-o blank">Không có kết quả</div>'; };
+    ov.innerHTML = `<div class="cs-sheet"><div class="cs-h">${many ? `<input class="cs-q" type="search" placeholder="${sel.dataset.csq ? 'Gõ để tìm tuyến…' : 'Tìm…'}" autocomplete="off">` : '<b>Chọn</b>'}<button type="button" class="cs-x" aria-label="Đóng">×</button></div><div class="cs-l"></div></div>`;
+    const L = ov.querySelector('.cs-l'), draw = q => { const k = nz(q); L.innerHTML = opts.filter(o => !k || nz(o.text).includes(k)).map(o => `<div class="cs-o ${o.value === sel.value ? 'on' : ''} ${o.value === '' ? 'blank' : ''}" data-v="${esc(o.value)}"><span>${esc(o.text)}</span><i>${o.value === sel.value ? '✓' : ''}</i></div>`).join('') || '<div class="cs-o blank">Không có kết quả</div>'; };
     draw(); document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.cs-x')) return close(); const o = e.target.closest('.cs-o[data-v]'); if (!o) return; sel.value = o.dataset.v; sel.dispatchEvent(new Event('change', { bubbles: true })); close(); });
     const q = ov.querySelector('.cs-q'); if (q) { q.oninput = () => draw(q.value); if (window.innerWidth > 900) q.focus(); }
     const on = ov.querySelector('.cs-o.on'); if (on) on.scrollIntoView({ block: 'center' });
   },
-  scan(root) { (root || document).querySelectorAll(window.innerWidth <= 900 ? 'select.inp:not([data-cs])' : '.modal select.inp:not([data-cs])').forEach(CSel.enh); }
+  scan(root) { (root || document).querySelectorAll(window.innerWidth <= 900 ? 'select.inp:not([data-cs])' : '.modal select.inp:not([data-cs]), select[data-csq]:not([data-cs])').forEach(CSel.enh); }
 };
 new MutationObserver(() => CSel.scan()).observe(document.body, { childList: true, subtree: true });
 /* ---------- Trợ lý Claude: khung chat nổi, đọc dữ liệu thật, ghi có xác nhận ---------- */
@@ -8594,7 +8602,8 @@ const GH = {
       rows: L.map(x => ({ ...x, tenHang: GH.items(x).map(it => it.tenHang).join('; '), dvt: GH.dvtTong(x), sl: GH.slTong(x), tt: F.money(GH.tien(x)), thu: GH.THU[x.nguoiThu] || '' })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
   }
 };
-addCSS(`.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#0c4a6e}.gh-info.sm{font-size:12.5px}
+addCSS(`@media(max-width:760px){.dv-tabs{flex-wrap:wrap;overflow:visible;row-gap:0;column-gap:14px}.dv-tabs button{padding:9px 0}}
+.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#0c4a6e}.gh-info.sm{font-size:12.5px}
 .gh-fw{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}.gh-pv{position:sticky;top:0;background:#525659;border-radius:10px;overflow:hidden}.gh-pvh{color:#fff;font-size:12px;font-weight:600;padding:7px 10px;background:#3c4043}.gh-pvb{max-height:68vh;overflow:auto;padding:12px 0}.gh-pvp{width:80mm;margin:0 auto;background:#fff;padding:3mm 2mm;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.4);zoom:.95}
 .gh-lw{overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px}.gh-lines{width:100%;border-collapse:collapse;font-size:13px}.gh-lines th{background:#f0f9ff;color:#0c4a6e;font-weight:600;text-align:left;padding:6px 6px;font-size:12px}.gh-lines td{padding:4px 4px;border-top:1px solid #eef2f7}.gh-lines .inp{height:34px;width:100%;min-width:0}.gh-lines .inp.r,.gh-lines .r{text-align:right}.gh-lines tfoot td{background:#f8fafc;padding:6px}.gh-lt{font-weight:700;color:#0369a1;white-space:nowrap}.gh-hn{white-space:normal!important;min-width:160px}
 @media(max-width:900px){.gh-fw{grid-template-columns:1fr}.gh-pv{position:static}}
@@ -8620,18 +8629,20 @@ addCSS(`.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;bor
 const MV = {
   LYDO: ['Xe hư, không chạy được', 'Thiếu lái xe', 'Gộp chuyến (ít khách)', 'Thời tiết / đường sá', 'Khách yêu cầu đổi giờ', 'Lý do khác'],
   fut: t => !lcGone(t) && !t.khoa,
+  // chỉ cho dời sang chuyến cùng tuyến
+  sameRoute: (a, b) => LT.nm(a && a.tuyen) === LT.nm(b && b.tuyen),
   label: t => `${F.date(t.ngay)} ${t.gio} · ${t.tuyen}`,
   // chọn ngày + chuyến đích (dùng chung)
   pickHTML: (cur, extra = '') => `<div class="form" style="grid-template-columns:1fr 1fr">
       <div class="field"><label>Ngày chuyến mới</label><input class="inp" type="date" id="mvD" min="${D.today()}" value="${cur.ngay >= D.today() ? cur.ngay : D.today()}"></div>
       <div class="field"><label>Lý do</label><select class="inp" id="mvL">${MV.LYDO.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
-      <div class="field full"><label>Chuyển sang chuyến</label><select class="inp" id="mvT"></select></div>
+      <div class="field full"><label>Chuyển sang chuyến (chỉ cùng tuyến ${esc(cur.tuyen || '')})</label><select class="inp" id="mvT"></select></div>
       <div class="field full" id="mvLk" hidden><label>Ghi rõ lý do</label><input class="inp" id="mvLx" placeholder="VD: xe nổ lốp ở Bảo Lộc"></div>${extra}</div>`,
   bind(m, cur, onT) {
     const q = s => m.el.querySelector(s);
     const fill = () => {
-      const ts = DB.lichchay.filter(l => l.ngay === q('#mvD').value && l.id !== cur.id && MV.fut(l)).sort((a, b) => (+(b.tuyen === cur.tuyen) - +(a.tuyen === cur.tuyen)) || String(a.gio).localeCompare(String(b.gio)));
-      q('#mvT').innerHTML = ts.length ? ts.map(l => { const v = lcXe(l), n = dvBook(l.id).length, c = dvSeatList(l).length; return `<option value="${l.id}">${esc(l.gio)} · ${esc(l.tuyen)} · Xe ${esc(v.bks || 'chưa gán')} · trống ${c - n}/${c} ghế</option>`; }).join('') : '<option value="">Ngày này chưa có chuyến khác (tạo thêm chuyến trước)</option>';
+      const ts = DB.lichchay.filter(l => l.ngay === q('#mvD').value && l.id !== cur.id && MV.fut(l) && MV.sameRoute(l, cur)).sort((a, b) => String(a.gio).localeCompare(String(b.gio)));
+      q('#mvT').innerHTML = ts.length ? ts.map(l => { const v = lcXe(l), n = dvBook(l.id).length, c = dvSeatList(l).length; return `<option value="${l.id}">${esc(l.gio)} · ${esc(l.tuyen)} · Xe ${esc(v.bks || 'chưa gán')} · trống ${c - n}/${c} ghế</option>`; }).join('') : `<option value="">Ngày này chưa có chuyến khác cùng tuyến ${esc(cur.tuyen || '')}</option>`;
       onT && onT();
     };
     q('#mvD').onchange = fill; q('#mvT').onchange = () => onT && onT();
@@ -8677,6 +8688,7 @@ const MV = {
     q('[data-no]').onclick = () => m.close();
     q('[data-ok]').onclick = async () => {
       const t = P.t(); if (!t) return toast('Chọn chuyến mới', 'err');
+      if (!MV.sameRoute(t, cur)) return toast('Chỉ được dời sang chuyến cùng tuyến', 'err');
       const doB = q('#mvB').checked, doH = q('#mvH').checked; if (!doB && !doH) return toast('Chọn vé hoặc hàng cần chuyển', 'err');
       const pl = doB ? MV.plan(B, t) : { map: new Map(), miss: [] }; if (pl.miss.length) return toast('Chuyến mới không đủ ghế trống', 'err');
       const why = P.why(), now = dvLog.now(), who = dvLog.who();
@@ -8701,6 +8713,7 @@ const MV = {
     q('[data-no]').onclick = () => m.close();
     q('[data-ok]').onclick = () => {
       const t = P.t(); if (!t) return toast('Chọn chuyến mới', 'err');
+      if (!MV.sameRoute(t, cur)) return toast('Chỉ được dời sang chuyến cùng tuyến', 'err');
       const why = P.why(), T2 = GH.trip(t);
       (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: `Dời phiếu (${why}): ${cur.ngay} ${cur.gio} → ${t.ngay} ${t.gio}` });
       Object.assign(x, { chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, bks: T2.bks, laiXe: T2.laiXe, sdtLai: T2.sdtLai, doiChuyen: { tu: cur.id, lyDo: why, tg: dvLog.now() } });
@@ -8727,6 +8740,215 @@ Object.assign(ACT, {
     if (nb || nh) { if (await Modal.confirm(`Chuyến <b>${esc(l.gio)}</b> ngày ${F.date(l.ngay)} còn <b>${nb} vé</b> và <b>${nh} phiếu hàng</b>. Cần chuyển sang chuyến khác trước khi xóa.`, { ok: 'Chuyển chuyến' })) MV.trip(l); return; }
     return del0(d);
   };
+}
+
+/* ===== SIDEBAR TỰ ẨN + NÚT GHIM · THEME GIAO DIỆN THEO TỪNG NGƯỜI DÙNG ===== */
+Object.assign(ICONS, {
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+  pinoff: '<path d="M12 17v5"/><path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"/><path d="m2 2 20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>',
+  palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>'
+});
+
+/* ---- Theme: thay bảng màu xanh (sky) của giao diện bằng bảng màu khác ---- */
+const THM = {
+  // thứ tự: 50 100 200 300 400 500 600 700 800 900 950
+  SKY: ['#f0f9ff', '#e0f2fe', '#bae6fd', '#7dd3fc', '#38bdf8', '#0ea5e9', '#0284c7', '#0369a1', '#075985', '#0c4a6e', '#082f49'],
+  EXTRA: { '#f0f8ff': 0, '#d4ebfa': 1, '#e6eef7': 1, '#cfe3f1': 2, '#b6d4ea': 2, '#dbeafe': 1 },   // các màu xanh pha thêm trong app
+  LIST: [
+    { id: 'sky', name: 'Xanh biển', c: null },
+    { id: 'emerald', name: 'Xanh lá', c: ['#ecfdf5', '#d1fae5', '#a7f3d0', '#6ee7b7', '#34d399', '#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#022c22'] },
+    { id: 'teal', name: 'Ngọc lam', c: ['#f0fdfa', '#ccfbf1', '#99f6e4', '#5eead4', '#2dd4bf', '#14b8a6', '#0d9488', '#0f766e', '#115e59', '#134e4a', '#042f2e'] },
+    { id: 'indigo', name: 'Chàm', c: ['#eef2ff', '#e0e7ff', '#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5', '#4338ca', '#3730a3', '#312e81', '#1e1b4b'] },
+    { id: 'violet', name: 'Tím', c: ['#f5f3ff', '#ede9fe', '#ddd6fe', '#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed', '#6d28d9', '#5b21b6', '#4c1d95', '#2e1065'] },
+    { id: 'rose', name: 'Hồng', c: ['#fff1f2', '#ffe4e6', '#fecdd3', '#fda4af', '#fb7185', '#f43f5e', '#e11d48', '#be123c', '#9f1239', '#881337', '#4c0519'] },
+    { id: 'amber', name: 'Cam', c: ['#fffbeb', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#451a03'] },
+    { id: 'slate', name: 'Xám', c: ['#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#475569', '#334155', '#1e293b', '#0f172a', '#020617'] },
+    { id: 'dark', name: 'Tối', c: null, dark: true }
+  ],
+  cur: 'sky', re: null, map: null,
+  key: () => 'tgtp:theme:' + ((Auth.user && Auth.user.id) || 'all'),
+  get() { let t = null; try { t = localStorage.getItem(THM.key()) || localStorage.getItem('tgtp:theme:last'); } catch (e) { } if (!t && Auth.user && Auth.user.theme) t = Auth.user.theme; return THM.LIST.some(x => x.id === t) ? t : 'sky'; },
+  build(th) {
+    if (!th || !th.c) { THM.re = null; THM.map = null; return; }
+    const m = {}; THM.SKY.forEach((h, i) => m[h] = th.c[i]); Object.entries(THM.EXTRA).forEach(([h, i]) => m[h] = th.c[i]);
+    THM.map = m; THM.re = new RegExp(Object.keys(m).map(h => h.slice(1)).sort((a, b) => b.length - a.length).map(h => '#' + h).join('|') + '(?![0-9a-f])', 'gi');
+  },
+  tx: t => THM.re ? t.replace(THM.re, h => THM.map[h.toLowerCase()] || h) : t,
+  styles() {
+    document.querySelectorAll('head style, body > style').forEach(s => { if (s.id === 'print-page' || s.dataset.thSkip) return; if (s._o == null) s._o = s.textContent; const n = THM.tx(s._o); if (s.textContent !== n) s.textContent = n; });
+  },
+  // màu ghi thẳng trong thẻ (style="...") của phần giao diện
+  inline(root) {
+    if (!THM.re && !THM._dirty) return;
+    (root || document.getElementById('app') || document.body).querySelectorAll('[style]').forEach(el => {
+      if (el.closest('#pv,.ppd,#print-root')) return;
+      const s = el.getAttribute('style'); if (!/#[0-9a-f]{6}/i.test(s) && el._so == null) return;
+      if (el._so == null) el._so = s; else if (s !== el._sl) el._so = s;   // nội dung đổi từ bên ngoài
+      const n = THM.tx(el._so); el._sl = n; if (s !== n) el.setAttribute('style', n);
+    });
+  },
+  apply(id, save) {
+    const th = THM.LIST.find(x => x.id === id) || THM.LIST[0];
+    THM.cur = th.id; THM.build(th); THM._dirty = true;
+    document.documentElement.setAttribute('data-theme', th.id);
+    THM.styles(); THM.inline();
+    try { PALETTE[0] = th.c ? th.c[6] : THM.SKY[6]; } catch (e) { }
+    const mt = document.querySelector('meta[name=theme-color]'); if (mt) mt.content = th.dark ? '#111827' : (th.c ? th.c[0] : THM.SKY[0]);
+    if (save) {
+      try { localStorage.setItem(THM.key(), th.id); localStorage.setItem('tgtp:theme:last', th.id); } catch (e) { }
+      if (Auth.user && Auth.user.theme !== th.id) { Auth.user.theme = th.id; try { Store.changed(); } catch (e) { } }   // theme đi theo tài khoản sang máy khác
+    }
+  },
+  dlg() {
+    const cur = THM.cur;
+    const card = th => { const c = th.c || (th.dark ? ['#111827', '#1f2937', '#374151', '', '', '', '#60a5fa', '#93c5fd', '', '#e5e7eb', '#f9fafb'] : THM.SKY);
+      return `<button type="button" class="th-card ${th.id === cur ? 'on' : ''}" data-th="${th.id}"><div class="th-pv" style="background:${th.dark ? '#0b1220' : c[0]}"><i style="background:${th.dark ? '#111827' : c[1]};border-color:${th.dark ? '#1f2937' : c[2]}"><s style="background:${c[6]}"></s><s></s><s></s></i><em><b style="background:${c[6]}"></b><b style="background:${th.dark ? '#1f2937' : '#fff'}"></b><b style="background:${th.dark ? '#1f2937' : '#fff'}"></b></em></div><span>${esc(th.name)}</span>${th.id === cur ? ic('check') : ''}</button>`; };
+    const m = Modal.open({ title: 'Chọn giao diện', width: 560, body: `<p class="muted small" style="margin-top:0">Giao diện lưu riêng cho tài khoản của bạn${Auth.user ? ' (' + esc(Auth.user.user) + ')' : ''}, không ảnh hưởng người khác. Bản in không đổi màu.</p><div class="th-grid">${THM.LIST.map(card).join('')}</div>`, foot: '<button class="btn pri" data-no>Xong</button>' });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    m.el.querySelectorAll('[data-th]').forEach(b => b.onclick = () => { THM.apply(b.dataset.th, true); try { App.render(); } catch (e) { } m.el.querySelectorAll('.th-card').forEach(x => { x.classList.toggle('on', x === b); const s = x.querySelector('svg'); if (s) s.remove(); }); b.insertAdjacentHTML('beforeend', ic('check')); });
+  }
+};
+// style thêm về sau cũng được đổi màu theo theme
+addCSS = (orig => function (t) { orig(t); const s = document.head.lastElementChild; if (s && s.tagName === 'STYLE') { s._o = t; if (THM.re) s.textContent = THM.tx(t); } })(addCSS);
+addCSS(`.th-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.th-card{position:relative;border:2px solid #e2e8f0;border-radius:12px;background:#fff;padding:8px;cursor:pointer;font:inherit;font-weight:600;font-size:13px;color:#334155;text-align:left;display:flex;flex-direction:column;gap:6px}.th-card:hover{border-color:#94a3b8}.th-card.on{border-color:var(--p);box-shadow:0 0 0 3px rgba(2,132,199,.15)}.th-card>svg{position:absolute;right:8px;bottom:8px;width:16px;height:16px;color:var(--p)}
+.th-pv{height:62px;border-radius:8px;display:flex;overflow:hidden;border:1px solid rgba(0,0,0,.06)}.th-pv i{width:30%;border-right:1px solid;display:flex;flex-direction:column;gap:4px;padding:6px 5px}.th-pv i s{display:block;height:6px;border-radius:3px;background:rgba(0,0,0,.08)}.th-pv em{flex:1;display:flex;flex-direction:column;gap:5px;padding:8px}.th-pv em b{display:block;height:9px;border-radius:4px}.th-pv em b:first-child{width:45%}
+@media(max-width:560px){.th-grid{grid-template-columns:repeat(2,1fr)}}
+/* theme tối: đảo màu toàn khung, giữ ảnh đúng màu */
+@media screen{html[data-theme=dark]{filter:invert(.9) hue-rotate(180deg);background:#fff}html[data-theme=dark] img,html[data-theme=dark] video,html[data-theme=dark] .th-pv,html[data-theme=dark] [style*="background-image"]{filter:invert(1) hue-rotate(180deg)}}
+html[data-theme=dark] #pv .gp-paper,html[data-theme=dark] .ppd .pp-sheet{filter:invert(1) hue-rotate(180deg)}`);
+
+/* ---- Sidebar tự ẩn (máy tính): thu nhỏ còn cột biểu tượng, rê chuột vào thì mở ra; nút ghim để giữ mở ---- */
+const SBA = {
+  key: 'tgtp:sbpin',
+  pinned() { try { const v = localStorage.getItem(SBA.key); if (v != null) return v === '1'; return localStorage.getItem('tgtp:sbmin') !== '1'; } catch (e) { return true; } },
+  desk: () => window.innerWidth > 900,
+  set(pin) {
+    try { localStorage.setItem(SBA.key, pin ? '1' : '0'); } catch (e) { }
+    SBA.state();
+  },
+  state() {
+    const b = document.body, pin = SBA.pinned();
+    b.classList.toggle('sb-auto', !pin && SBA.desk());
+    if (!SBA.desk()) { b.classList.remove('sb-min', 'sb-peek'); }
+    else if (pin) b.classList.remove('sb-min', 'sb-peek');
+    else if (!b.classList.contains('sb-peek')) b.classList.add('sb-min');
+    const p = $('#sbPin'); if (p) { p.innerHTML = ic(pin ? 'pinoff' : 'pin'); p.title = pin ? 'Bỏ ghim: menu tự ẩn, rê chuột vào để mở' : 'Ghim menu: luôn mở'; p.classList.toggle('on', pin); }
+  },
+  mount() {
+    const sb = $('.sidebar'), br = $('.sidebar .brand'); if (!sb || !br || $('#sbPin')) return SBA.state();
+    br.insertAdjacentHTML('beforeend', `<button type="button" class="sb-pin" id="sbPin"></button>`);
+    const foot = $('.sidebar .side-foot') || sb;
+    foot.insertAdjacentHTML(foot === sb ? 'beforeend' : 'afterbegin', `<button type="button" class="sb-th" id="sbTheme" title="Chọn giao diện">${ic('palette')}<span>Giao diện</span></button>`);
+    $('#sbPin').onclick = e => { e.stopPropagation(); SBA.set(!SBA.pinned()); };
+    $('#sbTheme').onclick = () => THM.dlg();
+    let tIn = 0, tOut = 0;
+    const open = () => { clearTimeout(tOut); if (!document.body.classList.contains('sb-auto')) return; tIn = setTimeout(() => { document.body.classList.remove('sb-min'); document.body.classList.add('sb-peek'); }, 120); };
+    const close = () => { clearTimeout(tIn); if (!document.body.classList.contains('sb-auto')) return; tOut = setTimeout(() => { if (sb.matches(':hover') || sb.contains(document.activeElement) && document.activeElement !== document.body && document.activeElement.matches('input,select,textarea')) return; document.body.classList.remove('sb-peek'); document.body.classList.add('sb-min'); }, 350); };
+    sb.addEventListener('mouseenter', open); sb.addEventListener('mouseleave', close);
+    sb.addEventListener('focusin', () => { if (document.body.classList.contains('sb-auto')) { clearTimeout(tOut); document.body.classList.remove('sb-min'); document.body.classList.add('sb-peek'); } });
+    sb.addEventListener('focusout', close);
+    sb.addEventListener('click', e => { if (e.target.closest('.nav a') && document.body.classList.contains('sb-auto')) { clearTimeout(tIn); document.body.classList.remove('sb-peek'); document.body.classList.add('sb-min'); } });
+    window.addEventListener('resize', () => SBA.state());
+    SBA.state();
+  }
+};
+// nút ☰ trên thanh tiêu đề (máy tính) giờ là ghim / bỏ ghim
+ACT.navOpen = () => { if (SBA.desk()) SBA.set(!SBA.pinned()); else document.body.classList.add('nav-open'); };
+addCSS(`.brand{position:relative}.sb-pin{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;border:1px solid #bae6fd;background:#fff;color:#0369a1;display:grid;place-items:center;cursor:pointer;opacity:.85}.sb-pin:hover{opacity:1;background:#e0f2fe}.sb-pin svg{width:16px;height:16px}.sb-pin.on{background:#0284c7;color:#fff;border-color:#0284c7}
+.sb-th{display:flex;align-items:center;gap:10px;width:100%;border:1px solid #bae6fd;background:#fff;color:#0369a1;border-radius:11px;padding:9px 12px;font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;margin-bottom:8px}.sb-th:hover{background:#e0f2fe}.sb-th svg{width:18px;height:18px;flex:none}
+.sidebar>.sb-th{margin:8px 12px 14px;width:auto;flex:none}body.sb-min .brand>div:not(.logo){display:none}.brand>div:not(.logo){min-width:0;padding-right:34px}body.sb-min .sidebar>.sb-th{margin:8px 10px 14px}
+body.sb-min .sb-pin{display:none}body.sb-min .sb-th{justify-content:center;padding:10px 0}body.sb-min .sb-th span{display:none}
+@media(min-width:901px){
+  body.sb-auto .shell{padding-left:72px}
+  body.sb-auto .sidebar{position:fixed;left:0;top:0;bottom:0;height:100vh;z-index:60}
+  body.sb-auto.sb-peek .sidebar{width:250px;box-shadow:12px 0 40px rgba(8,47,73,.22)}
+  body.sb-auto.sb-min .sidebar{width:72px}
+}
+@media(max-width:900px){.sb-pin{display:none}}`);
+{
+  // gắn vào chỗ khởi động giao diện
+  const s0 = Shell.setup; Shell.setup = function () { const r = s0.apply(this, arguments); SBA.mount(); THM.apply(THM.get()); return r; };
+  // đổi người đăng nhập → áp theme của người đó
+  const ch0 = Auth.chip; Auth.chip = function () { const r = ch0.apply(this, arguments); const box = $('#auMe .au-dd'); if (box && !box.querySelector('[data-au=theme]')) { const out = box.querySelector('[data-au=out]'); out && out.insertAdjacentHTML('beforebegin', `<button data-au="theme">${ic('palette')} Giao diện</button>`); } if (THM._u !== (Auth.user && Auth.user.id)) { THM._u = Auth.user && Auth.user.id; THM.apply(THM.get()); } return r; };
+  document.addEventListener('click', e => { const b = e.target.closest('[data-au=theme]'); if (b) { e.stopImmediatePropagation(); const m = $('#auMe'); m && m.classList.remove('open'); THM.dlg(); } }, true);
+  // màu viết thẳng trong HTML: đổi theo theme sau mỗi lần vẽ lại
+  let q = 0; new MutationObserver(() => { if (!THM.re && !THM._dirty) return; if (q) return; q = requestAnimationFrame(() => { q = 0; THM.inline(); if (!THM.re) THM._dirty = false; }); }).observe(document.body, { childList: true, subtree: true });
+}
+
+/* ===== IN THẲNG RA MÁY IN CỤC BỘ (hộp in của trình duyệt, chọn EPSON / Brother / PDF...) =====
+   - Phiếu 80mm: khổ giấy 80mm, chiều dài tự co theo nội dung phiếu (giống vé Vexere)
+   - A4: khổ A4 dọc / ngang
+   Vẫn có thể bật lại "Xem trước của app" trong menu tài khoản. */
+const PRN = {
+  key: 'tgtp:printmode',
+  direct() { try { return localStorage.getItem(PRN.key) !== 'preview'; } catch (e) { return true; } },
+  setDirect(on) { try { localStorage.setItem(PRN.key, on ? 'direct' : 'preview'); } catch (e) { } },
+  // đo chiều cao từng phiếu (đoạn giữa các lệnh ngắt trang) khi in khổ 80mm
+  rollH(html, wMM) {
+    const box = document.createElement('div'); box.dataset.runtime = '1';
+    box.style.cssText = `position:fixed;left:-99999px;top:0;width:${wMM}mm;visibility:hidden;background:#fff`;
+    box.innerHTML = `<div id="print-root" style="display:block">${html}</div>`;   // cùng CSS như lúc in
+    document.body.appendChild(box);
+    const root = box.firstElementChild, mm = px => px * 25.4 / 96, top0 = root.getBoundingClientRect().top;
+    const cuts = [0];
+    root.querySelectorAll('*').forEach(e => { const cs = getComputedStyle(e); if (cs.breakAfter === 'page' || cs.pageBreakAfter === 'always') cuts.push(e.getBoundingClientRect().bottom - top0); if (cs.breakBefore === 'page' || cs.pageBreakBefore === 'always') cuts.push(e.getBoundingClientRect().top - top0); });
+    cuts.push(root.scrollHeight); cuts.sort((a, b) => a - b);
+    let mx = 0; for (let i = 1; i < cuts.length; i++) mx = Math.max(mx, cuts[i] - cuts[i - 1]);
+    box.remove(); return Math.ceil(mm(mx)) + 3;
+  },
+  go(html, { landscape = false, title = 'Bản in', paper = 'A4', page } = {}) {
+    if (html.includes('sig-img') && !Print.sigOn()) html = `<div class="nosig">${html}</div>`;
+    if (!page) {
+      if (paper === '80') { const [mv, mh] = Print.marginMM('80', 'def'), h = Math.max(50, PRN.rollH(html, 80 - 2 * mh)) + 2 * mv; page = `@page{size:80mm ${h}mm;margin:${mv}mm ${mh}mm}`; }
+      else if (paper === 'A5') page = `@page{size:A5 ${landscape ? 'landscape' : 'portrait'};margin:8mm}`;
+      else page = Print.pageCSS(landscape);
+    }
+    Print.now(html, { title, page });
+  }
+};
+// mọi lệnh in trong app đi qua Print.run / Print.preview / PrintDlg.open
+{
+  const pv0 = Print.preview;
+  Print.preview = function (html, o = {}) { if (PRN.direct()) return PRN.go(html, o); return pv0.call(Print, html, o); };
+  const dl0 = PrintDlg.open;
+  PrintDlg.open = function (o) {
+    if (!PRN.direct()) return dl0.call(PrintDlg, o);
+    // tài liệu A4 (hợp đồng, phơi xe…): mỗi tài liệu bắt đầu trang mới, trình duyệt tự ngắt trang
+    const body = (o.htmls || []).map(h => `<div class="pd-doc">${h}</div>`).join('');
+    Print.now(body, { title: o.title || 'Tài liệu', page: '@page{size:A4 portrait;margin:15mm}' });
+  };
+}
+addCSS(`@media print{#print-root .pd-doc{break-after:page;page-break-after:always}#print-root .pd-doc:last-child{break-after:auto;page-break-after:auto}#print-root .pd-doc .pagebreak{break-after:page;page-break-after:always;border:0;margin:0}#print-root .hd p,#print-root .hd tr{break-inside:avoid}}`);
+// bật / tắt trong menu tài khoản
+{
+  const ch1 = Auth.chip; Auth.chip = function () {
+    const r = ch1.apply(this, arguments); const box = $('#auMe .au-dd');
+    if (box && !box.querySelector('[data-au=prn]')) { const out = box.querySelector('[data-au=out]'); out && out.insertAdjacentHTML('beforebegin', `<button data-au="prn">${ic('printer')} <span></span></button>`); }
+    const b = box && box.querySelector('[data-au=prn] span'); if (b) b.textContent = PRN.direct() ? 'In: mở thẳng máy in ✓' : 'In: xem trước của app';
+    return r;
+  };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-au=prn]'); if (!b) return; e.stopImmediatePropagation();
+    PRN.setDirect(!PRN.direct()); const s = b.querySelector('span'); if (s) s.textContent = PRN.direct() ? 'In: mở thẳng máy in ✓' : 'In: xem trước của app';
+    toast(PRN.direct() ? 'Bấm In sẽ mở thẳng hộp in của máy (chọn máy in EPSON, Brother…)' : 'Bấm In sẽ mở bản xem trước của app trước', 'ok', 5000);
+  }, true);
+}
+
+/* ===== Chuyến đã xuất bến (quá 20 phút): chữ in chìm dưới hàng tài xế, tự khóa khi vừa qua mốc ===== */
+addCSS(`.dv-gone{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0 12px;margin:2px 0;pointer-events:none;user-select:none;border-top:2px dashed rgba(220,38,38,.25);border-bottom:2px dashed rgba(220,38,38,.25)}
+.dv-gone b{font-size:clamp(26px,5vw,52px);font-weight:900;letter-spacing:.14em;color:rgba(220,38,38,.16);line-height:1.05;text-align:center;-webkit-text-stroke:1px rgba(220,38,38,.28)}
+.dv-gone small{font-size:12px;font-weight:600;color:rgba(185,28,28,.6);margin-top:2px}
+.dv-grid.is-gone .dv-seat:not(.bk):not(.pd){opacity:.55}`);
+{
+  const prev = new Map();
+  setInterval(() => {
+    try {
+      if (App.cur !== 'lichchay' || document.querySelector('.modal-wrap,#pv,.ppd,.cs-ov')) return;
+      const t = dvCur(); if (!t) return;
+      const g = lcGone(t), k = t.id, was = prev.get(k); prev.set(k, g);
+      if (g && was === false) { const st = window.scrollY; App.render(); window.scrollTo(0, st); if (!lcAdmin()) toast(`Chuyến ${esc(t.gio)} đã xuất bến hơn 20 phút: đã khóa sửa, xóa`, 'err', 6000); }
+    } catch (e) { }
+  }, 30000);
 }
 
 App.cfg = CFG; Store.load();
