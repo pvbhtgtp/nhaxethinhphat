@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T14:39:44.627Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T14:46:10.743Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -10016,6 +10016,94 @@ const RC = {
 };
 addCSS(`.rc-box{margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0}.rc-box small{display:block;color:#64748b;font-size:11.5px;margin-top:6px}`);
 window.addEventListener('load', () => { try { RC.mount(); } catch (e) { console.warn('RC', e); } setTimeout(() => { try { const c = GS.cfg(); if (GS.on && c.mode === 'fb') RC.remember({ ...c, key: 'x' }); } catch (e) { } }, 8000); });
+/* ===== CẬP NHẬT LÊN GITHUB NGAY TRONG APP (chỉ Admin) =====
+   - Đẩy file index.html KHÔNG CHỨA DỮ LIỆU (chỉ mã app + cấu hình kết nối) lên GitHub bằng API chính thức.
+   - "Cập nhật từ file app mới": chọn file app vừa tải từ Claude → app lấy phần mã mới, bỏ toàn bộ dữ liệu, gắn cấu hình kết nối rồi đẩy lên.
+   - Luôn kiểm tra trước khi đẩy: còn dữ liệu thật trong file là từ chối.
+   - Token GitHub chỉ nằm trên máy này (không vào dữ liệu chung, không vào file GitHub). */
+const GHP = {
+  K: 'gh.cfg', KS: 'gh.st', API: 'https://api.github.com',
+  guess() { const h = location.hostname.match(/^([\w-]+)\.github\.io$/i), p = location.pathname.split('/').filter(Boolean)[0]; return { owner: h ? h[1] : 'pvbhtgtp', repo: h && p ? p : 'nhaxethinhphat' }; },
+  cfg() { let c = {}; try { c = JSON.parse(localStorage.getItem(GHP.K) || '{}') || {}; } catch (e) { } let t = ''; try { t = sessionStorage.getItem(GHP.K + '.t') || ''; } catch (e) { } const g = GHP.guess(); return { owner: c.owner || g.owner, repo: c.repo || g.repo, branch: c.branch || 'main', path: c.path || 'index.html', remember: !!c.remember, token: c.token || t }; },
+  save(c) { try { localStorage.setItem(GHP.K, JSON.stringify({ owner: c.owner, repo: c.repo, branch: c.branch, path: c.path, remember: c.remember, token: c.remember ? c.token : '' })); sessionStorage.setItem(GHP.K + '.t', c.remember ? '' : c.token); } catch (e) { } },
+  st() { try { return JSON.parse(localStorage.getItem(GHP.KS) || '{}') || {}; } catch (e) { return {}; } },
+  /* phần dữ liệu cho file GitHub: chỉ tên công ty + cấu hình kết nối (lấy đúng như nút "Tải index.html cho GitHub") */
+  shellData() { const h = GS.shellHTML(), m = h.match(/<script id="app-data" type="application\/json">([\s\S]*?)<\/script>/); if (!m) throw new Error('Không tạo được phần cấu hình'); return m[1]; },
+  /* ghép: mã của file html + dữ liệu rỗng */
+  build(srcHtml) {
+    const re = /(<script id="app-data" type="application\/json">)([\s\S]*?)(<\/script>)/;
+    if (!re.test(srcHtml) || !/const GS = \{/.test(srcHtml) || !/<\/html>\s*$/i.test(srcHtml.trim() + '')) throw new Error('File này không phải file app Nhà Xe (thiếu phần mã chính)');
+    const data = GHP.shellData(); let out = srcHtml.replace(re, (_, a, __, c) => a + data + c);
+    if (!/^<!DOCTYPE html>/i.test(out.trim())) out = '<!DOCTYPE html>\n' + out.replace(/^[\s\S]*?(<html)/i, '$1');
+    GHP.check(out); return out;
+  },
+  /* kiểm tra an toàn: file đẩy lên chỉ được chứa tên công ty + cấu hình kết nối */
+  check(html) {
+    const m = html.match(/<script id="app-data" type="application\/json">([\s\S]*?)<\/script>/); if (!m) throw new Error('Thiếu phần cấu hình trong file');
+    let d; try { d = JSON.parse(m[1]); } catch (e) { throw new Error('Phần cấu hình trong file bị lỗi'); }
+    const bad = Object.keys(d).filter(k => !['settings', '_meta'].includes(k)), bs = Object.keys(d.settings || {}).filter(k => !['company', 'gsync'].includes(k)), bc = Object.keys((d.settings || {}).company || {}).filter(k => k !== 'ten');
+    if (bad.length || bs.length || bc.length || !(d._meta && d._meta.shell)) throw new Error('Đã chặn: file vẫn còn dữ liệu thật (' + [...bad, ...bs, ...bc].slice(0, 5).join(', ') + '). Không đẩy lên GitHub.');
+    if (d.settings.gsync && d.settings.gsync.key) throw new Error('Đã chặn: file có chứa mã kết nối');
+    if ((html.match(/<script id="app-data" type="application\/json">/g) || []).length !== 1) throw new Error('Đã chặn: file có nhiều phần dữ liệu');
+    return d;
+  },
+  b64: html => new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = () => no(new Error('Không đọc được file')); fr.readAsDataURL(new Blob([html], { type: 'text/html' })); }),
+  async api(c, path, opt = {}) {
+    let r; try { r = await fetch(GHP.API + path, { ...opt, cache: 'no-store', headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + c.token, 'X-GitHub-Api-Version': '2022-11-28', ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } }); }
+    catch (e) { throw new Error('Không kết nối được GitHub (kiểm tra mạng, hoặc đang mở trong khung xem của Claude)'); }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const m = String(j.message || ''); const er = new Error(r.status === 401 ? 'Token GitHub sai hoặc đã hết hạn' : r.status === 403 && /rate/i.test(m) ? 'GitHub tạm giới hạn, thử lại sau vài phút' : r.status === 403 || (r.status === 404 && opt.method === 'PUT') ? 'Token không có quyền ghi vào kho này (cần quyền Contents: Read and write)' : r.status === 404 ? 'Không thấy kho hoặc file: kiểm tra tên tài khoản, tên kho, nhánh' : r.status === 409 ? 'File trên GitHub vừa thay đổi, bấm lại để thử lần nữa' : /secret/i.test(m) ? 'GitHub chặn vì thấy "khóa bí mật" (apiKey Firebase). Mở trang kho trên GitHub → Security → bấm cho phép (Allow) rồi đẩy lại.' : 'GitHub báo lỗi: ' + m.slice(0, 160)); er.status = r.status; throw er; }
+    return j;
+  },
+  async push(html, msg) {
+    const c = GHP.cfg(); if (!c.token) throw new Error('Nhập token GitHub trước');
+    GHP.check(html);
+    const p = `/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}`;
+    let sha; try { sha = (await GHP.api(c, p + '?ref=' + encodeURIComponent(c.branch))).sha; } catch (e) { if (e.status !== 404) throw e; }
+    const r = await GHP.api(c, p, { method: 'PUT', body: JSON.stringify({ message: msg, content: await GHP.b64(html), branch: c.branch, ...(sha ? { sha } : {}) }) });
+    const st = { at: new Date().toISOString(), url: r.commit && r.commit.html_url, kb: Math.round(html.length / 1024), who: GS.who() }; try { localStorage.setItem(GHP.KS, JSON.stringify(st)); } catch (e) { }
+    return st;
+  },
+  async confirmPush(html, what) {
+    const d = GHP.check(html), g = d.settings.gsync || {}, c = GHP.cfg();
+    const ok = await Modal.confirm(`Đẩy <b>${esc(what)}</b> lên <b>${esc(c.owner)}/${esc(c.repo)}</b> (nhánh ${esc(c.branch)})?
+      <ul class="small" style="line-height:1.7;padding-left:18px;margin:8px 0 0"><li>Dung lượng: ${F.num(html.length / 1048576, 2)} MB</li><li><b class="pos">✓</b> Đã kiểm tra: <b>không có dữ liệu</b> nhân viên, lương, CCCD, tài khoản</li><li>Cấu hình kết nối: ${g.mode === 'fb' && g.fb ? 'Firebase · ' + esc(g.fb.projectId) + (g.email ? ' · ' + esc(g.email) : '') : g.url ? 'Apps Script' : '<b class="neg">chưa có</b> (máy mới phải tự nhập cấu hình)'}</li><li>Khoảng 1–2 phút sau, trang ${esc(c.owner)}.github.io/${esc(c.repo)} có bản mới</li></ul>`, { ok: 'Đẩy lên GitHub', title: 'Cập nhật lên GitHub' });
+    if (!ok) return;
+    toast('Đang đẩy lên GitHub…', '', 3000);
+    const st = await GHP.push(html, `Cập nhật app${what.includes('file') ? ' (bản mới)' : ''} · ${new Date().toLocaleString('vi-VN')} · ${GS.who()}`);
+    toast(`${ic('check')} Đã đẩy lên GitHub. Khoảng 1–2 phút nữa tải lại trang để dùng bản mới.`, 'ok', 8000); HUB.setTab('gdata'); return st;
+  },
+  html() {
+    const c = GHP.cfg(), st = GHP.st();
+    return `<div class="ghp-sec"><div class="hub-h">Cập nhật lên GitHub <span class="badge b-violet" style="margin-left:6px">Chỉ Admin</span></div><div class="hub-card">
+      <div class="hub-zs ${st.at ? 'ok' : ''}" style="margin-bottom:12px">${ic(st.at ? 'check' : 'upload')}<div><b>${st.at ? 'Lần đẩy gần nhất: ' + BK.ago(st.at) : 'Chưa đẩy lần nào từ máy này'}</b><small>${st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener">Xem trên GitHub</a> · ` : ''}App tự bỏ toàn bộ dữ liệu, chỉ đẩy mã app + cấu hình kết nối</small></div></div>
+      <div class="ghp-g"><label class="hub-f"><span>Tài khoản GitHub</span><input class="inp" data-gh="owner" value="${esc(c.owner)}"></label><label class="hub-f"><span>Tên kho</span><input class="inp" data-gh="repo" value="${esc(c.repo)}"></label><label class="hub-f"><span>Nhánh</span><input class="inp" data-gh="branch" value="${esc(c.branch)}"></label></div>
+      <label class="hub-f"><span>Token GitHub <small>(GitHub → Settings → Developer settings → Fine-grained tokens · chỉ chọn kho này · quyền <b>Contents: Read and write</b>)</small></span><div class="hub-pw"><input class="inp" data-gh="token" type="password" autocomplete="off" value="${esc(c.token)}" placeholder="github_pat_…"><button class="ibtn" data-g="ghEye">${ic('eye')}</button></div></label>
+      <label class="row small" style="gap:8px;margin:-2px 0 10px"><input type="checkbox" data-gh="remember" ${c.remember ? 'checked' : ''}> Nhớ token trên máy này <span class="muted">(bỏ chọn: tự quên khi đóng trình duyệt)</span></label>
+      <div class="hub-btns" style="justify-content:flex-start"><button class="btn" data-g="ghTest">${ic('check')} Thử token</button><button class="btn pri" data-g="ghPushCur">${ic('upload')} Đẩy bản đang chạy</button><button class="btn xl" data-g="ghPushFile">${ic('upload')} Cập nhật từ file app mới…</button></div>
+      <p class="hub-p" style="margin:8px 0 0"><b>Khi Claude sửa app:</b> tải file app mới về máy (file có dữ liệu cũng được), bấm <b>Cập nhật từ file app mới</b> và chọn file đó. App tự bỏ dữ liệu trước khi đẩy.</p></div></div>`;
+  },
+  form() { const q = k => HUB.el.querySelector(`[data-gh="${k}"]`), v = k => ((q(k) || {}).value || '').trim(); return { owner: v('owner'), repo: v('repo'), branch: v('branch') || 'main', path: 'index.html', token: v('token'), remember: !!(q('remember') || {}).checked }; },
+  async act(a, b) {
+    if (!BK.admin()) return toast('Chỉ Admin được đẩy app lên GitHub', 'err');
+    const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 10000); } finally { if (b.isConnected) b.disabled = false; } };
+    if (a === 'ghEye') { const i = b.parentElement.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; return; }
+    const c = GHP.form(); if (!/^[\w-]+$/.test(c.owner) || !/^[\w.-]+$/.test(c.repo)) return toast('Kiểm tra tên tài khoản và tên kho GitHub', 'err'); if (!c.token) return toast('Nhập token GitHub', 'err'); GHP.save(c);
+    if (a === 'ghTest') return busy(async () => { const r = await GHP.api(c, `/repos/${c.owner}/${c.repo}`); if (r.permissions && !r.permissions.push) throw new Error('Token chỉ có quyền xem, cần quyền ghi (Contents: Read and write)'); toast(`${ic('check')} Token dùng được cho kho ${esc(r.full_name)}${r.private ? ' (riêng tư)' : ' (công khai)'}`, 'ok', 6000); });
+    if (a === 'ghPushCur') return busy(async () => { await GHP.confirmPush(GS.shellHTML(), 'bản app đang chạy trên máy này'); });
+    if (a === 'ghPushFile') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.html,text/html';
+      inp.onchange = () => busy(async () => { const f = inp.files[0]; if (!f) return; if (f.size > 40 * 1048576) throw new Error('File quá lớn'); const out = GHP.build(await f.text()); await GHP.confirmPush(out, 'file app mới "' + f.name + '"'); });
+      inp.click();
+    }
+  },
+  mount() {
+    const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { if (BK.admin() && body && !body.querySelector('.ghp-sec')) { const t = body.querySelector('[data-g="fbshell"],[data-g="shell"]'), card = t && t.closest('.hub-card'); card ? card.insertAdjacentHTML('afterend', GHP.html()) : body.insertAdjacentHTML('beforeend', GHP.html()); } } catch (e) { console.warn('GHP', e); } return r; };
+    const a0 = GS.act; GS.act = function (a, b) { if (/^gh[A-Z]/.test(a || '')) return GHP.act(a, b); return a0.apply(this, arguments); };
+  }
+};
+addCSS(`.ghp-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 8px}@media(max-width:600px){.ghp-g{grid-template-columns:1fr}}.ghp-sec a{color:#0369a1}`);
+window.addEventListener('load', () => { try { GHP.mount(); } catch (e) { console.warn('GHP', e); } });
 </script>
 
 
