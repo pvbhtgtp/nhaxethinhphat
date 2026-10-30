@@ -292,6 +292,9 @@ body{-webkit-text-size-adjust:100%}
   body:not(.is-printing) .content{padding:0}
   .card,.kpi,.tbl-card{box-shadow:none;break-inside:avoid}
   .tbl-wrap{max-height:none!important;overflow:visible!important}
+  #print-root tr,#print-root img,#print-root .pr-signs,#print-root .slip{break-inside:avoid;page-break-inside:avoid}
+  #print-root thead{display:table-header-group}
+  #print-root h2,#print-root h3{break-after:avoid;page-break-after:avoid}
   #print-root .card{border:1px solid #ddd}
   #print-root .kpis{grid-template-columns:repeat(3,1fr)}
   #print-root .cols-2,#print-root .cols-21,#print-root .cols-12{grid-template-columns:1fr 1fr}
@@ -1052,6 +1055,42 @@ function download(blob, name) {
 /* ---------- In ---------- */
 const Print = {
   run(html, o = {}) { Print.preview(html, o); },
+  /* chia nội dung thành các trang cao H px; trả về [[đầu, cuối], ...] theo tọa độ trong el */
+  paginate(el, H) {
+    const top0 = el.getBoundingClientRect().top, total = el.scrollHeight > 0 ? Math.max(el.getBoundingClientRect().height, 1) : 1;
+    const Y = r => r - top0, blocks = [], cands = new Set([0, total]), forced = [];
+    const isPB = (cs, side) => { const v = side === 'b' ? cs.breakBefore : cs.breakAfter, o = side === 'b' ? cs.pageBreakBefore : cs.pageBreakAfter; return v === 'page' || v === 'always' || o === 'always'; };
+    el.querySelectorAll('*').forEach(e => {
+      const r = e.getBoundingClientRect(); if (!r.height && !r.width) return;
+      const a = Y(r.top), b = Y(r.bottom), cs = getComputedStyle(e);
+      if (cs.display === 'none') return;
+      cands.add(a); cands.add(b);
+      if (isPB(cs, 'b') && a > 1) forced.push(a);
+      if ((isPB(cs, 'a') || e.classList.contains('pp-sheet')) && !e.matches(':last-child') && b < total - 1) forced.push(b);
+      const keep = e.tagName === 'TR' || e.tagName === 'IMG' || e.tagName === 'svg' || e.tagName === 'THEAD' || cs.breakInside === 'avoid' || cs.pageBreakInside === 'avoid' || cs.breakInside === 'avoid-page';
+      if (keep && b - a <= H * 0.98) blocks.push([a, b]);
+    });
+    // từng dòng chữ: không cắt ngang dòng
+    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), rg = document.createRange();
+    for (let t = tw.nextNode(); t; t = tw.nextNode()) { if (!t.nodeValue.trim()) continue; rg.selectNodeContents(t); for (const r of rg.getClientRects()) { if (!r.height) continue; const a = Y(r.top), b = Y(r.bottom); blocks.push([a, b]); cands.add(b); cands.add(a); } }
+    blocks.sort((x, y) => x[0] - y[0]); const M = [];
+    blocks.forEach(([a, b]) => { const l = M[M.length - 1]; if (l && a < l[1] - 0.5) l[1] = Math.max(l[1], b); else M.push([a, b]); });
+    const ok = y => { let lo = 0, hi = M.length - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (M[m][1] - 0.5 <= y) lo = m + 1; else if (M[m][0] + 0.5 >= y) hi = m - 1; else return false; } return true; };
+    const C = [...cands].filter(y => y >= 0 && y <= total).sort((x, y) => x - y), F = [...new Set(forced.map(Math.round))].sort((x, y) => x - y);
+    const out = []; let s = 0, g = 0;
+    while (s < total - 1 && g++ < 2000) {
+      const lim = s + H, f = F.find(y => y > s + 1 && y <= lim);
+      let e;
+      if (f != null) e = f;
+      else if (total <= lim) e = total;
+      else { e = null; for (let i = C.length - 1; i >= 0; i--) { const y = C[i]; if (y > lim) continue; if (y <= s + H * 0.25) break; if (ok(y)) { e = y; break; } } if (e == null) e = lim; }
+      out.push([s, e]); s = e;
+      while (s < total - 1 && C.some(y => y > s && y < s + 0.5)) s += 0.5;
+    }
+    if (!out.length) out.push([0, total]);
+    // bỏ trang cuối trống
+    return out.filter(([a, b], i) => i === 0 || b - a > 2);
+  },
   sigOn() { return (S().company || {}).chenKy !== false; },
   /* Hộp thoại in kiểu Google Chrome: xem trước bên trái, tùy chọn bên phải */
   PAPER: { A4: [210, 297], A5: [148, 210], '80': [80, 0] },
@@ -1084,14 +1123,30 @@ const Print = {
     const body = () => { const one = hasSig && !st.sig ? `<div class="nosig">${html}</div>` : html; return Array(st.copies).fill(one).join(st.paper === '80' ? '<div class="r80cut"></div>' : '<div class="pagebreak"></div>'); };
     const dims = () => { const [w, h] = Print.PAPER[st.paper]; return st.paper === '80' ? [w, 0] : st.landscape ? [h, w] : [w, h]; };
     const pageCSS = () => { const [w, h] = dims(), [mv, mh] = Print.marginMM(st.paper, st.margin); return st.paper === '80' ? '@page{size:80mm auto;margin:0}' : `@page{size:${w}mm ${h}mm;margin:${mv}mm ${mh}mm}`; };
+    let imgT = 0;
     const render = () => {
       const [w, h] = dims(), [mv, mh] = Print.marginMM(st.paper, st.margin), k = st.scale / 100;
-      pages.innerHTML = `<div class="gp-paper${st.paper === '80' ? ' roll' : ''}" style="width:${w}mm;${h ? `min-height:${h}mm;` : ''}padding:${mv}mm ${mh}mm"><div class="gp-inner" style="zoom:${k}">${body()}</div></div>`;
-      const pp = pages.firstChild, fit = Math.min(1, (view.clientWidth - 32) / pp.offsetWidth); pp.style.zoom = fit > 0 ? fit : 1;
-      const n = h ? Math.max(1, Math.ceil((pp.querySelector('.gp-inner').scrollHeight * k) / ((h - 2 * mv) * 3.7795))) : 0;
-      pv.querySelector('.gp-count').textContent = h ? `Khoảng ${n} tờ giấy` : `${st.copies} phiếu · giấy cuộn`;
+      const paperCss = `width:${w}mm;padding:${mv}mm ${mh}mm`, inner = `<div class="gp-inner" style="zoom:${k}">${body()}</div>`;
+      pages.style.zoom = 1;
+      let n = 0;
+      if (!h) {   // giấy cuộn 80mm: 1 dải liền
+        pages.innerHTML = `<div class="gp-paper roll" style="${paperCss}">${inner}</div>`;
+      } else {
+        // dựng bản đo (ẩn) rồi chia thành từng tờ, cắt ở chỗ không làm đứt dòng chữ / dòng bảng / khối giữ liền
+        pages.innerHTML = `<div class="gp-paper gp-meas" style="${paperCss};position:absolute;left:-99999px;top:0;visibility:hidden">${inner}</div>`;
+        const meas = pages.firstChild, cuts = Print.paginate(meas.querySelector('.gp-inner'), (h - 2 * mv) * 3.7795);
+        n = cuts.length;
+        const many = n > 60;   // tài liệu quá dài: hiện 1 tờ dài có vạch ngắt để máy không bị chậm
+        pages.innerHTML = many
+          ? `<div class="gp-paper" style="${paperCss}"><div style="position:relative">${inner}${cuts.slice(1).map(c => `<div class="gp-cut" style="top:${c[0]}px"></div>`).join('')}</div></div>`
+          : cuts.map(([a, b], i) => `<div class="gp-pg"><div class="gp-paper" style="${paperCss};height:${h}mm"><div class="gp-clip" style="height:${Math.ceil(b - a)}px"><div style="margin-top:${-a}px">${inner}</div></div></div><div class="gp-pn">Trang ${i + 1} / ${n}</div></div>`).join('');
+      }
+      const pp = pages.firstChild, fit = Math.min(1, (view.clientWidth - 32) / pp.offsetWidth); pages.style.zoom = fit > 0 ? fit : 1;
+      pv.querySelector('.gp-count').textContent = h ? `${n} trang` : `${st.copies} phiếu · giấy cuộn`;
       pv.querySelector('[data-pv=go]').textContent = st.dest === 'file' ? 'Lưu' : 'In';
       $o('margin').disabled = false;
+      // ảnh (logo, chữ ký) tải xong làm thay đổi chiều cao: chia trang lại
+      pages.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', () => { clearTimeout(imgT); imgT = setTimeout(() => { if (pv.isConnected) render(); }, 150); }, { once: true }); });
     };
     pv.querySelectorAll('[data-o]').forEach(el => el.addEventListener(el.type === 'number' ? 'input' : 'change', () => {
       const k = el.dataset.o;
@@ -2884,13 +2939,40 @@ const PrintDlg = {
     const hh = n => { const cs = getComputedStyle(n); return n.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0); };
     htmls.forEach(html => {
       box.innerHTML = html; const root = box.firstElementChild;
-      [...root.children].forEach((el, i, arr) => {
+      // khối cao hơn 1 trang: bảng thì cắt theo dòng (lặp lại tiêu đề bảng), khối khác thì tách theo phần tử con
+      const big = el => {
+        if (el.tagName === 'TABLE') {
+          const head = el.tHead, hH = head ? head.offsetHeight : 0, rows = [...el.rows].filter(r => !head || r.parentNode !== head);
+          const shell = () => { const t = el.cloneNode(false); if (head) t.appendChild(head.cloneNode(true)); const b = document.createElement('tbody'); t.appendChild(b); return [t, b]; };
+          let [t, b] = shell(), n = 0, hUsed = hH;
+          const emit = () => { if (!n) return; cur.push(t.outerHTML); used += hUsed; [t, b] = shell(); n = 0; hUsed = hH; };
+          const addRow = (node, rh) => { if (used + hUsed + rh > vh && (n || used > 0)) { emit(); flush(); } b.appendChild(node); n++; hUsed += rh; };
+          rows.forEach(r => {
+            const rh = r.offsetHeight, cells = [...r.cells], big1 = cells.reduce((a, c) => c.children.length > (a ? a.children.length : 0) ? c : a, null);
+            if (rh <= vh - hH - 4 || !big1 || big1.children.length < 2) return addRow(r.cloneNode(true), rh);
+            // 1 dòng cao hơn cả trang: chia nội dung ô dài nhất ra nhiều dòng nối tiếp
+            const ks = [...big1.children], kh = ks.map(hh), base = Math.max(8, rh - kh.reduce((a, x) => a + x, 0)), ci = cells.indexOf(big1);
+            let part = [], ph = 0, first = true;
+            const out = () => { if (!part.length) return; const nr = r.cloneNode(true); [...nr.cells].forEach((c, j) => { if (j === ci) c.innerHTML = part.join(''); else if (!first) c.innerHTML = ''; }); addRow(nr, base + ph); part = []; ph = 0; first = false; };
+            ks.forEach((k, j) => { if (part.length && used + hUsed + base + ph + kh[j] > vh) { out(); emit(); flush(); } part.push(k.outerHTML); ph += kh[j]; });
+            out();
+          });
+          emit(); return;
+        }
+        const kids = [...el.children];
+        if (!kids.length) { if (used > 0) flush(); cur.push(el.outerHTML); used += hh(el); return; }
+        const wrap = el.cloneNode(false); wrap.style.marginTop = wrap.style.marginBottom = '0';
+        kids.forEach(k => place(k, null, (h, html) => { const w = wrap.cloneNode(false); w.innerHTML = html; return w.outerHTML; }));
+      };
+      const place = (el, next, wrapFn) => {
         if (el.classList.contains('pagebreak')) { flush(); return; }
         let h = hh(el); const own = h;
-        if (el.classList.contains('hd-h') && arr[i + 1]) h += hh(arr[i + 1]);   // tiêu đề Điều không nằm cuối trang một mình
+        if (own > vh) return big(el);
+        if (el.classList.contains('hd-h') && next) h += hh(next);   // tiêu đề Điều không nằm cuối trang một mình
         if (used + h > vh && used > 0) flush();
-        cur.push(el.outerHTML); used += own;
-      });
+        cur.push(wrapFn ? wrapFn(own, el.outerHTML) : el.outerHTML); used += own;
+      };
+      [...root.children].forEach((el, i, arr) => place(el, arr[i + 1]));
       flush();
     });
     box.remove(); return pages;
@@ -5039,7 +5121,7 @@ const DV_PT = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#639922',
 const dvPtColor = s => { const k = (typeof bgNorm === 'function' ? bgNorm(s) : String(s || '').trim().toLowerCase()); let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return DV_PT[h % DV_PT.length]; };
 const dvLegend = () => `<div class="dv-lg">${[['e', 'Trống'], ['h', 'Giữ chỗ'], ['c', 'Đã xác nhận'], ['p', 'Đã thu'], ['b', 'Đã lên xe'], ['u', 'Sắp hết hạn giữ'], ['l', 'Người khác đang thao tác']].map(([k, t]) => `<span><i class="lg-${k}"></i>${t}</span>`).join('')}<span class="lg-tip">Mẹo: bấm <b>Chọn nhiều</b> hoặc giữ <kbd>Ctrl</kbd> + bấm vào vé để in nhiều vé một lượt</span></div>`;
 const dvTripOf = b => DB.lichchay.find(l => l.id === b.chuyen) || {};
-const dvTabBar = cur => `<div class="dv-tabs">${[['ghe', 'Sơ đồ ghế'], ['goi', 'Gọi khách'], ['hk', 'Hành khách' + (cur ? ` (${dvBook(cur.id).length})` : '')], ['dt', 'Đón / Trả'], ['tk', 'Thống kê'], ['lt', 'Lịch chạy ngày']].map(([k, t]) => `<button class="${DV.tab === k ? 'on' : ''}" data-act="dvTab" data-t="${k}">${t}</button>`).join('')}</div>`;
+const dvTabBar = cur => `<div class="dv-tabs">${[['ghe', 'Sơ đồ ghế'], ['goi', 'Gọi khách'], ['hk', 'Hành khách' + (cur ? ` (${dvBook(cur.id).length})` : '')], ['dt', 'Đón / Trả'], ['gh', 'Gửi hàng' + (cur ? ` (${GH.list(cur.id).length})` : '')], ['tk', 'Thống kê'], ['lt', 'Lịch chạy ngày']].map(([k, t]) => `<button class="${DV.tab === k ? 'on' : ''}" data-act="dvTab" data-t="${k}">${t}</button>`).join('')}</div>`;
 addCSS(`.hd .ph-hd{display:flex;justify-content:space-between;align-items:flex-start;text-align:left;margin-bottom:6px}.hd .ph-hd h1{margin:0;font-size:20px;text-align:center;line-height:1.2}.hd .ph-t{table-layout:fixed;margin:8px 0}.hd .ph-t td.bx{border:1.5px solid #000;padding:3px 5px;vertical-align:top;font-size:12.5px;text-align:left}.hd .ph-t td.nb{border:0;text-align:center;vertical-align:middle;font-size:14px}.hd .ph-t .pp{font-size:10px;line-height:1.2;margin-top:2px;font-weight:400}.hd .ph-tt{font-size:14px;font-weight:700;margin:2px 0;text-align:left}.hd .ph-sg{display:grid;grid-template-columns:repeat(3,1fr);margin-top:8px;text-align:left}.hd .ph-sg small{display:block;font-size:11px}`);
 function dvPhoiHTML(l) {
   const so = dvSO(l), B = dvBook(l.id), co = S().company || {}, xe = lcXe(l), lai = lcEmp(l).ten || '';
@@ -5095,6 +5177,8 @@ const vDV = {
       } else if (DV.tab === 'hk') {
         const R = B.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
         body = R.length ? `<table class="dv-tbl"><tr><th>Ghế</th><th>Mã vé</th><th>Tên khách</th><th>SĐT</th><th>Điểm đón</th><th>Điểm trả</th><th class="r">Tiền vé</th><th>Tình trạng</th><th>Ghi chú</th></tr>${R.map(b => `<tr><td><b>${esc(b.ghe)}</b></td><td>${esc(b.ma || '')}</td><td>${esc(b.ten)}</td><td>${b.sdt ? `<a class="tel" href="tel:${esc(String(b.sdt).replace(/[^0-9+]/g, ''))}">${esc(b.sdt)}</a>` : ''}</td><td>${esc(b.diemDon || '')}</td><td>${esc(b.diemTra || '')}</td><td class="r">${F.money(dvTot(b))}</td><td>${b.tt === 'tra' ? 'Đã thanh toán' + (b.httt ? ' · ' + dvHT(b.httt) : '') : +b.coc ? 'Đã cọc ' + F.money(b.coc) : 'Giữ chỗ'}</td><td>${b.xuatCT ? '<b>[Xuất CT]</b> ' : ''}${callTag(b)} ${esc(b.ghiChu || '')}</td></tr>`).join('')}<tr><th colspan="6">Tổng ${R.length} khách</th><th class="r">${F.money(sum(R, b => dvTot(b)))}</th><th colspan="2"></th></tr></table>` : '<div class="muted">Chưa có hành khách.</div>';
+      } else if (DV.tab === 'gh') {
+        body = GH.tab(cur);
       } else if (DV.tab === 'goi') {
         body = callListHTML(cur);
       } else if (DV.tab === 'dt') {
@@ -5956,7 +6040,7 @@ Object.assign(ACT, {
 addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);display:flex;align-items:center;justify-content:center;padding:2vh 2vw;animation:fade .15s}
 .gp{display:flex;width:100%;max-width:1180px;height:100%;max-height:900px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);font-family:'Be Vietnam Pro','Segoe UI',Roboto,Arial,sans-serif}
 .gp-view{flex:1;min-width:0;background:#f1f3f4;overflow:auto;padding:20px 16px}
-.gp-pages{display:flex;justify-content:center}
+.gp-pages{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}.gp-pg{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:12px}.gp-pn{font-size:12px;color:#5f6368}.gp-paper{overflow:hidden}.gp-clip{overflow:hidden}.gp-cut{position:absolute;left:-12mm;right:-12mm;border-top:2px dashed #ef4444;height:0}
 .gp-paper{background:#fff;box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px 3px rgba(60,64,67,.15);box-sizing:border-box;color:#111;flex:none}
 .gp-paper.roll{min-height:120mm}
 .gp-side{width:340px;flex:none;display:flex;flex-direction:column;border-left:1px solid #dadce0;color:#202124}
@@ -5976,7 +6060,7 @@ addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);disp
 .gp-btn:hover{background:#f6fafe}
 .gp-btn.pri{background:#1a73e8;border-color:#1a73e8;color:#fff}
 .gp-btn.pri:hover{background:#1765cc}
-.gp-paper .pagebreak{border-top:1px dashed #dadce0;margin:14px -10mm}
+.gp-paper .pagebreak{border:0;margin:0;height:0}
 @media(max-width:760px){#pv{padding:0}.gp{flex-direction:column;border-radius:0;max-height:none}.gp-view{flex:1 1 50%}.gp-side{width:auto;border-left:0;border-top:1px solid #dadce0;max-height:55%}.gp-head{padding:12px 16px 8px}.gp-opts{padding:0 16px}.gp-row{margin-bottom:10px}.gp-foot{padding:10px 16px}.gp-btn{flex:1}}
 .pv-bar{display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid #cbd5e1;flex-wrap:wrap}.pv-t{font-size:15px;color:#0f172a;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pv-body{flex:1;overflow:auto;padding:12px 8px;-webkit-overflow-scrolling:touch}.pv-paper{background:#fff;margin:0 auto;padding:11mm 10mm;box-shadow:0 4px 24px rgba(0,0,0,.35);box-sizing:border-box;color:#111}
 @media(max-width:600px){.pv-t{display:none}.pv-bar .btn{flex:1;justify-content:center;padding:0 8px;font-size:13px}}
@@ -7758,7 +7842,7 @@ addCSS(`/* --- thanh trên cùng: hàng 1 = tiêu đề + tài khoản, hàng 2 
 const CFG = {
   id: 'luong', title: 'Nhà Xe Thịnh Phát', tagline: '', icon: 'bus', fileName: 'Nha Xe Thinh Phat.html', theme: THEME,
   palette: ['#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#64748b'],
-  sample: sampleDB, empty: emptyDB, migrate: db => { migrate(db); db.vehicles = db.vehicles || []; db.giochay = db.giochay || []; db.banggia = db.banggia || []; db.suachua = db.suachua || []; db.nhienlieu = db.nhienlieu || []; db.lylich = db.lylich || []; db.kmxe = db.kmxe || []; db.lichchay = db.lichchay || []; db.datve = db.datve || []; db.hdvc = db.hdvc || []; Auth.migrate(db); },
+  sample: sampleDB, empty: emptyDB, migrate: db => { migrate(db); db.vehicles = db.vehicles || []; db.giochay = db.giochay || []; db.banggia = db.banggia || []; db.suachua = db.suachua || []; db.nhienlieu = db.nhienlieu || []; db.lylich = db.lylich || []; db.kmxe = db.kmxe || []; db.lichchay = db.lichchay || []; db.datve = db.datve || []; db.guihang = db.guihang || []; db.hdvc = db.hdvc || []; Auth.migrate(db); },
   counts: () => [['Nhân viên', DB.employees.length], ['Phương tiện', DB.vehicles.length], ['Giờ chạy', DB.giochay.length], ['Bảng giá vé', (DB.banggia || []).length], ['Phiếu sửa chữa', (DB.suachua || []).length], ['Phiếu nhiên liệu', (DB.nhienlieu || []).length], ['Ghi nhận lý lịch', (DB.lylich || []).length], ['Dòng km xe', (DB.kmxe || []).length], ['Lịch chạy', DB.lichchay.length], ['Vé đã đặt', DB.datve.length], ['Hợp đồng vận chuyển', DB.hdvc.length], ['Tháng có chấm công', Object.keys(DB.cham).length]],
   nav: [{ group: 'Tổng quan', items: ['dashboard'] },
     { group: 'Vận hành', items: ['dieuhanh', 'lichchay', 'giochay', 'banggia', 'hdvc'] },
@@ -8359,6 +8443,150 @@ addCSS(`.acc-l{display:flex;flex-direction:column;gap:6px;max-height:300px;overf
     if (a === 'fbuGiveAll') return ACC.giveAll(b);
     return a0.call(FBU, a, b);
   };
+}
+
+/* ===== GỬI HÀNG theo chuyến (trong màn hình Đặt vé) · phiếu in K80 ===== */
+const GH = {
+  DVT: ['Kiện', 'Thùng', 'Bao', 'Hộp', 'Túi', 'Cái', 'Chiếc', 'Phong bì', 'Kg', 'Xe máy'],
+  THU: { gui: 'Người gửi trả', nhan: 'Người nhận trả' },
+  list: id => (DB.guihang || []).filter(x => x.chuyen === id).sort((a, b) => String(a.so).localeCompare(String(b.so), 'vi', { numeric: true })),
+  // thông tin chuyến: ngày, giờ, xe, lái xe + SĐT lái xe
+  trip(t) { const xe = lcXe(t) || {}, lx = DB.employees.find(e => e.id === t.laiXe) || {}; return { ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, bks: xe.bks || '', laiXe: lx.ten || '', sdtLai: lx.sdt || '' }; },
+  // số phiếu: GH + yymmdd + số thứ tự trong ngày
+  nextSo(ngay) { const k = 'GH' + String(ngay || D.today()).replace(/-/g, '').slice(2); const n = (DB.guihang || []).filter(x => String(x.so || '').startsWith(k + '-')).reduce((m, x) => Math.max(m, +String(x.so).split('-').pop() || 0), 0); return k + '-' + String(n + 1).padStart(3, '0'); },
+  meEmp: () => { const u = Auth.user; return u ? DB.employees.find(x => x.sdt && normUser(x.sdt) === normUser(u.user)) || null : null; },
+  tien: x => Math.round((+x.sl || 0) * (+x.donGia || 0)),
+
+  tab(cur) {
+    const L = GH.list(cur.id), T = GH.trip(cur), can = lcCan(cur), cA = can && Auth.can('lichchay', 'add'), cE = can && Auth.can('lichchay', 'edit'), cD = can && Auth.can('lichchay', 'del');
+    const info = `<div class="gh-info"><span>Ngày <b>${F.date(T.ngay)}</b></span><span>Giờ <b>${esc(T.gio)}</b></span><span>Xe <b>${esc(T.bks || 'Chưa gán xe')}</b></span><span>Lái xe <b>${esc(T.laiXe || 'Chưa gán')}</b>${T.sdtLai ? ` · <a class="tel" href="tel:${esc(String(T.sdtLai).replace(/[^0-9+]/g, ''))}">${esc(T.sdtLai)}</a>` : ''}</span></div>`;
+    const bar = `<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap">${cA ? `<button class="btn pri" data-act="ghAdd" data-id="${cur.id}">${ic('plus')} Thêm phiếu gửi hàng</button>` : ''}${L.length ? `<button class="btn" data-act="ghPrintAll" data-id="${cur.id}">${ic('printer')} In tất cả phiếu (K80)</button><button class="btn" data-act="ghList" data-id="${cur.id}">${ic('printer')} In bảng kê giao lái xe</button>` : ''}${!can ? '<span class="muted small">Chuyến đã khóa: chỉ xem và in</span>' : ''}</div>`;
+    if (!L.length) return info + bar + '<div class="muted" style="padding:12px 0">Chuyến này chưa có hàng gửi.</div>';
+    const tot = sum(L, x => GH.tien(x)), tg = sum(L.filter(x => x.nguoiThu !== 'nhan'), x => GH.tien(x));
+    return info + bar + `<div class="tbl-wrap free"><table class="dv-tbl gh-t"><tr><th>Số phiếu</th><th>SĐT người gửi</th><th>SĐT người nhận</th><th>Tên hàng</th><th>ĐVT</th><th class="r">SL</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th><th>Người thu</th><th>Nơi gửi</th><th>Nơi nhận</th><th>Nhân viên</th><th></th></tr>
+      ${L.map(x => `<tr><td><b>${esc(x.so)}</b></td><td>${esc(x.sdtGui || '')}</td><td>${esc(x.sdtNhan || '')}</td><td>${esc(x.tenHang || '')}</td><td>${esc(x.dvt || '')}</td><td class="r">${F.num ? F.num(+x.sl || 0) : +x.sl || 0}</td><td class="r">${F.money(+x.donGia || 0)}</td><td class="r"><b>${F.money(GH.tien(x))}</b></td><td>${esc(GH.THU[x.nguoiThu] || '')}</td><td>${esc(x.noiGui || '')}</td><td>${esc(x.noiNhan || '')}</td><td>${esc(x.nhanVien || '')}${x.chuKy ? ' <span class="badge b-green" title="Đã ký">Đã ký</span>' : ''}</td>
+        <td class="gh-a"><button class="ibtn" data-act="ghPrint" data-id="${x.id}" data-tip="In phiếu K80">${ic('printer')}</button>${cE ? `<button class="ibtn" data-act="ghEdit" data-id="${x.id}" data-tip="Sửa">${ic('edit')}</button>` : ''}${cD ? `<button class="ibtn" data-act="ghDel" data-id="${x.id}" data-tip="Xóa">${ic('trash')}</button>` : ''}</td></tr>`).join('')}
+      <tr><th colspan="7">Tổng ${L.length} phiếu · ${sum(L, x => +x.sl || 0)} kiện/món</th><th class="r">${F.money(tot)}</th><th colspan="5" style="text-align:left;font-weight:600">Người gửi đã trả ${F.money(tg)} · Thu người nhận ${F.money(tot - tg)}</th></tr></table></div>`;
+  },
+
+  // khung ký tên trên màn hình (chuột / ngón tay)
+  pad(box, init) {
+    const c = box.querySelector('canvas'), x = c.getContext('2d'); let draw = false, dirty = false, last = null, fw = 0;
+    const drawInit = () => { if (!init) return; const im = new Image(); im.onload = () => { if (dirty) return; const r = c.getBoundingClientRect(), s = Math.min(r.width / im.width, r.height / im.height); x.drawImage(im, (r.width - im.width * s) / 2, (r.height - im.height * s) / 2, im.width * s, im.height * s); }; im.src = init; };
+    const fit = () => { const r = c.getBoundingClientRect(), k = window.devicePixelRatio || 1; if (r.width < 20) return false; if (fw === r.width) return true; fw = r.width; c.width = r.width * k; c.height = r.height * k; x.setTransform(k, 0, 0, k, 0, 0); x.lineWidth = 2.2; x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#111'; if (!dirty) drawInit(); return true; };
+    requestAnimationFrame(() => fit()); setTimeout(fit, 250);
+    const pt = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    c.onpointerdown = e => { fit(); draw = true; dirty = true; last = pt(e); c.setPointerCapture(e.pointerId); e.preventDefault(); };
+    c.onpointermove = e => { if (!draw) return; const p = pt(e); x.beginPath(); x.moveTo(...last); x.lineTo(...p); x.stroke(); last = p; };
+    c.onpointerup = c.onpointercancel = () => { draw = false; };
+    box.querySelector('[data-clr]').onclick = () => { x.clearRect(0, 0, c.width, c.height); dirty = true; init = ''; };
+    return { val: () => { if (!dirty) return init || ''; const d = x.getImageData(0, 0, c.width, c.height).data; let any = false; for (let i = 3; i < d.length; i += 4) if (d[i]) { any = true; break; } if (!any) return ''; const o = document.createElement('canvas'), k = Math.min(1, 360 / c.width); o.width = c.width * k; o.height = c.height * k; o.getContext('2d').drawImage(c, 0, 0, o.width, o.height); return o.toDataURL('image/png'); } };
+  },
+
+  form(t, g) {
+    const isNew = !g, T = GH.trip(t), me = GH.meEmp(), stops = LT.get(t.tuyen).map(p => p.ten);
+    const v = g ? { ...g } : { so: GH.nextSo(t.ngay), sdtGui: '', sdtNhan: '', tenHang: '', dvt: 'Kiện', sl: 1, donGia: 0, nguoiThu: 'gui', noiGui: stops[0] || '', noiNhan: stops[stops.length - 1] || '', nhanVien: dvLog.who(), chuKy: '' };
+    const sig0 = v.chuKy || (isNew && me && me.chuKy) || '';
+    const inp = (k, l, a = '') => `<div class="field"><label>${l}</label><input class="inp" data-f="${k}" value="${esc(v[k] ?? '')}" ${a}></div>`;
+    const m = Modal.open({
+      title: isNew ? 'Phiếu gửi hàng mới' : 'Sửa phiếu gửi hàng ' + esc(v.so), width: 680,
+      body: `<div class="gh-info sm"><span><b>${esc(T.gio)}</b> · ${F.date(T.ngay)}</span><span>${esc(T.tuyen)}</span><span>Xe <b>${esc(T.bks || '—')}</b></span><span>Lái xe <b>${esc(T.laiXe || '—')}</b>${T.sdtLai ? ' · ' + esc(T.sdtLai) : ''}</span></div>
+      <datalist id="ghStops">${stops.map(s => `<option value="${esc(s)}">`).join('')}</datalist><datalist id="ghDvt">${GH.DVT.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      <div class="form gh-f">
+        ${inp('so', 'Số phiếu', 'readonly style="font-weight:700"')}
+        ${inp('nhanVien', 'Nhân viên')}
+        ${inp('sdtGui', 'SĐT người gửi <i class="req">*</i>', 'type="tel" inputmode="tel"')}
+        ${inp('sdtNhan', 'SĐT người nhận <i class="req">*</i>', 'type="tel" inputmode="tel"')}
+        <div class="field full"><label>Tên hàng <i class="req">*</i></label><input class="inp" data-f="tenHang" value="${esc(v.tenHang || '')}" placeholder="VD: Thùng trái cây, phong bì giấy tờ..."></div>
+        ${inp('dvt', 'ĐVT', 'list="ghDvt"')}
+        ${inp('sl', 'Số lượng', 'type="number" min="0" step="any" inputmode="decimal"')}
+        ${inp('donGia', 'Đơn giá (đ)', 'type="number" min="0" step="1000" inputmode="numeric"')}
+        <div class="field"><label>Thành tiền</label><div class="inp gh-tt" data-tt>${F.money(GH.tien(v))} đ</div></div>
+        <div class="field"><label>Người thu (ai trả tiền cước)</label><select class="inp" data-f="nguoiThu">${Object.entries(GH.THU).map(([k, s]) => `<option value="${k}" ${v.nguoiThu === k ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div></div>
+        ${inp('noiGui', 'Nơi gửi', 'list="ghStops"')}
+        ${inp('noiNhan', 'Nơi nhận', 'list="ghStops"')}
+        <div class="field full"><label>Chữ ký nhân viên nhận hàng</label><div class="gh-sig"><canvas></canvas><button type="button" class="btn sm" data-clr>Ký lại</button></div><small class="muted">${me && me.chuKy ? 'Đã điền sẵn chữ ký trong hồ sơ của bạn. Bấm "Ký lại" nếu muốn ký tay.' : 'Ký bằng chuột hoặc ngón tay. Có thể để trống và ký tay trên phiếu in.'}</small></div>
+      </div>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn" data-okp>${ic('printer')} Lưu & in K80</button><button class="btn pri" data-ok>${ic('check')} Lưu</button>`
+    });
+    const q = s => m.el.querySelector(s), val = k => q(`[data-f="${k}"]`).value.trim();
+    const sig = GH.pad(q('.gh-sig'), sig0);
+    const upd = () => { q('[data-tt]').textContent = F.money(Math.round((+val('sl') || 0) * (+val('donGia') || 0))) + ' đ'; };
+    m.el.addEventListener('input', upd);
+    q('[data-no]').onclick = () => m.close();
+    const save = pr => {
+      if (!lcCan(t)) return lcLockMsg();
+      const d = { sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), tenHang: val('tenHang'), dvt: val('dvt'), sl: +val('sl') || 0, donGia: +val('donGia') || 0, nguoiThu: val('nguoiThu'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), chuKy: sig.val() };
+      if (!d.sdtGui || !d.sdtNhan) return toast('Nhập SĐT người gửi và người nhận', 'err');
+      if (!d.tenHang) return toast('Nhập tên hàng', 'err');
+      if (!(d.sl > 0)) return toast('Số lượng phải lớn hơn 0', 'err');
+      d.thanhTien = GH.tien(d); Object.assign(d, { bks: T.bks, laiXe: T.laiXe, sdtLai: T.sdtLai });   // lưu lại thông tin chuyến lúc lập phiếu
+      let x;
+      if (isNew) { DB.guihang = DB.guihang || []; x = { id: uid(), so: GH.nextSo(t.ngay), chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, tg: dvLog.now(), nguoiLap: dvLog.who(), ...d }; DB.guihang.push(x); }
+      else { x = g; Object.assign(g, d, { sua: dvLog.now() }); }
+      App.changed(); m.close(); toast('Đã lưu phiếu ' + esc(x.so), 'ok');
+      if (pr) GH.print([x]);
+    };
+    q('[data-ok]').onclick = () => save(false); q('[data-okp]').onclick = () => save(true);
+    setTimeout(() => q('[data-f="sdtGui"]').focus(), 60);
+  },
+
+  // phiếu K80: lấy giờ chạy, xe, lái xe & SĐT lái xe theo chuyến hiện tại
+  html80(x, i, n) {
+    const co = S().company || {}, t = DB.lichchay.find(l => l.id === x.chuyen) || x, T = t.id ? GH.trip(t) : { ngay: x.ngay, gio: x.gio, tuyen: x.tuyen, bks: x.bks, laiXe: x.laiXe, sdtLai: x.sdtLai };
+    T.bks = T.bks || x.bks || ''; T.laiXe = T.laiXe || x.laiXe || ''; T.sdtLai = T.sdtLai || x.sdtLai || '';
+    const dow = D.dowName ? D.dowName[D.parse(T.ngay).getDay()] : '', ln = '<div class="t8-ln"></div>', row = (k, v) => v ? `<div class="t8-r"><span>${k}</span><b>${v}</b></div>` : '';
+    const tt = GH.tien(x), paid = x.nguoiThu !== 'nhan';
+    return `<div class="t8">
+  <div class="t8-hd">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div>${co.diaChi ? `<div class="t8-s">${esc(co.diaChi)}</div>` : ''}${co.sdt ? `<div class="t8-s">Hotline: <b>${esc(co.sdt)}</b></div>` : ''}</div>
+  <div class="t8-tt">PHIẾU GỬI HÀNG${n > 1 ? ` <small>(${i + 1}/${n})</small>` : ''}</div>
+  <div class="t8-ma">Số phiếu <b>${esc(x.so)}</b></div>
+  ${ln}
+  <div class="t8-big"><div><small>GIỜ CHẠY</small><b>${esc(T.gio || '')}</b><em>${esc(dow)} ${F.date(T.ngay)}</em></div><div class="t8-seat"><small>SL</small><b>${esc(String(+x.sl || 0))}</b><em style="display:block;font-size:10px;font-style:normal">${esc(x.dvt || '')}</em></div></div>
+  <div class="t8-route">${esc(T.tuyen || '')}</div>
+  ${row('Biển số xe', esc(T.bks))}${row('Lái xe', esc(T.laiXe))}${row('SĐT lái xe', esc(T.sdtLai))}
+  ${ln}
+  <div class="t8-pt"><small>GỬI</small><b>${esc(x.noiGui || '................................')}</b><em>SĐT: ${esc(x.sdtGui || '')}</em></div>
+  <div class="t8-pt"><small>NHẬN</small><b>${esc(x.noiNhan || '................................')}</b><em>SĐT: ${esc(x.sdtNhan || '')}</em></div>
+  ${ln}
+  ${row('Tên hàng', esc(x.tenHang || ''))}${row('ĐVT', esc(x.dvt || ''))}${row('Số lượng', esc(String(+x.sl || 0)))}${row('Đơn giá', F.money(+x.donGia || 0) + ' đ')}
+  <div class="t8-r t8-sum"><span>THÀNH TIỀN</span><b>${F.money(tt)} đ</b></div>
+  <div class="t8-pay${paid ? ' ok' : ''}">${paid ? 'NGƯỜI GỬI ĐÃ TRẢ CƯỚC' : `THU NGƯỜI NHẬN ${F.money(tt)} đ`}</div>
+  ${ln}
+  <div class="gh8-sg"><div><small>NGƯỜI GỬI</small><div class="gh8-sp"></div></div><div><small>NV NHẬN HÀNG</small>${x.chuKy ? `<img class="sig-img" src="${x.chuKy}" alt="">` : '<div class="gh8-sp"></div>'}<b>${esc(x.nhanVien || '')}</b></div></div>
+  <div class="t8-by">Lập: ${esc(x.nguoiLap || x.nhanVien || '—')} · ${dvLog.fmt(x.tg)}<br>In: ${esc(dvLog.who() || '—')} · ${dvLog.fmt(dvLog.now())}</div>
+  <div class="t8-ft" style="margin-top:4px">Quý khách kiểm tra hàng khi nhận.<br>Giữ phiếu để đối chiếu.</div>
+  <div class="t8-cut">✂ - - - - - - - - - - - - - - - - - - - -</div>
+</div>`;
+  },
+  CSS: `<style>.gh8-sg{display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center;margin:4px 0}.gh8-sg small{display:block;font-size:9.5px;font-weight:800;letter-spacing:.05em}.gh8-sg b{display:block;font-size:11px}.gh8-sp{height:15mm}.gh8-sg img{display:block;height:15mm;max-width:100%;object-fit:contain;margin:0 auto}</style>`,
+  print(L) { if (!L.length) return; Print.run(T80_CSS + GH.CSS + L.map((x, i) => GH.html80(x, i, L.length)).join(''), { title: L.length === 1 ? 'Phieu gui hang ' + L[0].so : 'Phieu gui hang', paper: '80' }); },
+  // bảng kê A4 giao lái xe, có chỗ ký nhận
+  printList(t) {
+    const L = GH.list(t.id), T = GH.trip(t); if (!L.length) return;
+    Print.report({ title: 'Bảng kê hàng gửi theo xe', sub: `Chuyến ${T.gio} ngày ${F.date(T.ngay)} · ${T.tuyen} · Xe ${T.bks || '—'} · Lái xe ${T.laiXe || '—'}${T.sdtLai ? ' (' + T.sdtLai + ')' : ''}`,
+      cols: [{ key: 'so', label: 'Số phiếu' }, { key: 'sdtGui', label: 'SĐT gửi' }, { key: 'sdtNhan', label: 'SĐT nhận' }, { key: 'tenHang', label: 'Tên hàng' }, { key: 'dvt', label: 'ĐVT' }, { key: 'sl', label: 'SL', align: 'r' }, { key: 'tt', label: 'Thành tiền', align: 'r' }, { key: 'thu', label: 'Người thu' }, { key: 'noiNhan', label: 'Nơi nhận' }],
+      rows: L.map(x => ({ ...x, tt: F.money(GH.tien(x)), thu: GH.THU[x.nguoiThu] || '' })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
+  }
+};
+addCSS(`.gh-info{display:flex;flex-wrap:wrap;gap:6px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#0c4a6e}.gh-info.sm{font-size:12.5px}
+.gh-f{grid-template-columns:1fr 1fr}.gh-f .full{grid-column:1/-1}.gh-tt{display:flex;align-items:center;font-weight:800;color:#0369a1;background:#f8fafc}
+.gh-sig{position:relative;border:1.5px dashed #94a3b8;border-radius:10px;background:#fff;height:130px;touch-action:none}.gh-sig canvas{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}.gh-sig [data-clr]{position:absolute;right:6px;top:6px}
+.gh-t td,.gh-t th{white-space:nowrap}.gh-a{display:flex;gap:2px}@media(max-width:700px){.gh-f{grid-template-columns:1fr}}`);
+{
+  const tByLc = id => DB.lichchay.find(l => l.id === id);
+  Object.assign(ACT, {
+    ghAdd: d => { const t = tByLc(d.id); if (!t) return; if (!lcCan(t)) return lcLockMsg(); GH.form(t); },
+    ghEdit: d => { const g = (DB.guihang || []).find(x => x.id === d.id), t = g && tByLc(g.chuyen); if (!g || !t) return; if (!lcCan(t)) return lcLockMsg(); GH.form(t, g); },
+    ghDel: async d => { const g = (DB.guihang || []).find(x => x.id === d.id), t = g && tByLc(g.chuyen); if (!g) return; if (t && !lcCan(t)) return lcLockMsg(); if (await Modal.confirm(`Xóa phiếu gửi hàng <b>${esc(g.so)}</b> (${esc(g.tenHang || '')})?`, { ok: 'Xóa', danger: true })) { DB.guihang = DB.guihang.filter(x => x !== g); App.changed(); } },
+    ghPrint: d => { const g = (DB.guihang || []).find(x => x.id === d.id); if (g) GH.print([g]); },
+    ghPrintAll: d => GH.print(GH.list(d.id)),
+    ghList: d => { const t = tByLc(d.id); if (t) GH.printList(t); }
+  });
+  const P = { ghAdd: ['lichchay', 'add'], ghEdit: ['lichchay', 'edit'], ghDel: ['lichchay', 'del'], ghPrint: ['lichchay', 'view'], ghPrintAll: ['lichchay', 'view'], ghList: ['lichchay', 'view'] };
+  Object.assign(Auth.ACT_PERM, P);
+  Object.keys(P).forEach(k => { const fn = ACT[k], [mo, a] = P[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
 }
 
 App.cfg = CFG; Store.load();
