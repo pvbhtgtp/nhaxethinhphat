@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:40:18.117Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:57:37.442Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -9784,6 +9784,94 @@ try { FO.mount(); } catch (e) { console.warn('FO', e); }
   const st0 = Store.status; Store.status = function () { const r = st0.apply(this, arguments); try { label(); } catch (e) { } return r; };
   window.addEventListener('load', () => setTimeout(() => { try { label(); } catch (e) { } }, 1500));
 }
+
+/* ===== KHO CẤU HÌNH: tự lưu mọi cấu hình đã khai báo, mất thì bấm "Khôi phục cấu hình trước đó" =====
+   - Giữ vĩnh viễn bản cấu hình ĐẦU TIÊN kết nối được, và 10 bản gần nhất mỗi khi cấu hình thay đổi.
+   - Lưu 2 nơi trên máy (localStorage + IndexedDB) để lỡ một nơi bị xóa vẫn còn nơi kia; có thể tải bản sao ra file.
+   - Chỉ chụp khi cấu hình đang dùng được (có kết nối hợp lệ), nên trạng thái "bị mất" không bao giờ đè lên bản tốt. */
+const VAULT = {
+  K: 'cfg.vault', KEYS: ['gs.cfg', 'zbot.cfg', 'bk.cfg', 'cf.cfg', 'fo.cfg', 'gh.cfg', 'gs.cfg.hist', 'tgtp:theme:last', 'tgtp:sbmin'],
+  NAMES: { 'gs.cfg': 'Kết nối dữ liệu (Firebase / Apps Script)', 'zbot.cfg': 'Zalo Bot', 'bk.cfg': 'Sao lưu Google Drive', 'cf.cfg': 'Cloudflare (tự chuyển)', 'fo.cfg': 'Tự chuyển dự phòng', 'gh.cfg': 'Cập nhật lên GitHub', 'gs.cfg.hist': 'Lịch sử cấu hình Firebase', 'tgtp:theme:last': 'Giao diện', 'tgtp:sbmin': 'Thanh bên' },
+  ls: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  parse: t => { try { return JSON.parse(t || 'null'); } catch (e) { return null; } },
+  /* cấu hình kết nối có dùng được không */
+  okGs(g) { return !!(g && ((g.mode === 'fb' && g.fb && g.fb.projectId && g.fb.apiKey && (g.key || g.acct)) || (/^https:\/\/script\.google/.test(g.url || '') && g.key))); },
+  snap() { const o = {}; VAULT.KEYS.forEach(k => { const v = VAULT.ls(k); if (v != null && v !== '' && v !== '{}') o[k] = v; }); return o; },
+  load() { return VAULT.parse(VAULT.ls(VAULT.K)) || { first: null, list: [] }; },
+  /* ---- IndexedDB (bản thứ hai) ---- */
+  idb(mode, val) {
+    return new Promise(ok => { try { const r = indexedDB.open('nhaxe-vault', 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onerror = () => ok(null);
+      r.onsuccess = () => { try { const db = r.result, tx = db.transaction('v', mode === 'put' ? 'readwrite' : 'readonly'), st = tx.objectStore('v'); const q = mode === 'put' ? st.put(val, 'vault') : st.get('vault'); q.onsuccess = () => ok(mode === 'put' ? true : q.result || null); q.onerror = () => ok(null); } catch (e) { ok(null); } }; } catch (e) { ok(null); } });
+  },
+  async best() { const a = VAULT.load(), b = VAULT.parse(await VAULT.idb('get')); const t = v => v && v.list && v.list[0] ? v.list[0].at : ''; return (b && t(b) > t(a)) || (b && !(a.list || []).length) ? b : a; },
+  save(v) { try { localStorage.setItem(VAULT.K, JSON.stringify(v)); } catch (e) { } VAULT.idb('put', JSON.stringify(v)); },
+  /* ---- chụp cấu hình ---- */
+  async capture(label) {
+    const s = VAULT.snap(); if (!VAULT.okGs(VAULT.parse(s['gs.cfg']))) return;
+    const v = await VAULT.best(), sig = JSON.stringify(s); v.list = v.list || [];
+    if (v.list[0] && v.list[0].sig === sig) return;
+    const it = { at: new Date().toISOString(), sig, keys: s, label: label || '' };
+    if (!v.first) v.first = { ...it, label: 'Lần khai báo đầu tiên' };
+    v.list = [it, ...v.list.filter(x => x.sig !== sig)].slice(0, 10); VAULT.save(v);
+  },
+  /* ---- khôi phục ---- */
+  restore(it) { Object.entries(it.keys || {}).forEach(([k, val]) => { try { localStorage.setItem(k, val); } catch (e) { } }); try { const g = VAULT.parse(localStorage.getItem('gs.cfg')); if (g && g.off) { delete g.off; localStorage.setItem('gs.cfg', JSON.stringify(g)); } } catch (e) { } try { sessionStorage.setItem('vault.done', '1'); } catch (e) { } },
+  desc(it) { const g = VAULT.parse((it.keys || {})['gs.cfg']) || {}; return (g.mode === 'fb' ? 'Firebase ' + ((g.fb || {}).projectId || '') + (g.email ? ' · ' + g.email : '') : 'Apps Script') + ' · ' + Object.keys(it.keys || {}).filter(k => k !== 'gs.cfg').map(k => VAULT.NAMES[k] || k).slice(0, 4).join(', '); },
+  t: iso => new Date(iso).toLocaleString('vi-VN'),
+  /* mở app mà máy đã mất cấu hình kết nối → hỏi ngay, trước khi vào app */
+  bootAsk(next) {
+    VAULT.best().then(v => {
+      const it = v && v.list && v.list[0]; if (!it) return next();
+      const w = document.createElement('div'); w.className = 'gs-wrap au-wrap'; w.dataset.runtime = '1';
+      w.innerHTML = `<form class="au-box gs-box"><div class="au-logo">${ic('refresh')}</div><h2>Máy này vừa mất cấu hình kết nối</h2><p>App còn giữ cấu hình đã khai báo trước đó. Bấm khôi phục để dùng lại ngay, không phải nhập lại.</p>
+        <div class="vlt-it"><b>Bản lưu lúc ${esc(VAULT.t(it.at))}</b><small>${esc(VAULT.desc(it))}</small></div>
+        <button class="btn pri" type="submit" style="width:100%;justify-content:center;height:42px">${ic('refresh')} Khôi phục cấu hình trước đó</button>
+        ${v.first && v.first.sig !== it.sig ? `<button class="btn" type="button" data-first style="width:100%;justify-content:center;margin-top:8px;height:auto;min-height:36px;white-space:normal;padding:6px 10px;line-height:1.3">Dùng cấu hình lần đầu (${esc(new Date(v.first.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }))})</button>` : ''}
+        <button class="btn" type="button" data-skip style="width:100%;justify-content:center;margin-top:8px;font-size:12.5px;height:34px">Bỏ qua</button></form>`;
+      document.body.appendChild(w);
+      w.querySelector('form').onsubmit = e => { e.preventDefault(); VAULT.restore(it); location.reload(); };
+      const f = w.querySelector('[data-first]'); if (f) f.onclick = () => { VAULT.restore(v.first); location.reload(); };
+      w.querySelector('[data-skip]').onclick = () => { try { sessionStorage.setItem('vault.skip', '1'); } catch (e) { } w.remove(); next(); };
+    }).catch(() => next());
+  },
+  /* ---- giao diện trong tab Lưu trữ Google ---- */
+  html(v) {
+    const n = (v.list || []).length, it = v.list && v.list[0];
+    return `<div class="vlt-bar">${ic('shield')}<div class="grow"><b>Kho cấu hình</b><small>${n ? `${n} bản đã lưu · gần nhất ${esc(BK.ago(it.at))}${v.first ? ' · lần đầu ' + esc(new Date(v.first.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })) : ''}` : 'Chưa có bản nào – app tự lưu khi kết nối thành công'}</small></div>
+      <button class="btn sm pri" data-g="vlReset" ${n ? '' : 'disabled'}>${ic('refresh')} Reset về cấu hình trước</button><button class="btn sm" data-g="vlList" ${n ? '' : 'disabled'}>Các bản</button><button class="btn sm" data-g="vlExport" ${n ? '' : 'disabled'} title="Tải bản sao kho cấu hình ra file">${ic('download')}</button><button class="btn sm" data-g="vlImport" title="Nhập kho cấu hình từ file">${ic('upload')}</button></div>`;
+  },
+  async act(a, b) {
+    const v = await VAULT.best(), L = v.list || [];
+    const pick = it => Modal.confirm(`Reset về cấu hình lưu lúc <b>${esc(VAULT.t(it.at))}</b>${it.label ? ' (' + esc(it.label) + ')' : ''}?<br><span class="small muted">${esc(VAULT.desc(it))}. App sẽ tải lại để dùng cấu hình này; dữ liệu không bị ảnh hưởng.</span>`, { ok: 'Reset cấu hình', title: 'Khôi phục cấu hình' }).then(ok => { if (ok) { VAULT.restore(it); location.reload(); } });
+    if (a === 'vlReset') { if (!L.length) return; const cur = JSON.stringify(VAULT.snap()), it = L.find(x => x.sig !== cur) || L[0]; return pick(it); }
+    if (a === 'vlList') {
+      const all = [...L]; if (v.first && !all.some(x => x.sig === v.first.sig)) all.push(v.first);
+      const m = Modal.open({ title: 'Các bản cấu hình đã lưu', width: 560, body: `<div class="bk-l" style="margin-top:0">${all.map((x, i) => `<div class="bk-r"><div><b>${esc(VAULT.t(x.at))}${v.first && x.sig === v.first.sig ? ' <span class="badge b-violet">Lần khai báo đầu tiên</span>' : ''}</b><small>${esc(VAULT.desc(x))}</small></div><button class="btn sm" data-i="${i}">Dùng bản này</button></div>`).join('')}</div>`, foot: '<button class="btn" data-no>Đóng</button>' });
+      m.el.querySelector('[data-no]').onclick = () => m.close(); m.el.querySelectorAll('[data-i]').forEach(x => x.onclick = () => { m.close(); pick(all[+x.dataset.i]); }); return;
+    }
+    if (a === 'vlExport') { if (!await Modal.confirm('File kho cấu hình có chứa <b>mã kết nối và token</b>. Chỉ lưu ở nơi an toàn (USB, máy riêng), không gửi qua Zalo/Facebook.', { ok: 'Tải file', title: 'Tải bản sao kho cấu hình' })) return; download(new Blob([JSON.stringify({ app: 'nhaxe-thinhphat', kind: 'config-vault', vault: v }, null, 1)], { type: 'application/json' }), 'kho-cau-hinh-nhaxe.json'); return; }
+    if (a === 'vlImport') { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json'; inp.onchange = async () => { try { const j = JSON.parse(await inp.files[0].text()); const nv = j && j.vault; if (!nv || !nv.list || !nv.list.length) throw new Error('File này không phải kho cấu hình'); const cur = await VAULT.best(); const merged = { first: cur.first || nv.first, list: [...(nv.list || []), ...(cur.list || [])].filter((x, i, a) => a.findIndex(y => y.sig === x.sig) === i).sort((p, q) => q.at.localeCompare(p.at)).slice(0, 10) }; VAULT.save(merged); toast(`${ic('check')} Đã nhập ${nv.list.length} bản cấu hình. Bấm "Reset về cấu hình trước" để dùng.`, 'ok', 7000); HUB.setTab('gdata'); } catch (e) { toast(esc(e.message), 'err'); } }; inp.click(); }
+  },
+  mount() {
+    /* chặn ngay lúc mở app nếu đã mất cấu hình */
+    const b0 = GS.boot; GS.boot = function (next) {
+      const self = this, a = arguments, g = VAULT.parse(VAULT.ls('gs.cfg'));
+      let skip = false; try { skip = sessionStorage.getItem('vault.skip') || sessionStorage.getItem('vault.done'); } catch (e) { }
+      if (VAULT.okGs(g) || skip) return b0.apply(self, a);
+      VAULT.bootAsk(() => b0.apply(self, a));
+    };
+    window.addEventListener('load', () => {
+      const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { if (BK.admin() && body && !body.querySelector('.vlt-bar')) { const v = VAULT.load(), mb = body.querySelector('.gs-mode'); (mb || body.firstElementChild || body).insertAdjacentHTML(mb ? 'beforebegin' : 'afterbegin', VAULT.html(v)); } } catch (e) { console.warn('VAULT', e); } return r; };
+      const a0 = GS.act; GS.act = function (a, b) { if (/^vl[A-Z]/.test(a || '')) return VAULT.act(a, b); return a0.apply(this, arguments); };
+      const af = GS.after; GS.after = function () { const r = af.apply(this, arguments); setTimeout(() => VAULT.capture('Kết nối thành công'), 1500); return r; };
+      setInterval(() => { if (GS.on) VAULT.capture(); }, 60000); setTimeout(() => { if (GS.on) VAULT.capture(); }, 6000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && GS.on) VAULT.capture(); });
+    });
+  }
+};
+addCSS(`.vlt-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid #e0e7ff;background:#f5f7ff;border-radius:12px;padding:8px 10px;margin:0 0 12px}.vlt-bar>svg{width:18px;height:18px;color:#4f46e5;flex:none}.vlt-bar>.grow{flex:1 1 calc(100% - 30px);min-width:0}.vlt-bar b{display:block;font-size:13px}.vlt-bar small{color:#64748b;font-size:11.5px}.vlt-bar .btn svg{width:14px;height:14px}
+.vlt-it{border:1px solid #e0e7ff;background:#f5f7ff;border-radius:10px;padding:8px 10px;margin:10px 0 12px;text-align:left}.vlt-it b{display:block;font-size:13px}.vlt-it small{color:#64748b;font-size:12px}`);
+try { VAULT.mount(); } catch (e) { console.warn('VAULT', e); }
 
 /* Tự sửa: máy bị chuyển nhầm sang chế độ Drive trong khi vẫn còn cấu hình Firebase */
 try { const l = JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; if (l.mode === 'gas' && l.fb && l.fb.projectId && !/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(l.url || '')) { l.mode = 'fb'; delete l.url; localStorage.setItem(GS.K, JSON.stringify(l)); } } catch (e) { }
