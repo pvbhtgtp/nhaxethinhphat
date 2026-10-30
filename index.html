@@ -9757,6 +9757,26 @@ const FO = {
 addCSS(`#foBar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:250;display:flex;align-items:center;gap:10px;background:#7c2d12;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}#foBar svg{width:16px;height:16px;flex:none}#foBar .btn{background:#fff;color:#7c2d12;border-color:#fff;flex:none}@media(max-width:700px){#foBar{bottom:8px;flex-wrap:wrap}}`);
 try { FO.mount(); } catch (e) { console.warn('FO', e); }
 
+/* ===== Nút Lưu: máy đã cài dữ liệu dùng chung nhưng đang chưa kết nối thì hỏi trước, không lặng lẽ tải file về máy ===== */
+{
+  const sv0 = Store.save;
+  const label = () => { const b = document.querySelector('.tb-save span'); if (!b) return; const c = GS.cfg(); b.textContent = GS.on ? (FO.on ? 'Lưu lên ' + FO.tname() : 'Lưu lên ' + (c.mode === 'fb' ? 'Firebase' : 'Google')) : (c.url ? 'Chưa kết nối · Lưu' : 'Lưu vào file'); };
+  Store.save = function (pickNew) {
+    const c = GS.cfg();
+    if (GS.on || pickNew || !c.url) return sv0.apply(this, arguments);
+    const inClaude = /claude\.ai|claudeusercontent|anthropic/i.test(location.hostname + document.referrer);
+    const m = Modal.open({ title: 'Máy này đang chưa kết nối dữ liệu dùng chung', width: 520,
+      body: `<p style="margin-top:0">Dữ liệu chung của nhà xe lưu trên <b>${c.mode === 'fb' ? 'Firebase' : 'Google'}</b>, nhưng máy này đang <b>chưa kết nối</b> nên bấm Lưu sẽ chỉ tải một file về máy, <b>các máy khác không thấy thay đổi</b>.</p>
+        ${inClaude ? '<p class="small" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px">Anh/chị đang mở app trong khung xem của Claude, nơi này không kết nối được Firebase. Hãy mở app trên <b>pvbhtgtp.github.io/nhaxethinhphat</b> để lưu chung.</p>' : ''}
+        <ul class="small" style="line-height:1.7;padding-left:18px;margin-bottom:0"><li><b>Kết nối lại</b>: tải lại app để kết nối, thay đổi chưa lưu được giữ tạm trên máy và lưu lên khi kết nối xong.</li><li><b>Tải file về máy</b>: chỉ để giữ một bản sao riêng.</li></ul>`,
+      foot: `<button class="btn" data-file>${ic('download')} Tải file về máy</button><button class="btn pri" data-re>${ic('refresh')} Kết nối lại</button>` });
+    m.el.querySelector('[data-file]').onclick = () => { m.close(); sv0.call(Store, true); };
+    m.el.querySelector('[data-re]').onclick = () => { m.close(); try { const l = JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; if (l.off) { delete l.off; localStorage.setItem(GS.K, JSON.stringify(l)); } } catch (e) { } location.reload(); };
+  };
+  const st0 = Store.status; Store.status = function () { const r = st0.apply(this, arguments); try { label(); } catch (e) { } return r; };
+  window.addEventListener('load', () => setTimeout(() => { try { label(); } catch (e) { } }, 1500));
+}
+
 /* Tự sửa: máy bị chuyển nhầm sang chế độ Drive trong khi vẫn còn cấu hình Firebase */
 try { const l = JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; if (l.mode === 'gas' && l.fb && l.fb.projectId && !/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(l.url || '')) { l.mode = 'fb'; delete l.url; localStorage.setItem(GS.K, JSON.stringify(l)); } } catch (e) { }
 App.cfg = CFG; Store.load();
@@ -9924,6 +9944,19 @@ addCSS(`.dx-chip .nm .dx-av{display:inline-grid;place-items:center;width:20px;he
 .av-cake{position:relative;display:inline-block;flex:none}.av-cake>i{position:absolute;right:-4px;bottom:-3px;width:17px;height:17px;border-radius:50%;background:#fce7f3;color:#db2777;display:grid;place-items:center;box-shadow:0 0 0 2px #fff}.av-cake>i svg{width:11px;height:11px}`);
 /* ô tài khoản góc trên: cập nhật ngay khi đổi ảnh đại diện nhân viên */
 window.addEventListener('load', () => { try { let sig = ''; const r0 = App.render; App.render = function () { const x = r0.apply(this, arguments); try { const em = Auth.user && empOfUser(Auth.user), k = (Auth.user && Auth.user.id) + '|' + (em ? (em.ten || '') + (em.avatar || '').length : ''); if (k !== sig) { sig = k; Auth.chip(); } } catch (e) { } return x; }; } catch (e) { } });
+/* ===== Cảnh báo: file đang đăng công khai (GitHub Pages…) lại chứa dữ liệu thật ===== */
+window.addEventListener('load', () => setTimeout(() => {
+  try {
+    const pub = /github\.io$|pages\.dev$|netlify\.app$|vercel\.app$/i.test(location.hostname);
+    if (!pub || !DB || (DB._meta && DB._meta.shell) || !(DB.employees || []).length || GS.on) return;
+    const at = DB._meta && DB._meta.savedAt ? new Date(DB._meta.savedAt).toLocaleString('vi-VN') : '';
+    const w = document.createElement('div'); w.className = 'ghw'; w.dataset.runtime = '1';
+    w.innerHTML = `${ic('alert')}<div><b>File app trên trang công khai này đang chứa dữ liệu thật${at ? ' (lưu lúc ' + esc(at) + ')' : ''} và chưa kết nối Firebase.</b>
+      <span>Ai có link cũng tải được lương, CCCD, chữ ký… Trên máy văn phòng (đang kết nối Firebase): <b>Điều hành → Lưu trữ Google → Tải index.html cho GitHub</b>, rồi đưa file đó lên GitHub thay file hiện tại. Không đưa file tải từ Claude lên GitHub.</span></div><button class="btn sm" data-x>Đã hiểu</button>`;
+    document.body.appendChild(w); w.querySelector('[data-x]').onclick = () => w.remove();
+  } catch (e) { }
+}, 2500));
+addCSS(`.ghw{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:260;display:flex;gap:10px;align-items:flex-start;max-width:min(760px,calc(100vw - 24px));background:#7f1d1d;color:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.3);font-size:12.5px;line-height:1.5}.ghw>svg{width:18px;height:18px;flex:none;margin-top:2px}.ghw b{display:block}.ghw .btn{flex:none;background:#fff;color:#7f1d1d;border-color:#fff}`);
 </script>
 
 
