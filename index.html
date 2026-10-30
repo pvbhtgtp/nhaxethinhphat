@@ -1696,7 +1696,10 @@ const S = () => DB.settings;
 const empById = id => DB.employees.find(e => e.id === id);
 function att(ym, eid) { DB.cham[ym] = DB.cham[ym] || {}; return DB.cham[ym][eid] = DB.cham[ym][eid] || { d: {}, ot: 0 }; }
 /* Lái xe: ngày công lấy từ bảng Lịch chạy; tiền công = ngày công × Tiền tài của xe (bảng Phương tiện) */
-const isDriver = e => !!e && /l[aá]i\s*xe/i.test(String(e.chucVu || ''));
+const DRV_RUN = { arr: null, n: -1, set: new Set() };
+const drvRunSet = () => { const L = DB.lichchay || []; if (DRV_RUN.arr !== L || DRV_RUN.n !== L.length) { DRV_RUN.arr = L; DRV_RUN.n = L.length; DRV_RUN.set = new Set(L.map(l => l.laiXe).filter(Boolean)); } return DRV_RUN.set; };
+const isDriver = e => !!e && (/l[aá]i\s*xe|t[aà]i\s*x[eế]|driver/i.test(String(e.chucVu || '')) || drvRunSet().has(e.id));
+{ const r0 = App.render; App.render = function () { DRV_RUN.n = -1; return r0.apply(this, arguments); }; }
 /* Số công cho mỗi chuyến theo nhóm tuyến (Cài đặt ngay trên Bảng chấm công), mặc định 1 công/chuyến */
 const congTuyen = t => { const m = S().congTuyen || {}, k = String(t || '').trim(), g = typeof tuyenNhom === 'function' ? tuyenNhom(k) : k; return m[k] != null && m[k] !== '' ? +m[k] : m[g] != null && m[g] !== '' ? +m[g] : 1; };
 const tuyenRieng = ym => [...new Set([...(DB.lichchay || []).filter(l => l.tuyen && String(l.ngay).startsWith(ym)).map(l => String(l.tuyen).trim()), ...(DB.giochay || []).map(g => String(g.tuyen || '').trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'vi'));
@@ -1764,6 +1767,7 @@ const MRT = {
     const c = MRT.cong(ym, e.id), L = MRT.list.filter(m => c[m.k] > 0).sort((a, b) => c[b.k] - c[a.k]);
     return L[0] || null;
   },
+  ran(e, ym, name) { const m = MRT.list.find(x => x.n === name); return !!m && isDriver(e) && (MRT.cong(ym, e.id)[m.k] || 0) > 0; },
   cross(e, ym) { if (!isDriver(e)) return 0; const m = MRT.main(e, ym); if (!m) return 0; return MRT.cong(ym, e.id)[m.o.k] || 0; },
   badge(e, ym) { const m = MRT.main(e, ym), x = MRT.cross(e, ym); return m && x ? ` <span class="cc-x" title="Nhóm ${esc(m.n)}, có chạy ${esc(m.o.n)} (chiều đi và về) ${F.num ? F.num(x) : x} công">+${F.num ? F.num(x) : x} công ${esc(m.o.s)}</span>` : ''; }
 };
@@ -2201,14 +2205,14 @@ const vCham = {
   tools: () => monthTool(), after: bindMonth,
   sel() { return Array.isArray(UI.ccPbs) ? UI.ccPbs : (UI.ccPbs = UI.pb ? [UI.pb] : []); },
   grp(e, ym = UI.m) { if (!isDriver(e)) return '~Văn phòng'; const m = MRT.main(e, ym); return m ? m.n : (tuyenChinh(e, ym) || '~~Lái xe chưa có lịch chạy'); },
-  inSel(e, ym, gs) { const g = vCham.grp(e, ym); return gs.some(v => v.startsWith('x:') ? (g === v.slice(2) && MRT.cross(e, ym) > 0) : v === g); },
+  inSel(e, ym, gs) { const g = vCham.grp(e, ym); return gs.some(v => v.startsWith('x:') ? (g === v.slice(2) && MRT.cross(e, ym) > 0) : (v === g || MRT.ran(e, ym, v))); },
   emps(allGrp) { const ym = UI.m, end = ym + '-31', gs = UI.ccGrps || []; return DB.employees.filter(e => (!e.ngayVao || e.ngayVao <= end) && (e.trangThai !== 'Nghỉ việc' || summarize(ym, e.id).has) && (!vCham.sel().length || vCham.sel().includes(e.phongBan)) && (allGrp || !gs.length || vCham.inSel(e, ym, gs))); },
   render(el) {
     const ym = UI.m, n = D.daysIn(ym), today = D.today(), all = vCham.emps(true);
     const q = (UI.ccq || '').toLowerCase();
     const GM = new Map(), grpOf = e => vCham.grp(e, ym);
-    const gSel = Array.isArray(UI.ccGrps) ? UI.ccGrps : (UI.ccGrps = []), gAll = {}; all.forEach(e => { const g = grpOf(e); gAll[g] = (gAll[g] || 0) + 1; });
-    const found = all.filter(e => !q || (e.ten + ' ' + e.ma).toLowerCase().includes(q)).map((e, i) => ({ e, i, g: grpOf(e) })).filter(x => !gSel.length || vCham.inSel(x.e, ym, gSel)).sort((a, b) => { const r = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0; return r(a.g) - r(b.g) || a.g.localeCompare(b.g, 'vi') || a.i - b.i; }).map(x => (GM.set(x.e, x.g), x.e));
+    const gSel = Array.isArray(UI.ccGrps) ? UI.ccGrps : (UI.ccGrps = []), gAll = {}; all.forEach(e => { const g = grpOf(e); gAll[g] = (gAll[g] || 0) + 1; MRT.list.forEach(m => { if (m.n !== g && MRT.ran(e, ym, m.n)) gAll[m.n] = (gAll[m.n] || 0) + 1; }); });
+    const found = all.filter(e => !q || (e.ten + ' ' + e.ma).toLowerCase().includes(q)).map((e, i) => ({ e, i, g: (gSel.length === 1 && MRT.ran(e, ym, gSel[0])) ? gSel[0] : grpOf(e) })).filter(x => !gSel.length || vCham.inSel(x.e, ym, gSel)).sort((a, b) => { const r = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0; return r(a.g) - r(b.g) || a.g.localeCompare(b.g, 'vi') || a.i - b.i; }).map(x => (GM.set(x.e, x.g), x.e));
     const gCount = {}; found.forEach(e => { const g = GM.get(e); gCount[g] = (gCount[g] || 0) + 1; }); let lastG = null;
     const pst = pgState('cc', 20), emps = pageSlice(pst, found);
     App.subtitle = F.month(ym);
