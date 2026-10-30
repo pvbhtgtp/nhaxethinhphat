@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:57:37.442Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T23:30:31.521Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -3630,7 +3630,7 @@ async function vehPdfToBlob(dataUrl) {
   const bin = atob(dataUrl.split(',')[1]), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   const pdf = await pdfjsLib.getDocument({ data: u8 }).promise, pg = await pdf.getPage(1), vp = pg.getViewport({ scale: 1.8 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
   await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
-  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
 }
 async function vehAuto(key, url, root) {
   const cfg = VEH_AUTO[key]; if (!cfg || !root || !url) return;
@@ -5702,7 +5702,7 @@ const dhScan = {
     const m = Modal.open({ title: 'Quét ảnh điều hành xe · ' + F.date(day), width: 820, body: `<div class="sc-drop" data-pick>${ic('upload')} <b>Bấm để chọn ảnh từ máy / thư viện ảnh (hoặc kéo thả, dán Ctrl+V)</b><div class="small" style="margin-top:4px">Ảnh rõ nét, nên cắt riêng phần bảng. Phần mềm sẽ đọc tuyến, giờ, biển số xe, lái xe rồi điền vào lịch ngày đang chọn.</div><input type="file" accept="${lim.images.mediaTypes.join(',')},image/*" data-file class="sc-in" aria-label="Chọn ảnh"></div><div style="margin-top:8px"><label class="btn sc-cam" style="position:relative;overflow:hidden;cursor:pointer">${ic('upload')} Chụp ảnh bằng điện thoại<input type="file" accept="image/*" capture="environment" data-cam class="sc-in" aria-label="Chụp ảnh"></label></div><img class="sc-prev" data-prev hidden><div data-out></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn" data-stop hidden>Dừng</button><button class="btn pri" data-go disabled>Quét ảnh</button><button class="btn pri" data-apply hidden>Áp dụng vào lịch</button>` });
     const q = s => m.el.querySelector(s), out = q('[data-out]'), go = q('[data-go]'), ap = q('[data-apply]'), stop = q('[data-stop]'), fi = q('[data-file]'), drop = q('[data-pick]'), prev = q('[data-prev]');
     const shrink = async f => {   // ảnh điện thoại thường rất lớn hoặc HEIC: thu về JPEG tối đa 2200px cho nhẹ và dễ đọc
-      try { const bm = await createImageBitmap(f); const k = Math.min(1, 2200 / Math.max(bm.width, bm.height)), c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); const bl = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); return bl || f; } catch (e) { return f; }
+      try { const bm = await createImageBitmap(f); const k = Math.min(1, 1800 / Math.max(bm.width, bm.height)), c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); const bl = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); return bl || f; } catch (e) { return f; }
     };
     const setFile = async f => {
       if (!f) return;
@@ -5732,9 +5732,9 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
 Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e => e.ten).filter(Boolean))}`;
-      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh, vui lòng đợi (có thể mất 10–60 giây)…</div>';
+      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh… <b data-sec>0</b> giây <span class="small">(thường 5–15 giây)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
-      try { res = await sample.json(prompt, { images: self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }); }
+      try { res = await sample.json(prompt, { images: self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }).finally(() => clearInterval(tick)); toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây`, 'ok', 3000); }
       catch (e) { const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
@@ -9083,7 +9083,10 @@ addCSS(`.dx-chip.dx-new{border:1.5px dashed #94a3b8!important;background:#f8fafc
    Khóa lưu trong Cài đặt dữ liệu dùng chung để mọi máy (kể cả điện thoại) quét được. */
 const AIX = {
   URL: 'https://generativelanguage.googleapis.com/v1beta',
-  MODELS: ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  MODELS: ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
+  /* model dùng được gần nhất được nhớ trên máy để lần sau gọi thẳng, không thử lại từ đầu */
+  get _good() { try { return localStorage.getItem('aix.good') || ''; } catch (e) { return ''; } },
+  set _good(v) { try { localStorage.setItem('aix.good', v || ''); } catch (e) { } },
   cfg: () => ((DB && DB.settings && DB.settings.ai) || {}),
   ok: () => !!AIX.cfg().key,
   err(code, msg) { const e = new Error(msg || code); e.code = code; return e; },
@@ -9106,6 +9109,7 @@ const AIX = {
     }
     if (r.ok) return r.json();
     let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) { }
+    if (r.status === 400 && /thinking|budget/i.test(msg) && body.generationConfig && body.generationConfig.thinkingConfig) { const b2 = JSON.parse(JSON.stringify(body)); delete b2.generationConfig.thinkingConfig; AIX.noThink = AIX.noThink || {}; AIX.noThink[model] = 1; return AIX.call(model, b2, key, signal); }
     if (r.status === 404) throw AIX.err('no_model', msg);
     if (r.status === 429) throw AIX.err('rate_limited', msg);
     if (r.status === 400 && /api key|API_KEY/i.test(msg)) throw AIX.err('bad_key', msg);
@@ -9118,12 +9122,12 @@ const AIX = {
     const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
     const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
     for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
-    const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
     const list = [...new Set([c.model, AIX._good, ...AIX.MODELS].filter(Boolean))];
     let last;
     for (const md of list) {
       try {
-        const j = await AIX.call(md, body, c.key, signal); AIX._good = md;
+        const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json', ...((AIX.noThink || {})[md] ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } };
+        const t0 = Date.now(), j = await AIX.call(md, body, c.key, signal); AIX._good = md; AIX.lastMs = Date.now() - t0;
         const txt = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(p => p.text || '').join('') : '';
         if (!txt) throw AIX.err((j.promptFeedback && j.promptFeedback.blockReason) ? 'image_rejected' : 'invalid_json');
         return AIX.parse(txt);
@@ -10303,6 +10307,46 @@ addCSS(`.fold-h{cursor:pointer;user-select:none;display:flex;align-items:center;
 .fold-t svg{width:14px;height:14px;transform:rotate(90deg);transition:transform .2s}.fold-h.closed .fold-t svg{transform:rotate(-90deg)}.fold-h.closed{opacity:.85}
 .fold-hide{display:none!important}`);
 window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } catch (e) { console.warn('FOLD', e); } }, 0));
+/* ===== LUÔN DÙNG BẢN MỚI NHẤT =====
+   - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
+     Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
+   - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
+const APP_BUILD = '2026-10-31T06:45';
+const UPD = {
+  pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
+  busy: false, last: 0, shown: false,
+  async remote() {
+    const r = await fetch(location.pathname + '?_v=' + Date.now(), { cache: 'no-store', credentials: 'omit' }); if (!r.ok) return null;
+    const t = await r.text(), m = t.match(/const APP_BUILD = '([^']+)'/); return m ? m[1] : null;
+  },
+  async check(force) {
+    if (!UPD.pub() || UPD.busy || (!force && Date.now() - UPD.last < 60000)) return; UPD.busy = true; UPD.last = Date.now();
+    try {
+      const b = await UPD.remote(); if (!b || b <= APP_BUILD) return;
+      const login = !!document.querySelector('.au-wrap'), idle = login || (!Store.dirty && !(GS && GS.busy) && !document.querySelector('.modal-wrap'));
+      if (idle) return UPD.reload(b);
+      UPD.banner(b);
+    } catch (e) { } finally { UPD.busy = false; }
+  },
+  reload(b) { try { sessionStorage.setItem('upd.to', b); } catch (e) { } location.replace(location.pathname + '?v=' + encodeURIComponent(b) + location.hash); },
+  banner(b) {
+    if (UPD.shown) return; UPD.shown = true;
+    const w = document.createElement('div'); w.className = 'upd-bar'; w.dataset.runtime = '1';
+    w.innerHTML = `${ic('refresh')}<span><b>Đã có phiên bản app mới.</b> Lưu xong thay đổi rồi bấm cập nhật.</span><button class="btn sm" data-u>Cập nhật ngay</button>`;
+    document.body.appendChild(w);
+    w.querySelector('[data-u]').onclick = async () => { if (Store.dirty && GS.on) { try { await GS.push(); } catch (e) { } } if (Store.dirty && !GS.on) { if (!await Modal.confirm('Còn thay đổi chưa lưu trên máy này. Vẫn cập nhật? (thay đổi được giữ tạm và hỏi lại sau khi tải)', { ok: 'Cập nhật' })) return; } UPD.reload(b); };
+  },
+  mount() {
+    /* dọn ?v= khỏi địa chỉ sau khi đã tải bản mới */
+    try { if (/[?&]v=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash); const to = sessionStorage.getItem('upd.to'); if (to) { sessionStorage.removeItem('upd.to'); if (to <= APP_BUILD) setTimeout(() => toast(`${ic('check')} Đã cập nhật lên phiên bản mới nhất`, 'ok', 4000), 1500); } } catch (e) { }
+    setTimeout(() => UPD.check(true), 4000); setInterval(() => UPD.check(), 5 * 60000);
+    const wake = () => { UPD.check(); try { if (GS.on && !Store.dirty) GS.check(); } catch (e) { } };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
+    window.addEventListener('focus', wake); window.addEventListener('online', () => setTimeout(wake, 1500));
+  }
+};
+addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
+window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
 </script>
 
 
