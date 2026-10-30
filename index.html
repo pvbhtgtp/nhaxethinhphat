@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:20:22.801Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:40:18.117Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -10143,7 +10143,7 @@ const FBH = {
   },
   /* ---- (1) lịch sử phiên bản ---- */
   html() {
-    return `<div class="fbh-sec hub-card" style="margin-top:10px"><p class="hub-p"><b>Lịch sử phiên bản trên Firebase</b> <span class="badge b-violet">Chỉ Admin</span><br>Firebase tự giữ <b>5 bản lưu gần nhất</b>. Lỡ ghi nhầm (ví dụ máy có dữ liệu cũ đè lên) thì quay về bản trước ở đây.</p>
+    return `<div class="hub-h fbh-h">Lịch sử phiên bản (khôi phục) <span class="badge b-violet" style="margin-left:6px">Chỉ Admin</span></div><div class="fbh-sec hub-card"><p class="hub-p">Firebase tự giữ <b>5 bản lưu gần nhất</b>. Lỡ ghi nhầm (ví dụ máy có dữ liệu cũ đè lên) thì quay về bản trước ở đây.</p>
       <div class="hub-btns" style="justify-content:flex-start;margin-top:0"><button class="btn" data-g="fhList">${ic('refresh')} Xem các bản trước</button></div><div data-fhl>${FBH.listHTML()}</div></div>`;
   },
   listHTML() {
@@ -10177,6 +10177,44 @@ const FBH = {
 };
 addCSS(`.fbh-cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.fbh-cmp>div{border:1px solid #e6e9f0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}.fbh-cmp small{color:#64748b;font-size:11.5px}.fbh-cmp em{font-style:normal;font-size:11.5px;color:#475569}.fbh-cmp .badge{align-self:flex-start}`);
 window.addEventListener('load', () => { try { FBH.mount(); } catch (e) { console.warn('FBH', e); } });
+/* ===== Thu gọn / mở các mục trong bảng Điều hành (Lưu trữ Google, Zalo Bot…) để khỏi lỡ tay bấm nhầm =====
+   Bấm vào tiêu đề mục để ẩn/hiện; app nhớ lựa chọn trên máy này. Mặc định: đã kết nối thì ẩn các mục cài đặt, khôi phục. */
+const FOLD = {
+  K: 'hub.fold',
+  get() { try { return JSON.parse(localStorage.getItem(FOLD.K) || '{}') || {}; } catch (e) { return {}; } },
+  set(k, v) { const o = FOLD.get(); o[k] = v; try { localStorage.setItem(FOLD.K, JSON.stringify(o)); } catch (e) { } },
+  key: h => (h.dataset.fk || h.textContent).replace(/\s+/g, ' ').replace(/^(\d+\s*·\s*)/, '').replace(/(Chỉ Admin|Mã hóa đầu-cuối|Ẩn|Mở).*$/i, '').trim().slice(0, 40),
+  /* mục nào mặc định ẩn */
+  defClosed(k) {
+    const on = !!GS.on, n = k.toLowerCase();
+    if (/cấu hình firebase|kết nối máy chủ google/.test(n)) return on;                 // chưa kết nối thì để mở để cài
+    if (/luật bảo mật|đăng nhập 1 lần|cloudflare|google drive|lịch sử phiên bản|cập nhật lên github|đưa lên github/.test(n)) return true;
+    return false;
+  },
+  apply(body) {
+    if (!body) return; const st = FOLD.get();
+    body.querySelectorAll('.hub-h').forEach(h => {
+      if (h.dataset.fold) return; h.dataset.fold = 1;
+      const items = []; let x = h.nextElementSibling; while (x && !x.classList.contains('hub-h') && !x.querySelector('.hub-h')) { items.push(x); x = x.nextElementSibling; }
+      if (!items.length) return;
+      const k = FOLD.key(h), closed = k in st ? st[k] : FOLD.defClosed(k);
+      h.classList.add('fold-h'); h.insertAdjacentHTML('beforeend', `<span class="fold-t"><span class="fold-l"></span>${ic('back')}</span>`);
+      const paint = c => { h.classList.toggle('closed', c); items.forEach(i => i.classList.toggle('fold-hide', c)); h.querySelector('.fold-l').textContent = c ? 'Mở' : 'Ẩn'; h.title = c ? 'Bấm để mở mục này' : 'Bấm để ẩn mục này'; };
+      paint(closed);
+      h.addEventListener('click', e => { if (e.target.closest('a,button,input')) return; const c = !h.classList.contains('closed'); paint(c); FOLD.set(k, c); });
+    });
+  },
+  mount() {
+    const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { FOLD.apply(body); } catch (e) { console.warn('FOLD', e); } return r; };
+    /* tab Zalo Bot và các tab khác của bảng Điều hành */
+    try { const s0 = HUB.setTab; HUB.setTab = function () { const r = s0.apply(this, arguments); setTimeout(() => { try { FOLD.apply(HUB.el && HUB.el.querySelector('#hubBody')); } catch (e) { } }, 0); return r; }; } catch (e) { }
+  }
+};
+addCSS(`.fold-h{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-radius:8px;padding:6px 8px!important;margin-left:-8px;margin-right:-8px;transition:background .15s}
+.fold-h:hover{background:#f0f9ff}.fold-t{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#64748b;text-transform:none;letter-spacing:0}
+.fold-t svg{width:14px;height:14px;transform:rotate(90deg);transition:transform .2s}.fold-h.closed .fold-t svg{transform:rotate(-90deg)}.fold-h.closed{opacity:.85}
+.fold-hide{display:none!important}`);
+window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } catch (e) { console.warn('FOLD', e); } }, 0));
 </script>
 
 
