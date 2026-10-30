@@ -9141,20 +9141,29 @@ const RTP = {
       .sort((a, b) => (a.cheo - b.cheo) || (b.tong - a.tong) || String(a.e.ten).localeCompare(String(b.e.ten), 'vi'));
   },
   pick() { const gs = UI.ccGrps || [], L = MRT.list.filter(m => gs.includes(m.n) || gs.includes('x:' + m.o.n)); return L.length ? L : MRT.list; },
+  // lái xe của từng nhóm: đang chọn nút nhóm thì lấy mọi người có chạy tuyến đó (như trên màn hình); chưa chọn thì chia theo nhóm chính, không trùng người
+  emps(m) {
+    const ym = UI.m, gs = UI.ccGrps || [], s0 = UI.ccGrps; UI.ccGrps = []; const all = vCham.emps().filter(isDriver); UI.ccGrps = s0;
+    const L = gs.length ? all.filter(e => gs.includes('x:' + m.n) ? (vCham.grp(e, ym) === m.n && MRT.cross(e, ym) > 0) : MRT.ran(e, ym, m.n)) : all.filter(e => vCham.grp(e, ym) === m.n);
+    return L.sort((a, b) => String(a.ten).localeCompare(String(b.ten), 'vi'));
+  },
+  // cột giống Bảng chấm công, bỏ Mã NV và Phòng ban
+  cols() { const c = vCham.cols(); return [c[1], ...c.slice(3)]; },
+  rowsOf(m) { const ym = UI.m, n = D.daysIn(ym); return RTP.emps(m).map(e => { const a = att(ym, e.id), s = summarize(ym, e.id), lc = s.drv ? lcDays(ym, e.id) : {}, au = s.drv ? {} : autoDays(ym, e), x = MRT.cross(e, ym), mn = MRT.main(e, ym);
+    return { e, tag: mn && mn.k !== m.k ? 'chạy chéo, nhóm ' + mn.s : x ? '+' + (F.num ? F.num(x) : x) + ' công ' + mn.o.s : '', v: [e.ten, ...Array.from({ length: n }, (_, i) => a.d[i + 1] || (lc[i + 1] ? lc[i + 1].cong : au[i + 1] ? 'X' : '')), s.lv, s.drv || s.tienCong ? s.tienCong : '', s.cpKhac, ...(o => [o.lck, o.bh, o.noTruoc, o.show ? o.thucNhan : '', o.noChuyen])(PO.of(ym, e.id))] }; }); },
   print() {
-    const ym = UI.m, L = RTP.pick(), num = x => F.num ? F.num(x) : x;
-    const sec = m => { const R = RTP.rows(m, ym); if (!R.length) return `<h3 class="rtp-h">${esc(m.n)}</h3><p class="pr-note">Không có lái xe nào chạy tuyến này trong ${F.month(ym)}.</p>`;
-      return `<h3 class="rtp-h">${esc(m.n)} <small>(${R.length} lái xe · ${num(R.reduce((a, r) => a + r.tong, 0))} chuyến)</small></h3>
-      <table><thead><tr><th style="width:34px">STT</th><th>Mã NV</th><th>Họ và tên</th><th>Số điện thoại</th><th>Nhóm chính</th><th>Chuyến đi</th><th>Chuyến về</th><th>Tổng chuyến</th><th>Tổng công</th><th>Xe đã chạy</th><th>Ngày chạy</th></tr></thead><tbody>
-      ${R.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.e.ma || '')}</td><td><b>${esc(r.e.ten || '')}</b>${r.cheo ? ' <i>(chạy chéo)</i>' : ''}</td><td>${esc(r.e.sdt || '')}</td><td class="c">${esc(r.nhom)}</td><td class="r">${num(r.di)}</td><td class="r">${num(r.ve)}</td><td class="r"><b>${num(r.tong)}</b></td><td class="r">${num(r.cong)}</td><td>${esc([...r.xe].join(', '))}</td><td>${[...r.days].sort((a, b) => a - b).join(', ')}</td></tr>`).join('')}
-      </tbody><tfoot><tr><td colspan="5">Cộng</td><td class="r">${num(R.reduce((a, r) => a + r.di, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.ve, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.tong, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.cong, 0))}</td><td colspan="2"></td></tr></tfoot></table>`; };
-    Print.run(`<div class="pr">${Print.head()}<h2>Bảng lái xe chạy theo tuyến</h2><div class="pr-sub">${F.month(ym)} · ${L.map(m => esc(m.n)).join(' · ')}</div>${L.map(sec).join('')}<div class="pr-note">Chuyến đi: tuyến bắt đầu từ Biên Hòa / Hố Nai. Chuyến về: tuyến bắt đầu từ Vũng Tàu. "Chạy chéo": lái xe thuộc nhóm tuyến khác có chạy tuyến này.</div>${Print.signs(['Người lập biểu', 'Đội trưởng điều hành', 'Giám đốc'])}</div>`, { landscape: true, title: 'Lai xe theo tuyen ' + ym });
+    const ym = UI.m, n = D.daysIn(ym), cols = RTP.cols(), L = RTP.pick(), num = v => typeof v === 'number' ? (v ? F.num(v) : '0') : esc(v);
+    const head = `<tr><th style="padding:3px 2px;font-size:9px;width:34px">STT</th>${cols.map(c => `<th style="padding:3px 2px;font-size:9px">${esc(c.label).replace('\n', '<br>')}</th>`).join('')}</tr>`;
+    const sec = m => { const R = RTP.rowsOf(m); if (!R.length) return `<h3 class="rtp-h">${esc(m.n)}</h3><p class="pr-note">Không có lái xe nào chạy tuyến này trong ${F.month(ym)}.</p>`;
+      const tot = cols.map((c, i) => c.sum ? R.reduce((a, r) => a + (+r.v[i] || 0), 0) : null);
+      return `<h3 class="rtp-h">${esc(m.n)} <small>(${R.length} lái xe)</small></h3><table><thead>${head}</thead><tbody>${R.map((r, k) => `<tr><td class="c" style="padding:3px 2px;font-size:9.5px">${k + 1}</td>${r.v.map((v, i) => { const c = CODES[v], day = i > 0 && i <= n; return `<td class="${i > 0 ? 'c' : ''}" style="padding:3px 2px;font-size:9.5px;${i === 0 ? 'text-align:left;white-space:nowrap;' : ''}${c && day ? `background:${c.bg};color:${c.c};font-weight:700` : ''}">${i === 0 ? `<b>${esc(v)}</b>${r.tag ? `<br><i style="font-size:8.5px;color:#92400e">${esc(r.tag)}</i>` : ''}` : num(v)}</td>`; }).join('')}</tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="2" style="padding:3px 4px;font-size:9.5px">Cộng</td>${tot.slice(1).map(t => `<td class="c" style="padding:3px 2px;font-size:9.5px">${t == null ? '' : F.num(t)}</td>`).join('')}</tr></tfoot></table>`; };
+    Print.run(`<div class="pr">${Print.head()}<h2>Bảng chấm công lái xe theo tuyến ${F.month(ym)}</h2><div class="pr-sub">${L.map(m => esc(m.n)).join(' · ')}</div>${L.map(sec).join('')}<div class="pr-note">${vCham.legend()}. Ô ngày ghi số công của lái xe trong ngày (mọi tuyến). Tuyến Biên Hòa ⇄ Vũng Tàu gồm chiều đi và về; Hố Nai ⇄ Vũng Tàu gồm chiều đi và về.</div>${Print.signs(['Người chấm công', 'Đội trưởng điều hành', 'Giám đốc'])}</div>`, { landscape: true, title: 'Bang cham cong lai xe theo tuyen ' + ym });
   },
   excel() {
-    const ym = UI.m, L = RTP.pick();
-    const cols = [{ key: 'stt', label: 'STT', type: 'int' }, { key: 'ma', label: 'Mã NV' }, { key: 'ten', label: 'Họ và tên', width: 26 }, { key: 'sdt', label: 'Số điện thoại' }, { key: 'nhom', label: 'Nhóm chính' }, { key: 'cheo', label: 'Chạy chéo' }, { key: 'di', label: 'Chuyến đi', type: 'num', sum: true }, { key: 've', label: 'Chuyến về', type: 'num', sum: true }, { key: 'tong', label: 'Tổng chuyến', type: 'num', sum: true }, { key: 'cong', label: 'Tổng công', type: 'num', sum: true }, { key: 'xe', label: 'Xe đã chạy', width: 22 }, { key: 'days', label: 'Ngày chạy', width: 40 }];
-    XLSX.save('Lai xe theo tuyen ' + ym, L.map(m => ({ name: m.s + '-VT', title: 'LÁI XE CHẠY TUYẾN ' + m.n + ' · ' + F.month(ym).toUpperCase(), subtitles: [companyLine(), 'Ngày xuất: ' + F.date(D.today())], columns: cols, totals: true,
-      rows: RTP.rows(m, ym).map((r, i) => ({ stt: i + 1, ma: r.e.ma || '', ten: r.e.ten || '', sdt: r.e.sdt || '', nhom: r.nhom, cheo: r.cheo ? 'Có' : '', di: r.di, ve: r.ve, tong: r.tong, cong: r.cong, xe: [...r.xe].join(', '), days: [...r.days].sort((a, b) => a - b).join(', ') })) })));
+    const ym = UI.m, L = RTP.pick(), cols = [{ label: 'STT', type: 'int', width: 5 }, ...RTP.cols()];
+    XLSX.save('Cham cong lai xe theo tuyen ' + ym, L.map(m => ({ name: m.s + '-VT', title: 'BẢNG CHẤM CÔNG LÁI XE TUYẾN ' + m.n + ' · ' + F.month(ym).toUpperCase(), subtitles: [companyLine()], columns: cols, totals: true, freezeCols: 2, footer: [vCham.legend()],
+      rows: RTP.rowsOf(m).map((r, i) => [i + 1, r.v[0] + (r.tag ? ' (' + r.tag + ')' : ''), ...r.v.slice(1)]) })));
   }
 };
 addCSS(`.rtp-h{margin:16px 0 6px;font-size:14px;color:#111}.rtp-h small{font-weight:500;color:#555;font-size:12px}.cc-pb .cc-rtp{margin-left:auto;background:#fff;border-style:solid}`);
