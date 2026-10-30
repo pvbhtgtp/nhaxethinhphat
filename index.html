@@ -321,7 +321,7 @@ body{background:#f0f8ff}
 
 
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:4e9b898b43b94faf658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c"}},"_meta":{"shell":true,"savedAt":"2026-10-30T02:13:39.167Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","appId":"1:1033308919804:web:4e9b898b43b94faf658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T02:44:44.993Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -1204,7 +1204,7 @@ const App = {
     if (!DB) Store.load();
     App.views.data = App.views.data || DataScreen;
     const navHTML = cfg.nav.map(g => `<div class="nav-group">${g.group}</div>${g.items.map(id => { const v = App.views[id]; return `<a data-nav="${id}">${ic(v.icon)}<span>${v.label || v.title}</span></a>`; }).join('')}`).join('')
-      + `<div class="nav-group">Hệ thống</div><a data-nav="data">${ic('database')}<span>Dữ liệu & sao lưu</span></a>`;
+      + `<a data-nav="data">${ic('database')}<span>Dữ liệu & sao lưu</span></a>`;
     $('#app').innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="logo">${ic(cfg.icon)}</div><div><b>${cfg.title}</b>${cfg.tagline ? `<small>${cfg.tagline}</small>` : ''}</div></div><nav class="nav">${navHTML}</nav></aside><div class="backdrop" data-act="navClose"></div><main class="main"><header class="topbar"><button class="ibtn menu-btn" data-act="navOpen">${ic('menu')}</button><div><h1 id="vTitle"></h1><p id="vDesc"></p></div><div class="top-actions" id="vTools"></div><div class="tb-right no-print" id="tbRight"><div class="save-state" id="saveState" title="Trạng thái lưu"><i></i><span></span></div><button class="tb-save" data-act="saveFile" title="Lưu vào file">${ic('save')}<span>Lưu vào file</span></button></div></header><section class="content"><div id="draftBox"></div><div id="view"></div></section></main></div>`;
     $('#app').addEventListener('click', e => { const a = e.target.closest('[data-nav]'); if (a) { e.preventDefault(); App.go(a.dataset.nav); document.body.classList.remove('nav-open'); } });
     Store.status();
@@ -1321,7 +1321,7 @@ const COMPANY_FIELDS = [
 <script>
 const THEME = {"p":"#0ea5e9","d":"#0284c7","s50":"#f0f9ff","s100":"#e0f2fe","ink":"#082f49","ink2":"#0c4a6e"};
 /* ==========================================================
-   CHẤM CÔNG & TÍNH LƯƠNG (thuế TNCN, BHXH) - Phong Excel
+   NHÀ XE THỊNH PHÁT
    ========================================================== */
 const CODES = {
   X: { n: 'Đi làm cả ngày', lv: 1, hl: 1, kl: 0, bg: '#dcfce7', c: '#15803d' },
@@ -7301,18 +7301,18 @@ service cloud.firestore {
     w.querySelector('form').onsubmit = e => { e.preventDefault(); const f = n => w.querySelector(`[name=${n}]`).value.trim(), nc = { ...local(), mode: 'fb', fb: c.fb, email: f('email'), key: f('key'), off: false }; if (!GS.ok({ ...nc, mode: 'fb' })) return toast('Nhập email và mã kết nối (từ 6 ký tự)', 'err'); GS.saveCfg(nc); w.remove(); GS.boot(next); };
     const sk = w.querySelector('[data-skip]'); if (sk) sk.onclick = () => { GS.saveCfg({ ...local(), off: true }); w.remove(); next(); };
   };
-  GS.shellHTML = function () {
-    const c = GS.cfg(), keep = DB, dirty = Store.dirty;
+  GS.shellHTML = function (ov) {
+    const c = ov || GS.cfg(), keep = DB, dirty = Store.dirty;
     const gsync = c.mode === 'fb' ? { mode: 'fb', fb: c.fb, email: c.email, url: c.url } : { url: c.url };
     DB = { settings: { company: { ten: (keep.settings.company || {}).ten || '' }, gsync }, _meta: { shell: true } };
     let html; try { html = Store.serialize(); } finally { DB = keep; Store.dirty = dirty; }
     return html;
   };
-  GS.downloadShell = function (u) {
-    const c = GS.cfg();
+  GS.downloadShell = function (u, ov) {
+    const c = ov || GS.cfg();
     if (c.mode !== 'fb') return dl0.call(GS, u);
-    if (!c.fb || !c.fb.projectId || !c.email) return toast('Lưu cấu hình Firebase và email ở bước 1 trước', 'err', 6000);
-    download(new Blob([GS.shellHTML()], { type: 'text/html' }), 'index.html');
+    if (!c.fb || !c.fb.projectId || !c.email) return toast('Dán firebaseConfig và nhập email ở bước 1 trước', 'err', 6000);
+    download(new Blob([GS.shellHTML(c)], { type: 'text/html' }), 'index.html');
     toast('Đã tải file index.html (không chứa dữ liệu). Đưa file này lên GitHub thay file cũ.', 'ok', 7000);
   };
   const modeBar = m => `<div class="gs-mode"><span>Nơi lưu dữ liệu</span><button class="${m === 'fb' ? 'on' : ''}" data-g="mode" data-m="fb">${ic('database')} Firebase <em>khuyên dùng</em></button><button class="${m === 'gas' ? 'on' : ''}" data-g="mode" data-m="gas">${ic('file')} Apps Script + Drive</button></div>`;
@@ -7368,7 +7368,7 @@ service cloud.firestore {
       else if (await Modal.confirm(`Firebase đã có dữ liệu (phiên bản #${j.ver}${j.who ? ', lưu bởi ' + esc(j.who) : ''}). Tải dữ liệu đó về máy này?<br><span class="small muted">Chọn "Hủy" nếu máy này đang có dữ liệu mới hơn, sau đó bấm "Đưa dữ liệu lên Firebase".</span>`, { ok: 'Tải từ Firebase', title: 'Dữ liệu trên Firebase' })) await GS.pull(false);
       HUB.setTab('gdata');
     });
-    if (a === 'fbshell') return GS.downloadShell();
+    if (a === 'fbshell') { const c = nc(); return GS.downloadShell(null, c.fb.apiKey && c.fb.projectId && /@/.test(c.email) ? c : GS.cfg().mode === 'fb' ? null : c); }
     if (a === 'up' && GS.cfg().mode === 'fb') return busy(async () => { if (!await Modal.confirm('Ghi dữ liệu trên máy này lên Firebase? Dữ liệu trên Firebase sẽ được thay bằng bản này.', { ok: 'Đưa lên Firebase' })) return; await GS.push(true); if (!GS.err) toast('Đã đưa dữ liệu lên Firebase', 'ok'); HUB.setTab('gdata'); });
     if (a === 'down' && GS.cfg().mode === 'fb') return busy(async () => { await GS.pull(false); toast('Đã tải dữ liệu mới nhất từ Firebase', 'ok'); HUB.setTab('gdata'); });
     if (a === 'off' && GS.cfg().mode === 'fb') { if (!await Modal.confirm('Ngắt kết nối Firebase trên máy này? Lần sau mở app sẽ dùng dữ liệu trong file.', { ok: 'Ngắt kết nối', danger: true })) return; GS.saveCfg({ ...local(), key: '', off: true }); GS.on = false; clearInterval(GS.poll); if (FB.unsub) { FB.unsub(); FB.unsub = null; } try { FB.app && FB.app.auth().signOut(); } catch (e) { } FB.sig = ''; Store.status(); HUB.setTab('gdata'); return toast('Đã ngắt kết nối Firebase trên máy này', 'ok'); }
@@ -7379,6 +7379,203 @@ service cloud.firestore {
 }
 addCSS(`.gs-mode{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.gs-mode>span{font-size:12.5px;font-weight:700;color:#475467;margin-right:4px}.gs-mode button{display:inline-flex;align-items:center;gap:6px;border:1px solid #d6e4f0;background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:#334155;cursor:pointer}.gs-mode button svg{width:14px;height:14px}.gs-mode button em{font-style:normal;font-size:10.5px;background:#dcfce7;color:#15803d;border-radius:99px;padding:1px 6px}.gs-mode button.on{background:var(--p);border-color:var(--p);color:#fff}.gs-mode button.on em{background:rgba(255,255,255,.25);color:#fff}
 .gs-rules{margin:0;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:10px 12px;font:11.5px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto}`);
+
+/* ===== ĐĂNG NHẬP 1 LẦN: tài khoản app (số điện thoại + mật khẩu) cũng là tài khoản vào dữ liệu Firebase =====
+   - Mỗi tài khoản app có 1 tài khoản Firebase riêng: email nội bộ <sđt>.v<n>@nhaxe-tp.app, mật khẩu suy ra từ mật khẩu app.
+   - nhaxe_acl/{uid}: danh sách được phép (vai trò, còn hoạt động). nhaxe_dir/{băm sđt}: cho biết email nội bộ hiện tại của sđt.
+   - Admin cấp / đặt lại mật khẩu ngay trong app; người dùng tự đổi mật khẩu thì Firebase đổi theo.
+   - Máy quản lý vẫn có thể vào bằng mã kết nối chung (tài khoản chủ). */
+const FBU = {
+  DOMAIN: 'nhaxe-tp.app', admin: {}, _ready: null, _sig: '',
+  email: (phone, v) => `${normUser(phone)}.v${v || 1}@${FBU.DOMAIN}`,
+  pw: (phone, pw) => `NX-${normUser(phone)}-${pw}`,
+  async key(phone) { const s = 'nhaxe:' + normUser(phone); const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 40); },
+  on: () => { const c = GS.cfg(); return c.mode === 'fb' && !!(c.fb && c.fb.projectId); },
+  acct: () => { const c = GS.cfg(); return c.mode === 'fb' && !!c.acct; },
+  cur: () => { try { return FB.app && FB.app.auth().currentUser; } catch (e) { return null; } },
+  async init(c) {
+    await FB.load();
+    if (FB.app && FB.app.options.projectId !== c.fb.projectId) { if (FB.unsub) { FB.unsub(); FB.unsub = null; } await FB.app.delete(); FB.app = null; FB.db = null; FB.sig = ''; }
+    if (!FB.app) FB.app = (firebase.apps || []).find(a => a.name === 'nhaxe') || firebase.initializeApp(c.fb, 'nhaxe');
+    if (!FB.db) FB.db = FB.app.firestore();
+    if (!FBU._ready) FBU._ready = new Promise(ok => { const un = FB.app.auth().onAuthStateChanged(() => { un(); ok(); }); });
+    await FBU._ready; return FB.db;
+  },
+  async isAdmin() {
+    const u = FBU.cur(), c = GS.cfg(); if (!u) return false;
+    if (c.email && u.email === c.email) return true;
+    if (FBU.admin[u.uid] != null) return FBU.admin[u.uid];
+    try { const s = await FB.db.collection('nhaxe_acl').doc(u.uid).get(), d = s.exists ? s.data() : {}; return FBU.admin[u.uid] = d.role === 'admin' && d.active === true; } catch (e) { return FBU.admin[u.uid] = false; }
+  },
+  async lookup(phone) { await FBU.init(GS.cfg()); const s = await FB.db.collection('nhaxe_dir').doc(await FBU.key(phone)).get(); return s.exists ? s.data() : null; },
+  /* tạo tài khoản Firebase mới cho người dùng (cần phiên admin), ghi quyền và danh bạ */
+  async provision(u, pw) {
+    const c = GS.cfg(); await FBU.init(c);
+    if (!(await FBU.isAdmin())) throw new Error('Cần đăng nhập bằng tài khoản Admin (hoặc mã kết nối của quản lý) để cấp tài khoản');
+    const ref = FB.db.collection('nhaxe_dir').doc(await FBU.key(u.user)), cur = (await ref.get()).data() || {};
+    let v = (+cur.v || 0) + 1, nu = null; const sec = firebase.initializeApp(c.fb, 'nx-sec-' + Date.now());
+    try {
+      for (let i = 0; i < 6 && !nu; i++) {
+        try { nu = (await sec.auth().createUserWithEmailAndPassword(FBU.email(u.user, v), FBU.pw(u.user, pw))).user; }
+        catch (e) { if (e.code === 'auth/email-already-in-use') { v++; continue; } if (e.code === 'auth/operation-not-allowed' || e.code === 'auth/admin-restricted-operation') throw new Error('Firebase đang tắt tạo tài khoản: vào Authentication → Settings → User actions, bật "Enable create (sign-up)" rồi thử lại'); throw FB.err(e); }
+      }
+      if (!nu) throw new Error('Không tạo được tài khoản Firebase');
+      await sec.auth().signOut().catch(() => { });
+    } finally { sec.delete().catch(() => { }); }
+    const b = FB.db.batch();
+    b.set(FB.db.collection('nhaxe_acl').doc(nu.uid), { phone: normUser(u.user), uid: nu.uid, role: u.role === 'admin' ? 'admin' : 'member', active: u.active !== false, at: new Date().toISOString() });
+    if (cur.uid && cur.uid !== nu.uid) b.delete(FB.db.collection('nhaxe_acl').doc(cur.uid));
+    b.set(ref, { v, uid: nu.uid });
+    await b.commit();
+    u.fb = { v, uid: nu.uid, role: u.role === 'admin' ? 'admin' : 'member', active: u.active !== false, at: new Date().toISOString() }; delete u.fbStale;
+    Store.changed(); return u.fb;
+  },
+  /* mật khẩu app vừa đặt / đổi → cập nhật tài khoản Firebase */
+  async onPass(u, pw) {
+    if (!FBU.on() || !GS.on) return;
+    try {
+      await FBU.init(GS.cfg()); const me = FBU.cur();
+      if (u.fb && me && me.uid === u.fb.uid) { await me.updatePassword(FBU.pw(u.user, pw)); return; }
+      if (await FBU.isAdmin()) { await FBU.provision(u, pw); toast('Đã cập nhật tài khoản đăng nhập dữ liệu cho ' + esc(u.user), 'ok', 3500); return; }
+      u.fbStale = true; Store.changed();
+    } catch (e) { u.fbStale = true; toast('Chưa cập nhật được tài khoản dữ liệu: ' + esc(e.message), 'err', 8000); }
+  },
+  /* đăng nhập app thành công → đổi phiên Firebase sang đúng người, hoặc tự cấp tài khoản nếu máy đang có quyền quản lý */
+  async afterLogin(u, pw) {
+    if (!FBU.on() || !GS.on) return;
+    try {
+      const c = GS.cfg(); await FBU.init(c); const me = FBU.cur();
+      if (!u.fb && await FBU.isAdmin()) { await FBU.provision(u, pw); return; }
+      if (c.acct && !c.key && u.fb && (!me || me.uid !== u.fb.uid)) {
+        const d = await FBU.lookup(u.user); if (!d) return;
+        await FB.app.auth().signInWithEmailAndPassword(FBU.email(u.user, d.v), FBU.pw(u.user, pw)); FB.sig = 'acct:' + u.user;
+      }
+    } catch (e) { toast('Đã đăng nhập app nhưng chưa vào được dữ liệu dùng chung: ' + esc(FB.err(e).message), 'err', 8000); }
+  },
+  /* đồng bộ vai trò / khóa / xóa tài khoản sang danh sách quyền Firebase (chỉ phiên admin) */
+  async syncAcl() {
+    if (!FBU.on() || !GS.on || !FB.db) return;
+    const sig = JSON.stringify((DB.users || []).map(u => [u.id, u.role, u.active, u.fb && u.fb.uid])); if (sig === FBU._sig) return;
+    if (!(await FBU.isAdmin())) return; FBU._sig = sig;
+    const col = FB.db.collection('nhaxe_acl'), b = FB.db.batch(); let n = 0;
+    (DB.users || []).forEach(u => { if (!u.fb) return; const role = u.role === 'admin' ? 'admin' : 'member', active = u.active !== false; if (u.fb.role !== role || u.fb.active !== active) { b.update(col.doc(u.fb.uid), { role, active }); u.fb.role = role; u.fb.active = active; n++; } });
+    const known = new Set((DB.users || []).filter(u => u.fb).map(u => u.fb.uid));
+    try { const all = await col.get(); all.forEach(d => { if (!known.has(d.id)) { b.delete(d.ref); n++; } }); } catch (e) { }
+    if (n) { await b.commit(); Store.changed(); }
+  },
+  /* màn hình đăng nhập gộp (máy chưa có phiên Firebase) */
+  loginForm(next, msg) {
+    GS.loading(false); $$('.gs-wrap,.au-wrap').forEach(n => n.remove()); document.body.classList.add('auth-locked');
+    const c = GS.cfg(), w = document.createElement('div'); w.className = 'gs-wrap au-wrap'; w.dataset.runtime = '1';
+    w.innerHTML = `<form class="au-box"><div class="au-logo">${ic('shield')}</div><h2>${esc(App.cfg.title)}</h2><p>Đăng nhập để tiếp tục</p>
+      ${msg ? `<div class="gs-err">${ic('alert')} ${esc(msg)}</div>` : ''}
+      <label class="field"><span>Tên đăng nhập</span><input class="inp" name="u" type="text" inputmode="tel" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username" autofocus placeholder="Số điện thoại"></label>
+      <label class="field"><span>Mật khẩu</span><input class="inp" name="p" type="password" autocomplete="current-password"></label>
+      <div class="au-err" data-err></div><button class="btn pri" type="submit">Đăng nhập</button>
+      <button class="btn" type="button" data-key style="width:100%;justify-content:center;margin-top:8px;font-size:12.5px;height:34px">Quản lý: vào bằng mã kết nối</button></form>`;
+    document.body.appendChild(w);
+    const err = w.querySelector('[data-err]'), f = w.querySelector('form'), btn = f.querySelector('[type=submit]');
+    w.querySelector('[data-key]').onclick = () => { w.remove(); GS.connect(next, { ...c, acct: false }, !!(DB._meta && DB._meta.shell)); };
+    f.onsubmit = async e => {
+      e.preventDefault(); const ph = normUser(f.u.value), pw = f.p.value; if (!ph || !pw) return;
+      btn.disabled = true; err.textContent = 'Đang đăng nhập…';
+      try {
+        await FBU.init(c); const d = await FBU.lookup(ph);
+        if (!d) throw Object.assign(new Error('Sai tên đăng nhập hoặc mật khẩu'), { soft: 1 });
+        try { await FB.app.auth().signInWithEmailAndPassword(FBU.email(ph, d.v), FBU.pw(ph, pw)); }
+        catch (x) { const k = x && x.code; if (['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/user-not-found'].includes(k)) throw Object.assign(new Error('Sai tên đăng nhập hoặc mật khẩu'), { soft: 1 }); throw FB.err(x); }
+        FB.sig = 'acct:' + ph;
+        let j; try { j = await GS.call({ action: 'get' }, c, 60000); } catch (x) { await FB.app.auth().signOut().catch(() => { }); throw new Error(x.code === 'permission-denied' || /từ chối/.test(x.message) ? 'Tài khoản này chưa được cấp quyền vào dữ liệu hoặc đã bị khóa. Liên hệ quản lý.' : x.message); }
+        if (!j.data) throw new Error('Firebase chưa có dữ liệu. Quản lý cần đưa dữ liệu lên trước.');
+        GS.apply(j.data, j.ver);
+        const u = (DB.users || []).find(x => normUser(x.user) === ph && x.active !== false);
+        if (!u) { await FB.app.auth().signOut().catch(() => { }); throw new Error('Tài khoản đã bị khóa hoặc không còn trong danh sách người dùng'); }
+        Auth.user = u; try { sessionStorage.setItem(Auth.sKey(), u.id); } catch (x) { } u.lastLogin = new Date().toISOString();
+        GS.on = true; GS.last = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        w.remove(); document.body.classList.remove('auth-locked');
+        next(); GS.after();
+        if (u.mustChange || !u.hash) setTimeout(() => Auth.changePass(true), 400);
+      } catch (x) { err.textContent = x.message; f.p.value = ''; btn.disabled = false; }
+    };
+  },
+  /* khởi động ở chế độ đăng nhập 1 lần */
+  async boot(next, c) {
+    GS.loading('Đang kết nối dữ liệu…');
+    try {
+      await FBU.init(c);
+      if (!FBU.cur()) return FBU.loginForm(next);
+      const j = await GS.call({ action: 'get' }, c, 60000);
+      if (!j.data) return FBU.loginForm(next, 'Firebase chưa có dữ liệu');
+      GS.apply(j.data, j.ver); GS.on = true; GS.last = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      GS.loading(false); next(); GS.after();
+    } catch (e) { await (FB.app && FB.app.auth().signOut().catch(() => { })); FBU.loginForm(next, /mạng|kết nối/.test(e.message) ? e.message : ''); }
+  },
+  /* phần cài đặt trong tab Lưu trữ Google */
+  html() {
+    const c = GS.cfg(), on = GS.on && c.mode === 'fb', U = (DB.users || []);
+    const st = u => u.active === false ? '<span class="badge b-gray">Đã khóa</span>' : u.fb && !u.fbStale ? '<span class="badge b-green">Đã cấp</span>' : u.fbStale ? '<span class="badge b-amber">Cần cấp lại</span>' : '<span class="badge b-amber">Chưa cấp</span>';
+    return `<div class="hub-h">5 · Đăng nhập 1 lần bằng tài khoản app</div>
+      <div class="hub-card">
+        <div class="hub-zs ${c.acct ? 'ok' : ''}" style="margin-bottom:10px">${ic(c.acct ? 'check' : 'lock')}<div><b>${c.acct ? 'Đang bật: nhân viên chỉ cần đăng nhập app' : 'Đang tắt: máy mới phải nhập mã kết nối'}</b><small>${c.acct ? 'Số điện thoại + mật khẩu app cũng là chìa khóa vào dữ liệu' : 'Bật để bỏ bước nhập email và mã kết nối'}</small></div></div>
+        <p class="hub-p">Mỗi tài khoản cần được <b>cấp</b> 1 lần. Người nào đăng nhập app trên máy quản lý (đang vào bằng mã kết nối) sẽ <b>tự được cấp</b>. Hoặc bấm <b>Cấp</b> để đặt mật khẩu tạm cho họ.</p>
+        <div class="fbu-l">${U.map(u => `<div class="fbu-r"><div><b>${esc(u.ten || u.user)}</b><small>${esc(u.user)} · ${esc((DB.roles[u.role] || {}).name || u.role)}</small></div>${st(u)}${u.active !== false ? `<button class="btn sm" data-g="fbuGive" data-id="${u.id}" ${on ? '' : 'disabled'}>${u.fb ? 'Cấp lại' : 'Cấp'}</button>` : ''}</div>`).join('')}</div>
+        <div class="hub-btns">${c.acct ? `<button class="btn danger sm" data-g="fbuOff">Tắt đăng nhập 1 lần</button>` : `<button class="btn pri" data-g="fbuOn" ${on ? '' : 'disabled'}>${ic('check')} Bật đăng nhập 1 lần</button>`}</div>
+        <p class="hub-p" style="margin-top:8px">Sau khi bật: dán lại <b>Rules ở mục 2</b> (đã có thêm phần tài khoản) và <b>tải lại index.html cho GitHub</b> ở mục 4.</p>
+      </div>`;
+  },
+  async act(a, b) {
+    const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
+    if (a === 'fbuGive') return busy(async () => {
+      const u = (DB.users || []).find(x => x.id === b.dataset.id); if (!u) return;
+      if (!(await FBU.isAdmin())) throw new Error('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin để cấp');
+      const pw = await new Promise(ok => Form.open({ title: (u.fb ? 'Cấp lại' : 'Cấp') + ' tài khoản: ' + esc(u.user), width: 420, saveText: 'Cấp tài khoản', value: { pw: '' }, fields: [{ key: 'pw', label: 'Mật khẩu tạm cho ' + esc(u.ten || u.user), required: true, full: true, hint: 'Từ 6 ký tự. Người dùng đăng nhập bằng mật khẩu này rồi app bắt đổi mật khẩu mới.' }], onSave: v => { if (!v.pw || v.pw.length < 6) { toast('Mật khẩu tạm tối thiểu 6 ký tự', 'err'); return false; } ok(v.pw); }, onClose: () => ok(null) }));
+      if (!pw) return;
+      await Auth.setPass0(u, pw); u.mustChange = true; await FBU.provision(u, pw); Store.changed();
+      toast(`Đã cấp tài khoản cho ${esc(u.ten || u.user)}. Báo họ đăng nhập bằng số ${esc(u.user)} và mật khẩu tạm.`, 'ok', 8000); HUB.setTab('gdata');
+    });
+    if (a === 'fbuOn') return busy(async () => {
+      if (!(await FBU.isAdmin())) throw new Error('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin');
+      const me = Auth.user; if (me && !me.fb) {
+        const pw = await new Promise(ok => Form.open({ title: 'Xác nhận mật khẩu của bạn', width: 420, saveText: 'Xác nhận', value: { pw: '' }, fields: [{ key: 'pw', label: 'Mật khẩu đăng nhập app của ' + esc(me.user), type: 'password', required: true, full: true, hint: 'Để tạo tài khoản dữ liệu cho chính bạn' }], onSave: v => { ok(v.pw); }, onClose: () => ok(null) }));
+        if (!pw) return; if (!(await Auth.check(me, pw))) throw new Error('Mật khẩu không đúng');
+        await FBU.provision(me, pw);
+      }
+      DB.settings.gsync = { ...(DB.settings.gsync || {}), acct: true }; GS.saveCfg({ ...GS.local(), acct: true }); Store.changed();
+      toast('Đã bật đăng nhập 1 lần. Nhớ dán lại Rules (mục 2) và tải lại index.html cho GitHub (mục 4).', 'ok', 9000); HUB.setTab('gdata');
+    });
+    if (a === 'fbuOff') { if (!await Modal.confirm('Tắt đăng nhập 1 lần? Máy mới sẽ phải nhập email và mã kết nối như trước.', { ok: 'Tắt', danger: true })) return; DB.settings.gsync = { ...(DB.settings.gsync || {}), acct: false }; GS.saveCfg({ ...GS.local(), acct: false }); Store.changed(); HUB.setTab('gdata'); }
+  }
+};
+/* ---- nối vào các phần có sẵn ---- */
+{
+  GS.local = () => { try { return JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; } catch (e) { return {}; } };
+  const cfg1 = GS.cfg; GS.cfg = function () { const c = cfg1.call(GS); if (c.mode !== 'fb') return c; const l = GS.local(), g = (DB && DB.settings && DB.settings.gsync) || {}; return { ...c, acct: l.acct != null ? !!l.acct : !!g.acct }; };
+  const ok1 = GS.ok; GS.ok = c => c && c.mode === 'fb' && c.acct && !(c.key) ? !!(c.fb && c.fb.apiKey && c.fb.projectId) : ok1(c);
+  const boot1 = GS.boot; GS.boot = function (next) { const c = GS.cfg(); if (c.mode === 'fb' && c.acct && !c.key && !c.off && c.fb && c.fb.projectId) return FBU.boot(next, c); return boot1.call(GS, next); };
+  const ready1 = FB.ready; FB.ready = async function (c) { if (c && c.mode === 'fb' && c.acct && !c.key) { await FBU.init(c); if (!FBU.cur()) { const e = new Error('Cần đăng nhập lại'); e.code = 'need-login'; throw e; } return FB.db; } return ready1.call(FB, c); };
+  const ser = Store.serialize; if (ser) Store.serialize = function () { if (DB && DB._meta && DB._meta.shell && DB.settings && DB.settings.gsync) { const c = GS.cfg(); if (c.mode === 'fb') DB.settings.gsync.acct = !!c.acct; } return ser.apply(this, arguments); };
+  Auth.setPass0 = Auth.setPass;
+  Auth.setPass = async function (u, pw) { await Auth.setPass0(u, pw); FBU.onPass(u, pw); };
+  const chk = Auth.check; Auth.check = async function (u, pw) { const r = await chk.call(Auth, u, pw); if (r && !Auth.user) setTimeout(() => FBU.afterLogin(u, pw), 50); return r; };
+  const out = Auth.logout; Auth.logout = function () { if (FBU.acct() && !GS.cfg().key) { try { FB.app && FB.app.auth().signOut(); } catch (e) { } FB.sig = ''; } return out.apply(Auth, arguments); };
+  let st; const ch = Store.changed; Store.changed = function () { const r = ch.apply(this, arguments); clearTimeout(st); st = setTimeout(() => FBU.syncAcl().catch(() => { }), 4000); return r; };
+  const d0 = GS.draw; GS.draw = function (body) { d0.call(GS, body); if ((HUB.gsMode || GS.cfg().mode || 'fb') === 'fb' && body.querySelector('[data-g="fbshell"]')) { const h4 = [...body.querySelectorAll('.hub-h')].pop(); const tail = body.querySelector('[data-g="off"]'); const at = tail ? tail.closest('.hub-btns') : null; at ? at.insertAdjacentHTML('beforebegin', FBU.html()) : body.insertAdjacentHTML('beforeend', FBU.html()); } };
+  const a0 = GS.act; GS.act = function (a, b) { if (/^fbu/.test(a)) return FBU.act(a, b); return a0.call(GS, a, b); };
+  FB.rules = email => `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner() { return request.auth != null && request.auth.token.email == '${email || 'email-quan-ly@gmail.com'}'; }
+    function acl() { return get(/databases/$(database)/documents/nhaxe_acl/$(request.auth.uid)).data; }
+    function member() { return request.auth != null && exists(/databases/$(database)/documents/nhaxe_acl/$(request.auth.uid)) && acl().active == true; }
+    function admin() { return owner() || (member() && acl().role == 'admin'); }
+    match /nhaxe/{doc} { allow read, write: if owner() || member(); }
+    match /nhaxe_acl/{uid} { allow read: if request.auth != null && (request.auth.uid == uid || admin()); allow write: if admin(); }
+    match /nhaxe_dir/{id} { allow get: if true; allow list: if false; allow write: if admin(); }
+  }
+}`;
+}
+addCSS(`#hub ~ .modal-wrap{z-index:170}
+.fbu-l{display:flex;flex-direction:column;gap:6px;margin:6px 0 4px;max-height:280px;overflow:auto}.fbu-r{display:flex;align-items:center;gap:8px;border:1px solid #eef2f7;border-radius:10px;padding:7px 9px}.fbu-r>div{flex:1;min-width:0}.fbu-r b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fbu-r small{color:#64748b;font-size:11.5px}`);
 
 /* nối vào bộ lưu sẵn có */
 { const ch = Store.changed, sv = Store.save, stt = Store.status;
@@ -7392,13 +7589,92 @@ addCSS(`.gs-load{position:fixed;inset:0;z-index:600;background:linear-gradient(1
 .gs-box p{line-height:1.5}.gs-err{display:flex;gap:8px;align-items:flex-start;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 11px;font-size:12.5px;margin-bottom:12px;text-align:left}.gs-err svg{width:16px;height:16px;flex:none;margin-top:1px}
 .save-state.err i{background:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.25)!important}`);
 
+/* ===== Bố cục thanh trên cùng & nút bấm: gọn, ưu tiên nút chính, phần còn lại vào "Thêm" ===== */
+const TB = {
+  mob: () => window.innerWidth <= 900,
+  score(b) { const a = b.dataset.act || ''; if (b.classList.contains('pri')) return 0; if (a === 'viewPrint') return 4; if (a === 'viewExcel') return 3; if (b.classList.contains('danger')) return 3; return 1; },
+  close() { $$('.tb-more.open').forEach(m => { m.classList.remove('open'); if (m._menu && m._menu.parentNode !== m) { m._menu.classList.remove('tb-sheet'); m.appendChild(m._menu); } }); document.body.classList.remove('tb-open'); },
+  layout() {
+    const t = $('#vTools'); if (!t) return;
+    // trả các nút đã gom về chỗ cũ (khi đổi cỡ màn hình)
+    $$('.tb-more', t).forEach(w => { [...w.querySelectorAll('.tb-menu > *')].forEach(b => { b.classList.remove('tb-mi'); t.appendChild(b); }); w.remove(); });
+    const kids = [...t.children]; kids.forEach((k, i) => { if (k.dataset.tbi == null) k.dataset.tbi = i; });
+    kids.sort((a, b) => a.dataset.tbi - b.dataset.tbi).forEach(k => t.appendChild(k));
+    const btns = kids.filter(k => k.matches('button.btn, a.btn') && k.style.display !== 'none');
+    const lim = TB.mob() ? 2 : 4;
+    if (TB.mob()) { const first = t.querySelector('button.btn, a.btn'); btns.filter(b => b.classList.contains('pri')).reverse().forEach(b => { if (first && b !== first) t.insertBefore(b, t.querySelector('button.btn, a.btn')); }); }
+    if (btns.length - lim < 2) return;
+    const keep = new Set([...btns].sort((a, b) => TB.score(a) - TB.score(b) || a.dataset.tbi - b.dataset.tbi).slice(0, lim));
+    const more = btns.filter(b => !keep.has(b)); if (!more.length) return;
+    const w = document.createElement('div'); w.className = 'tb-more';
+    w.innerHTML = `<button type="button" class="btn tb-mb" aria-haspopup="true">${ic('menu')} Thêm <b>${more.length}</b></button><div class="tb-menu" role="menu"><div class="tb-mh">Thao tác khác</div></div>`;
+    const menu = w.querySelector('.tb-menu');
+    more.forEach(b => { b.classList.add('tb-mi'); menu.appendChild(b); });
+    t.appendChild(w);
+    w._menu = menu;
+    w.querySelector('.tb-mb').onclick = e => { e.stopPropagation(); const on = !w.classList.contains('open'); TB.close(); if (on) { w.classList.add('open'); if (TB.mob()) { menu.classList.add('tb-sheet'); document.body.appendChild(menu); document.body.classList.add('tb-open'); } } };
+    menu.addEventListener('click', () => setTimeout(TB.close, 0));
+  },
+  mount() {
+    const r0 = App.render; App.render = function () { TB.close(); const x = r0.apply(this, arguments); try { TB.layout(); } catch (e) { } return x; };
+    document.addEventListener('click', e => { if (!e.target.closest('.tb-more, .tb-sheet')) TB.close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') TB.close(); });
+    let last = TB.mob(), tm; window.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (TB.mob() !== last) { last = TB.mob(); TB.layout(); } }, 150); });
+    if (!$('.tb-bg')) document.body.insertAdjacentHTML('beforeend', '<div class="tb-bg no-print" data-runtime="1"></div>');
+    $('.tb-bg').onclick = TB.close;
+    TB.layout();
+  }
+};
+addCSS(`/* --- thanh trên cùng: hàng 1 = tiêu đề + tài khoản, hàng 2 = nút của trang --- */
+.topbar{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"m t r" "m a a";column-gap:14px;row-gap:10px;align-items:center;padding:12px 24px!important;min-height:0!important}
+.topbar>.menu-btn{grid-area:m;align-self:start;margin-top:2px}
+.topbar>div:nth-child(2){grid-area:t;min-width:0}
+.topbar h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62ch}
+.topbar #vTools{grid-area:a;margin:0!important;justify-content:flex-start!important;gap:8px;flex-wrap:wrap}
+.topbar #vTools:empty{display:none}
+.topbar #tbRight{grid-area:r;margin-left:0;align-self:start}
+#vTools .btn{height:36px}
+/* nút "Thêm" và menu */
+.tb-more{position:relative;flex:none}
+.tb-mb b{font-size:11px;background:#e0f2fe;color:#0369a1;border-radius:99px;padding:1px 7px;margin-left:2px}
+.tb-menu{display:none;position:absolute;left:0;top:calc(100% + 6px);min-width:230px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 40px rgba(2,32,71,.18);padding:6px;z-index:70}
+.tb-more.open .tb-menu{display:block;animation:pop .14s}
+.tb-mh{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:6px 10px 4px}
+.tb-menu .tb-mi{display:flex!important;width:100%;justify-content:flex-start;height:40px!important;border:0!important;background:none!important;color:#0f172a!important;box-shadow:none!important;border-radius:9px;padding:0 10px;font-weight:600}
+.tb-menu .tb-mi:hover{background:#f0f9ff!important;color:#0369a1!important}
+.tb-menu .tb-mi.danger{color:#dc2626!important}
+.tb-menu .tb-mi svg{color:#64748b}
+.tb-bg{display:none}
+/* menu bên: gom nhóm rõ ràng */
+.nav-group{margin-top:18px}
+@media(max-width:900px){
+  .topbar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"t r" "a a";padding:10px 12px 8px!important;row-gap:8px}
+  .topbar>.menu-btn{display:none!important}
+  .topbar h1{font-size:18px}
+  .topbar #vTools{position:static!important;background:none!important;border:0!important;padding:0!important;flex-wrap:wrap!important;overflow:visible!important;width:auto;gap:6px!important}
+  .topbar #vTools::-webkit-scrollbar{display:none}
+  .topbar #vTools>*{flex:none}
+  #vTools .btn{height:38px;padding:0 12px}
+  .content{padding:12px 12px 88px!important}
+  .tb-menu.tb-sheet{display:block;position:fixed;left:8px;right:8px;top:auto;bottom:calc(68px + env(safe-area-inset-bottom));min-width:0;border-radius:18px;padding:8px;max-height:60vh;overflow:auto;z-index:70;animation:pop .16s}
+  .tb-menu .tb-mi{height:48px!important;font-size:15px}
+  body.tb-open .topbar{z-index:65!important}body.tb-open .bot-fab{display:none!important}
+  body.tb-open .tb-bg{display:block;position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:60}
+}
+@media print{.tb-more,.tb-bg{display:none!important}}`);
+
 /* ---------- Khởi động ---------- */
 const CFG = {
-  id: 'luong', title: 'Nhà Xe Thịnh Phát', tagline: '', icon: 'bus', fileName: 'Cham cong va Tinh luong.html', theme: THEME,
+  id: 'luong', title: 'Nhà Xe Thịnh Phát', tagline: '', icon: 'bus', fileName: 'Nha Xe Thinh Phat.html', theme: THEME,
   palette: ['#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#64748b'],
   sample: sampleDB, empty: emptyDB, migrate: db => { migrate(db); db.vehicles = db.vehicles || []; db.giochay = db.giochay || []; db.banggia = db.banggia || []; db.suachua = db.suachua || []; db.nhienlieu = db.nhienlieu || []; db.lylich = db.lylich || []; db.kmxe = db.kmxe || []; db.lichchay = db.lichchay || []; db.datve = db.datve || []; db.hdvc = db.hdvc || []; Auth.migrate(db); },
   counts: () => [['Nhân viên', DB.employees.length], ['Phương tiện', DB.vehicles.length], ['Giờ chạy', DB.giochay.length], ['Bảng giá vé', (DB.banggia || []).length], ['Phiếu sửa chữa', (DB.suachua || []).length], ['Phiếu nhiên liệu', (DB.nhienlieu || []).length], ['Ghi nhận lý lịch', (DB.lylich || []).length], ['Dòng km xe', (DB.kmxe || []).length], ['Lịch chạy', DB.lichchay.length], ['Vé đã đặt', DB.datve.length], ['Hợp đồng vận chuyển', DB.hdvc.length], ['Tháng có chấm công', Object.keys(DB.cham).length]],
-  nav: [{ group: 'Tổng quan', items: ['dashboard'] }, { group: 'Nghiệp vụ', items: ['nhanvien', 'phuongtien', 'suachua', 'nhienlieu', 'giochay', 'banggia', 'lichchay', 'dieuhanh', 'hdvc', 'hopdong', 'chamcong', 'bangluong', 'thue'] }, { group: 'Thiết lập', items: ['caidat', 'users'] }],
+  nav: [{ group: 'Tổng quan', items: ['dashboard'] },
+    { group: 'Vận hành', items: ['dieuhanh', 'lichchay', 'giochay', 'banggia', 'hdvc'] },
+    { group: 'Xe & nhiên liệu', items: ['phuongtien', 'nhienlieu', 'suachua'] },
+    { group: 'Nhân sự & lương', items: ['nhanvien', 'chamcong', 'bangluong', 'hopdong', 'thue'] },
+    { group: 'Thiết lập', items: ['caidat', 'users'] }],
   views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: vGC, banggia: vBG, suachua: vSC, nhienlieu: vNL, lylich: vLL, kmxe: vKM, lichchay: vLC, dieuhanh: vDH, hdvc: vVC, hopdong: vHD, chamcong: vCham, bangluong: vLuong, thue: vThue, caidat: vSet, users: vUsers }
 };
 const Shell = {
@@ -7871,7 +8147,7 @@ Object.assign(ACT, { hubOpen: () => HUB.open() });
 
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
-  App.init(CFG); Auth.chip(); Shell.setup(); Lock.init(); BOT.mount(); HUB.mount(); LOGO.mount(); NLMK.init(); setTimeout(() => { try { GDN.check(); } catch (e) { } }, 1500);
+  App.init(CFG); Auth.chip(); Shell.setup(); Lock.init(); BOT.mount(); HUB.mount(); LOGO.mount(); TB.mount(); NLMK.init(); setTimeout(() => { try { GDN.check(); } catch (e) { } }, 1500);
   lcAutoRun(); setInterval(() => lcAutoRun(), 60000);
   new MutationObserver(() => Auth.btns()).observe($('#app'), { childList: true, subtree: true });
   Auth.apply(); Store.status();
