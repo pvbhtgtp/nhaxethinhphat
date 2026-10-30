@@ -2221,7 +2221,7 @@ const vCham = {
       ${(() => { const sel = vCham.sel(), s0 = UI.ccPbs; UI.ccPbs = []; const A = vCham.emps(); UI.ccPbs = s0; const cnt = p => A.filter(e => e.phongBan === p).length;
         return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('users')} Phòng ban</span><button class="${!sel.length ? 'on' : ''}" data-pbv="">Tất cả <b>${A.length}</b></button>${S().phongBan.filter(p => cnt(p) || sel.includes(p)).map(p => `<button class="${sel.includes(p) ? 'on' : ''}" data-pbv="${esc(p)}">${sel.includes(p) ? ic('check') : ''}${esc(p)} <b>${cnt(p)}</b></button>`).join('')}${sel.length ? `<span class="cc-pbn">Đang chọn ${sel.length} phòng ban · ${all.length} người</span>` : ''}</div>`; })()}
       ${(() => { const rk = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0, G = Object.keys(gAll).filter(g => !g.startsWith('~')).sort((a, b) => (MRT.rank(a) - MRT.rank(b)) || a.localeCompare(b, 'vi')); if (!G.length) return ''; const XC = MRT.list.map(m => ({ v: 'x:' + m.n, m, n: all.filter(e => vCham.grp(e, ym) === m.n && MRT.cross(e, ym)).length })).filter(x => x.n || gSel.includes(x.v));
-        return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('bus')} Nhóm tuyến</span><button class="${!gSel.length ? 'on' : ''}" data-grv="">Tất cả <b>${all.length}</b></button>${G.map(g => `<button class="${gSel.includes(g) ? 'on' : ''}" data-grv="${esc(g)}">${gSel.includes(g) ? ic('check') : ''}${esc(g.replace(/^~+/, ''))} <b>${gAll[g]}</b></button>`).join('')}${XC.length ? `<span class="cc-pbl" style="margin-left:6px">Chạy chéo</span>${XC.map(x => `<button class="cc-xb ${gSel.includes(x.v) ? 'on' : ''}" data-grv="${esc(x.v)}" title="Lái xe nhóm ${esc(x.m.n)} có chạy tuyến ${esc(x.m.o.n)} (cả chiều đi và về)">${gSel.includes(x.v) ? ic('check') : ''}${esc(x.m.s)} chạy qua ${esc(x.m.o.s)} <b>${x.n}</b></button>`).join('')}` : ''}${gSel.length ? `<span class="cc-pbn">Đang chọn ${gSel.length} nhóm · ${found.length} người</span>` : ''}</div>`; })()}
+        return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('bus')} Nhóm tuyến</span><button class="${!gSel.length ? 'on' : ''}" data-grv="">Tất cả <b>${all.length}</b></button>${G.map(g => `<button class="${gSel.includes(g) ? 'on' : ''}" data-grv="${esc(g)}">${gSel.includes(g) ? ic('check') : ''}${esc(g.replace(/^~+/, ''))} <b>${gAll[g]}</b></button>`).join('')}${XC.length ? `<span class="cc-pbl" style="margin-left:6px">Chạy chéo</span>${XC.map(x => `<button class="cc-xb ${gSel.includes(x.v) ? 'on' : ''}" data-grv="${esc(x.v)}" title="Lái xe nhóm ${esc(x.m.n)} có chạy tuyến ${esc(x.m.o.n)} (cả chiều đi và về)">${gSel.includes(x.v) ? ic('check') : ''}${esc(x.m.s)} chạy qua ${esc(x.m.o.s)} <b>${x.n}</b></button>`).join('')}` : ''}${gSel.length ? `<span class="cc-pbn">Đang chọn ${gSel.length} nhóm · ${found.length} người</span>` : ''}<button class="cc-rtp" data-act="rtpPrint" title="In bảng lái xe theo nhóm tuyến đang chọn (chưa chọn = cả 2 nhóm)">${ic('printer')} In bảng lái xe theo tuyến</button><button class="cc-rtp" data-act="rtpExcel" style="margin-left:0">${ic('sheet')} Excel</button></div>`; })()}
       ${(() => { const R = tuyenRieng(ym); if (!R.length) return ''; const ed = !Auth.user || Auth.can('chamcong', 'edit') || Auth.can('caidat', 'edit'), G = {};
         R.forEach(t => { (G[tuyenNhom(t)] = G[tuyenNhom(t)] || []).push(t); });
         return `<details class="cc-ct no-print" ${UI.ccCtOpen ? 'open' : ''}><summary>${ic('bus')} Công lái xe theo tuyến <span>${R.length} tuyến · ${Object.keys(G).length} nhóm · bấm để chỉnh công/chuyến</span></summary><div class="cc-ctb">${Object.entries(G).map(([g, L]) => `<div class="cc-ctg"><b>${ic('bus')} ${esc(g)}</b>${L.map(t => `<label><span>${esc(t)}</span><input class="inp sm num" type="number" min="0" step="0.25" data-ct="${esc(t)}" value="${congTuyen(t)}" ${ed ? '' : 'disabled'}><em>công / chuyến</em></label>`).join('')}</div>`).join('')}<p class="small muted">Mỗi tuyến (chiều đi, chiều về) chấm công riêng: số công trong ô ngày = số chuyến của từng tuyến trong Lịch chạy × công/chuyến của tuyến đó. Danh sách lái xe được gom theo nhóm tuyến.</p></div></details>`; })()}
@@ -8970,7 +8970,7 @@ const PRN = {
     Print.now(body, { title: o.title || 'Tài liệu', page: '@page{size:A4 portrait;margin:15mm}' });
   };
 }
-addCSS(`@media print{html,body,body.is-printing{padding:0!important;margin:0!important;min-height:0!important;height:auto!important}#print-root{padding:0!important;margin:0!important}#btmNav,.top-actions{display:none!important}}`);
+addCSS(`@media print{html,body,body.is-printing{padding:0!important;margin:0!important;min-height:0!important;height:auto!important;background:#fff!important;background-image:none!important}#print-root{padding:0!important;margin:0!important}#btmNav,.top-actions{display:none!important}}`);
 addCSS(`@media print{#print-root .k80 .t8,#print-root .k80 .r80{width:auto!important;max-width:none!important;margin:0!important;padding-left:0!important;padding-right:0!important}#print-root .k80 .t8,#print-root .k80 .r80{break-after:auto;page-break-after:auto}}
 .k80 .t8,.k80 .r80{width:auto!important;max-width:none!important;margin:0!important}`);
 addCSS(`@media print{#print-root .pd-doc{break-after:page;page-break-after:always}#print-root .pd-doc:last-child{break-after:auto;page-break-after:auto}#print-root .pd-doc .pagebreak{break-after:page;page-break-after:always;border:0;margin:0}#print-root .hd p,#print-root .hd tr{break-inside:avoid}}`);
@@ -9121,6 +9121,45 @@ async function aiSampler() {
   const ch2 = Auth.chip; Auth.chip = function () { const r = ch2.apply(this, arguments); const box = $('#auMe .au-dd'); if (box && lcAdmin() && !box.querySelector('[data-au=ai]')) { const out = box.querySelector('[data-au=out]'); out && out.insertAdjacentHTML('beforebegin', `<button data-au="ai">${ic('sparkle')} AI đọc ảnh${AIX.ok() ? ' ✓' : ''}</button>`); } return r; };
   document.addEventListener('click', e => { const b = e.target.closest('[data-au=ai]'); if (!b) return; e.stopImmediatePropagation(); const m = $('#auMe'); m && m.classList.remove('open'); AIX.setup(); }, true);
 }
+
+/* ===== Bảng lái xe theo nhóm tuyến (để in / xuất Excel) =====
+   Biên Hòa ⇄ Vũng Tàu: tuyến có chứa "Biên Hòa" và "Vũng Tàu" (cả 2 chiều)
+   Hố Nai ⇄ Vũng Tàu:  tuyến có chứa "Hố Nai" và "Vũng Tàu" (cả 2 chiều) */
+const RTP = {
+  // chiều đi = tuyến bắt đầu từ Biên Hòa / Hố Nai; chiều về = bắt đầu từ Vũng Tàu
+  dir(t) { const k = MRT.nm(t), v = k.indexOf('vung tau'), o = Math.max(k.indexOf('bien hoa'), k.indexOf('ho nai')); return v >= 0 && o >= 0 && v < o ? 've' : 'di'; },
+  rows(m, ym) {
+    const by = {};
+    (DB.lichchay || []).forEach(l => {
+      if (!l.laiXe || !String(l.ngay).startsWith(ym) || !m.re.test(MRT.nm(l.tuyen))) return;
+      const e = DB.employees.find(x => x.id === l.laiXe); if (!e) return;
+      const o = by[e.id] = by[e.id] || { e, di: 0, ve: 0, cong: 0, days: new Set(), xe: new Set() };
+      const n = +l.soChuyen || 1; o[RTP.dir(l.tuyen)] += n; o.cong += congTuyen(l.tuyen) * n; o.days.add(+String(l.ngay).slice(8, 10));
+      const v = (DB.vehicles || []).find(x => x.id === l.xeId); if (v && v.bks) o.xe.add(v.bks);
+    });
+    return Object.values(by).map(o => { const mn = MRT.main(o.e, ym); return { ...o, tong: o.di + o.ve, nhom: mn ? mn.s : '', cheo: !!mn && mn.k !== m.k }; })
+      .sort((a, b) => (a.cheo - b.cheo) || (b.tong - a.tong) || String(a.e.ten).localeCompare(String(b.e.ten), 'vi'));
+  },
+  pick() { const gs = UI.ccGrps || [], L = MRT.list.filter(m => gs.includes(m.n) || gs.includes('x:' + m.o.n)); return L.length ? L : MRT.list; },
+  print() {
+    const ym = UI.m, L = RTP.pick(), num = x => F.num ? F.num(x) : x;
+    const sec = m => { const R = RTP.rows(m, ym); if (!R.length) return `<h3 class="rtp-h">${esc(m.n)}</h3><p class="pr-note">Không có lái xe nào chạy tuyến này trong ${F.month(ym)}.</p>`;
+      return `<h3 class="rtp-h">${esc(m.n)} <small>(${R.length} lái xe · ${num(R.reduce((a, r) => a + r.tong, 0))} chuyến)</small></h3>
+      <table><thead><tr><th style="width:34px">STT</th><th>Mã NV</th><th>Họ và tên</th><th>Số điện thoại</th><th>Nhóm chính</th><th>Chuyến đi</th><th>Chuyến về</th><th>Tổng chuyến</th><th>Tổng công</th><th>Xe đã chạy</th><th>Ngày chạy</th></tr></thead><tbody>
+      ${R.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.e.ma || '')}</td><td><b>${esc(r.e.ten || '')}</b>${r.cheo ? ' <i>(chạy chéo)</i>' : ''}</td><td>${esc(r.e.sdt || '')}</td><td class="c">${esc(r.nhom)}</td><td class="r">${num(r.di)}</td><td class="r">${num(r.ve)}</td><td class="r"><b>${num(r.tong)}</b></td><td class="r">${num(r.cong)}</td><td>${esc([...r.xe].join(', '))}</td><td>${[...r.days].sort((a, b) => a - b).join(', ')}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="5">Cộng</td><td class="r">${num(R.reduce((a, r) => a + r.di, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.ve, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.tong, 0))}</td><td class="r">${num(R.reduce((a, r) => a + r.cong, 0))}</td><td colspan="2"></td></tr></tfoot></table>`; };
+    Print.run(`<div class="pr">${Print.head()}<h2>Bảng lái xe chạy theo tuyến</h2><div class="pr-sub">${F.month(ym)} · ${L.map(m => esc(m.n)).join(' · ')}</div>${L.map(sec).join('')}<div class="pr-note">Chuyến đi: tuyến bắt đầu từ Biên Hòa / Hố Nai. Chuyến về: tuyến bắt đầu từ Vũng Tàu. "Chạy chéo": lái xe thuộc nhóm tuyến khác có chạy tuyến này.</div>${Print.signs(['Người lập biểu', 'Đội trưởng điều hành', 'Giám đốc'])}</div>`, { landscape: true, title: 'Lai xe theo tuyen ' + ym });
+  },
+  excel() {
+    const ym = UI.m, L = RTP.pick();
+    const cols = [{ key: 'stt', label: 'STT', type: 'int' }, { key: 'ma', label: 'Mã NV' }, { key: 'ten', label: 'Họ và tên', width: 26 }, { key: 'sdt', label: 'Số điện thoại' }, { key: 'nhom', label: 'Nhóm chính' }, { key: 'cheo', label: 'Chạy chéo' }, { key: 'di', label: 'Chuyến đi', type: 'num', sum: true }, { key: 've', label: 'Chuyến về', type: 'num', sum: true }, { key: 'tong', label: 'Tổng chuyến', type: 'num', sum: true }, { key: 'cong', label: 'Tổng công', type: 'num', sum: true }, { key: 'xe', label: 'Xe đã chạy', width: 22 }, { key: 'days', label: 'Ngày chạy', width: 40 }];
+    XLSX.save('Lai xe theo tuyen ' + ym, L.map(m => ({ name: m.s + '-VT', title: 'LÁI XE CHẠY TUYẾN ' + m.n + ' · ' + F.month(ym).toUpperCase(), subtitles: [companyLine(), 'Ngày xuất: ' + F.date(D.today())], columns: cols, totals: true,
+      rows: RTP.rows(m, ym).map((r, i) => ({ stt: i + 1, ma: r.e.ma || '', ten: r.e.ten || '', sdt: r.e.sdt || '', nhom: r.nhom, cheo: r.cheo ? 'Có' : '', di: r.di, ve: r.ve, tong: r.tong, cong: r.cong, xe: [...r.xe].join(', '), days: [...r.days].sort((a, b) => a - b).join(', ') })) })));
+  }
+};
+addCSS(`.rtp-h{margin:16px 0 6px;font-size:14px;color:#111}.rtp-h small{font-weight:500;color:#555;font-size:12px}.cc-pb .cc-rtp{margin-left:auto;background:#fff;border-style:solid}`);
+Object.assign(ACT, { rtpPrint: () => RTP.print(), rtpExcel: () => RTP.excel() });
+Object.assign(Auth.ACT_PERM, { rtpPrint: ['chamcong', 'view'], rtpExcel: ['chamcong', 'view'] });
 
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
