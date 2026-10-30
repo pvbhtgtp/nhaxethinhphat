@@ -7431,7 +7431,11 @@ service cloud.firestore {
     if (a === 'up' && GS.cfg().mode === 'fb') return busy(async () => { if (!await Modal.confirm('Ghi dữ liệu trên máy này lên Firebase? Dữ liệu trên Firebase sẽ được thay bằng bản này.', { ok: 'Đưa lên Firebase' })) return; await GS.push(true); if (!GS.err) toast('Đã đưa dữ liệu lên Firebase', 'ok'); HUB.setTab('gdata'); });
     if (a === 'down' && GS.cfg().mode === 'fb') return busy(async () => { await GS.pull(false); toast('Đã tải dữ liệu mới nhất từ Firebase', 'ok'); HUB.setTab('gdata'); });
     if (a === 'off' && GS.cfg().mode === 'fb') { if (!await Modal.confirm('Ngắt kết nối Firebase trên máy này? Lần sau mở app sẽ dùng dữ liệu trong file.', { ok: 'Ngắt kết nối', danger: true })) return; GS.saveCfg({ ...local(), key: '', off: true }); GS.on = false; clearInterval(GS.poll); if (FB.unsub) { FB.unsub(); FB.unsub = null; } try { FB.app && FB.app.auth().signOut(); } catch (e) { } FB.sig = ''; Store.status(); HUB.setTab('gdata'); return toast('Đã ngắt kết nối Firebase trên máy này', 'ok'); }
-    if (a === 'save' || a === 'test') { const l = local(); if (l.mode === 'fb') GS.saveCfg({ ...l, mode: 'gas' }); }
+    if (a === 'save') {
+      const l = local(), u = v('url').trim();
+      if (!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(u)) return toast('Địa chỉ phải là link script.google.com/…/exec. Nếu đang dùng Firebase, bấm nút "Firebase" ở dòng Nơi lưu dữ liệu.', 'err', 9000);
+      if (l.mode === 'fb' || GS.cfg().mode === 'fb') { if (!await Modal.confirm('Chuyển <b>nơi lưu chính</b> của máy này từ Firebase sang Apps Script + Drive?<br><span class="small muted">Nếu chỉ muốn sao lưu sang Drive, bấm Hủy và dùng mục "Sao lưu tự động sang Google Drive" ở cuối tab Firebase.</span>', { ok: 'Chuyển sang Drive', danger: true, title: 'Đổi nơi lưu dữ liệu' })) return; GS.saveCfg({ ...l, mode: 'gas' }); }
+    }
     return act0.call(GS, a, b);
   };
   const st0 = GS.statusText; GS.statusText = function () { const r = st0.call(GS); if (GS.cfg().mode === 'fb') r[1] = r[1].replace('Google', 'Firebase'); return r; };
@@ -8204,6 +8208,8 @@ addCSS(`.hub-btn{position:relative;display:inline-flex;align-items:center;gap:7p
 @media(max-width:900px){.hub-btn span{display:none}.hub-btn{padding:0 10px;margin-left:auto}.hub-pn{width:100%}.hub-kp{grid-template-columns:repeat(3,minmax(0,1fr))}.hub-sr input{font-size:16px}}`);
 Object.assign(ACT, { hubOpen: () => HUB.open() });
 
+/* Tự sửa: máy bị chuyển nhầm sang chế độ Drive trong khi vẫn còn cấu hình Firebase */
+try { const l = JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; if (l.mode === 'gas' && l.fb && l.fb.projectId && !/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec/.test(l.url || '')) { l.mode = 'fb'; delete l.url; localStorage.setItem(GS.K, JSON.stringify(l)); } } catch (e) { }
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
   App.init(CFG); Auth.chip(); Shell.setup(); Lock.init(); BOT.mount(); HUB.mount(); LOGO.mount(); TB.mount(); NLMK.init(); setTimeout(() => { try { GDN.check(); } catch (e) { } }, 1500);
