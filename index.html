@@ -4255,11 +4255,11 @@ const Lock = {
 const lockMsg = (g, o) => 'Ghế ' + g + ' đang được ' + ((o && o.name) || 'nhân viên khác') + ' thao tác';
 function dvSetB(b) { const o = DB.datve.find(x => x.id === DV.selB); if (o) dvGrp(o).forEach(x => Lock.release(x.chuyen, x.ghe)); DV.selB = b ? b.id : null; return b ? Promise.all(dvGrp(b).map(x => Lock.take(x.chuyen, x.ghe))).then(r => r.every(Boolean)) : Promise.resolve(true); }
 const DV = { ngay: null, trip: null, tab: 'ghe', tuyen: '', multi: false, sel: [], selTrip: null };
-const dvAllDay = () => DB.lichchay.filter(l => l.ngay === lcDay());
+const dvAllDay = () => DB.lichchay.filter(l => l.ngay === lcDay() && !l.khoa);   // chuyến khóa ở Điều hành không bán vé
 const dvRoutes = () => [...new Set(dvAllDay().map(l => l.tuyen))].sort(routeCmp);
 const dvRoute = () => { const r = dvRoutes(); return r.includes(DV.tuyen) ? DV.tuyen : (r[0] || ''); };
 const dvDay = () => lcDay();
-const dvTrips = () => DB.lichchay.filter(l => l.ngay === dvDay() && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.gio).localeCompare(String(b.gio)) || String(a.tuyen).localeCompare(String(b.tuyen), 'vi'));
+const dvTrips = () => DB.lichchay.filter(l => l.ngay === dvDay() && !l.khoa && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.gio).localeCompare(String(b.gio)) || String(a.tuyen).localeCompare(String(b.tuyen), 'vi'));
 const dvSO = l => {
   const v = DB.vehicles.find(x => x.id === l.xeId), cap = v && +v.soCho > 2 ? +v.soCho - 2 : 14;
   const hs = v && Array.isArray(v.soDoLs) ? v.soDoLs : null;
@@ -5566,10 +5566,11 @@ Object.assign(ACT, {
     const t = lcById(d.id); if (!t) return; if (!Auth.guard('lichchay', 'edit')) return; if (!lcCan(t)) return lcLockMsg();
     if (t.khoa) { if (await Modal.confirm(`Bạn có muốn <b>mở khóa</b> không?<br><span class="muted small">Chuyến ${esc(t.gio)} · ${esc(t.tuyen)}. Mọi người sẽ nhìn thấy tên lái xe.</span>`, { ok: 'Mở khóa', title: 'Mở khóa chuyến' })) { t.khoa = false; App.changed(); toast('Đã mở khóa, mọi người đều thấy tên lái xe', 'ok'); } return; }
     if (!t.laiXe) return toast('Chuyến này chưa gán lái xe', 'err');
-    if (await Modal.confirm(`Bạn có muốn <b>khóa</b> không?<br><span class="muted small">Chuyến ${esc(t.gio)} · ${esc(t.tuyen)}. Tên lái xe sẽ bị ẩn với mọi người, chỉ Admin nhìn thấy và mở khóa được.</span>`, { ok: 'Khóa', danger: true, title: 'Khóa chuyến' })) { t.khoa = true; App.changed(); toast('Đã khóa chuyến, chỉ Admin thấy tên lái xe', 'ok'); }
+    const nb = dvBook(t.id).length;
+    if (await Modal.confirm(`Bạn có muốn <b>khóa</b> không?<br><span class="muted small">Chuyến ${esc(t.gio)} · ${esc(t.tuyen)}. Tên lái xe sẽ bị ẩn với mọi người, chỉ Admin nhìn thấy và mở khóa được. Chuyến khóa sẽ <b>không hiện bên Đặt vé</b> (ngưng bán vé).</span>${nb ? `<div style="margin-top:8px;color:#b45309;font-weight:600">Chuyến đang có ${nb} vé khách: sau khi khóa sẽ không xem, sửa được các vé này ở Đặt vé cho tới khi mở khóa. Nên dùng "Dời cả chuyến" trước nếu cần.</div>` : ''}`, { ok: 'Khóa', danger: true, title: 'Khóa chuyến' })) { t.khoa = true; App.changed(); toast('Đã khóa chuyến, chỉ Admin thấy tên lái xe', 'ok'); }
   },
   dhChip: d => { const t = lcById(d.id); if (!t) return; if (Auth.can('lichchay', 'edit') && lcCan(t)) lcQuick(t, true); else ACT.dhGo(d); },
-  dhGo: d => { dhOpen = false; const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; LC.ngay = t.ngay; DV.trip = t.id; DV.tab = 'ghe'; DV.tuyen = t.tuyen; App.go('lichchay'); },
+  dhGo: d => { dhOpen = false; const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; if (t.khoa) return toast('Chuyến đang khóa nên không hiện bên Đặt vé. Mở khóa chuyến (biểu tượng ổ khóa) để bán vé lại', 'err', 6000); LC.ngay = t.ngay; DV.trip = t.id; DV.tab = 'ghe'; DV.tuyen = t.tuyen; App.go('lichchay'); },
   dhAddGio: d => {
     if (!Auth.guard('lichchay', 'add')) return;
     const day = lcDay(), T = DB.lichchay.filter(l => l.ngay === day), allG = [...new Set(T.map(l => dhGrp(l.tuyen)))], sel = dhSel.filter(g => allG.includes(g)), cur = sel.length ? sel : (allG[0] ? [allG[0]] : []);
@@ -9002,8 +9003,14 @@ const AIX = {
   },
   async call(model, body, key, signal) {
     let r;
-    try { r = await fetch(`${AIX.URL}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal }); }
-    catch (e) { if (e && e.name === 'AbortError') throw AIX.err('cancelled'); throw AIX.err('network', 'Không kết nối được dịch vụ AI (kiểm tra mạng)'); }
+    const url = `${AIX.URL}/models/${encodeURIComponent(model)}:generateContent`, opt = { method: 'POST', body: JSON.stringify(body), signal };
+    // khóa gửi trong tiêu đề x-goog-api-key (cách Google hướng dẫn, dùng cho cả khóa mới AQ. và khóa cũ AIza); lỗi mạng thì thử cách ?key=
+    try { r = await fetch(url, { ...opt, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key } }); }
+    catch (e) {
+      if (e && e.name === 'AbortError') throw AIX.err('cancelled');
+      try { r = await fetch(url + '?key=' + encodeURIComponent(key), { ...opt, headers: { 'Content-Type': 'application/json' } }); }
+      catch (e2) { if (e2 && e2.name === 'AbortError') throw AIX.err('cancelled'); throw AIX.err('network', 'Không kết nối được dịch vụ AI (kiểm tra mạng)'); }
+    }
     if (r.ok) return r.json();
     let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) { }
     if (r.status === 404) throw AIX.err('no_model', msg);
@@ -9044,9 +9051,9 @@ const AIX = {
     const c = AIX.cfg();
     const m = Modal.open({ title: 'AI đọc ảnh (Google Gemini)', width: 560, body: `<ol class="small" style="margin:0 0 10px;padding-left:18px;line-height:1.7">
         <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"><b>aistudio.google.com/apikey</b></a>, đăng nhập Google của nhà xe.</li>
-        <li>Bấm <b>Create API key</b> (Tạo khóa API), chép khóa (bắt đầu bằng <code>AIza…</code>).</li>
+        <li>Bấm <b>Create API key</b> (Tạo khóa API), bấm vào khóa vừa tạo rồi bấm <b>Copy key</b>. Khóa bắt đầu bằng <code>AQ.</code> (loại mới) hoặc <code>AIza</code> (loại cũ) đều được.</li>
         <li>Dán vào ô dưới, bấm <b>Kiểm tra</b> rồi <b>Lưu</b>.</li></ol>
-      <div class="form" style="grid-template-columns:1fr"><div class="field"><label>Khóa Gemini API</label><div class="hub-pw" style="position:relative"><input class="inp" id="aiK" type="password" autocomplete="off" value="${esc(c.key || '')}" placeholder="AIza..." style="padding-right:44px"><button type="button" class="ibtn" id="aiEye" style="position:absolute;right:3px;top:3px" title="Hiện / ẩn">${ic('eye')}</button></div></div>
+      <div class="form" style="grid-template-columns:1fr"><div class="field"><label>Khóa Gemini API</label><div class="hub-pw" style="position:relative"><input class="inp" id="aiK" type="password" autocomplete="off" value="${esc(c.key || '')}" placeholder="AQ.… hoặc AIza…" style="padding-right:44px"><button type="button" class="ibtn" id="aiEye" style="position:absolute;right:3px;top:3px" title="Hiện / ẩn">${ic('eye')}</button></div></div>
       <div class="field"><label>Model (để trống = tự chọn)</label><input class="inp" id="aiM" value="${esc(c.model || '')}" placeholder="${esc(AIX.MODELS.join(' / '))}"></div></div>
       <div id="aiR" class="small" style="margin-top:8px"></div>
       <p class="small muted" style="margin:8px 0 0">Khóa được lưu trong cài đặt dữ liệu dùng chung, nên máy nào vào được dữ liệu đều quét ảnh được. Gói miễn phí của Google có giới hạn số lần mỗi ngày, đủ cho việc quét bảng điều hành và giấy tờ xe.</p>`,
