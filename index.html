@@ -322,7 +322,7 @@ body{background:#f0f8ff}
 </head>
 <body>
 <div id="app"></div>
-<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"url":""}},"_meta":{"shell":true,"savedAt":"2026-10-30T14:46:10.743Z"}}</script>
+<script id="app-data" type="application/json">{"settings":{"company":{"ten":"CÔNG TY TNHH MTV TƯỜNG GIA THỊNH PHÁT"},"gsync":{"mode":"fb","fb":{"apiKey":"AIzaSyDwUDws82AlxcN-b-PtGknQV1PnshXRZLo","authDomain":"nhaxethinhphat-d062c.firebaseapp.com","projectId":"nhaxethinhphat-d062c","storageBucket":"nhaxethinhphat-d062c.firebasestorage.app","messagingSenderId":"1033308919804","appId":"1:1033308919804:web:a6d29a1e7b6b1192658479"},"email":"pvbh.tgtp@gmail.com","url":"firebase:nhaxethinhphat-d062c","acct":false}},"_meta":{"shell":true,"savedAt":"2026-10-30T15:20:22.801Z"}}</script>
 <script>
 'use strict';
 /* ==========================================================
@@ -9456,9 +9456,15 @@ addCSS(`body.drv-scope #hubBtn,body.drv-scope #botFab,body.drv-scope #botPanel,b
   const bytes = s => { try { return new Blob([s]).size; } catch (e) { return s.length * 3; } };
   const delParts = async (p, n) => { for (let i = 0; i < n; i += 400) { const b = FB.db.batch(); for (let k = i; k < Math.min(n, i + 400); k++) b.delete(FB.col().doc(p + k)); await b.commit().catch(() => { }); } };
   FB.call = async function (body, c) {
-    if (!body || (body.action !== 'put' && body.action !== 'get')) return call0.apply(this, arguments);
+    if (!body || !['put', 'get', 'hist', 'getver'].includes(body.action)) return call0.apply(this, arguments);
     await FB.ready(c); const meta = FB.col().doc('meta');
     try {
+      if (body.action === 'hist') { const s = await meta.get(), m = s.exists ? s.data() : {}; return { ok: true, cur: { ver: +m.ver || 0, at: m.at || '', who: m.who || '', size: m.size || 0 }, hist: (m.hist || []).map(h => ({ ver: h.ver, at: h.at, who: h.who, size: h.size, p: h.p, n: h.n })) }; }
+      if (body.action === 'getver') {
+        const s = await meta.get(), m = s.exists ? s.data() : {}, h = (m.hist || []).find(x => x.ver === +body.ver); if (!h) throw new Error('Không còn bản #' + body.ver + ' trên Firebase');
+        const parts = await Promise.all(Array.from({ length: h.n }, (_, i) => FB.col().doc(h.p + i).get())); if (parts.some(x => !x.exists)) throw new Error('Bản #' + body.ver + ' đã bị xóa một phần');
+        return { ok: true, ver: h.ver, at: h.at, who: h.who, data: JSON.parse(parts.map(x => x.data().d).join('')) };
+      }
       if (body.action === 'get') {
         const s = await meta.get(); if (!s.exists || !s.data().n) return { ok: true, ver: 0, data: null };
         const m = s.data(), p = m.p || 'c', parts = await Promise.all(Array.from({ length: m.n }, (_, i) => FB.col().doc(p + i).get()));
@@ -9484,12 +9490,15 @@ addCSS(`body.drv-scope #hubBtn,body.drv-scope #botFab,body.drv-scope #botPanel,b
         r = await FB.db.runTransaction(async t => {
           const s = await t.get(meta), m = s.exists ? s.data() : {}, cur = +m.ver || 0;
           if (!body.force && s.exists && +body.baseVer !== cur) { const er = new Error('Dữ liệu trên Firebase đã có bản mới hơn'); er.conflict = true; er.ver = cur; throw er; }
-          const nv = cur + 1; t.set(meta, { ver: nv, n, p, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length });
-          return { ok: true, ver: nv, old: { p: m.p || 'c', n: +m.n || 0 } };
+          const nv = cur + 1, H = (m.hist || []).slice(), KEEP = 5;
+          if (s.exists && +m.n) H.unshift({ ver: cur, p: m.p || 'c', n: +m.n, at: m.at || '', who: m.who || '', size: +m.size || 0 });
+          const drop = H.slice(KEEP).filter(x => x.p !== p);
+          t.set(meta, { ver: nv, n, p, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length, hist: H.slice(0, KEEP) });
+          return { ok: true, ver: nv, drop };
         });
       } catch (e) { delParts(p, n); throw e; }
       // 3) dọn các phần cũ (chờ vài giây để máy khác đang đọc bản cũ đọc xong)
-      const old = r.old; delete r.old; if (old.n && old.p !== p) setTimeout(() => delParts(old.p, old.n), 8000);
+      const drop = r.drop || []; delete r.drop; if (drop.length) setTimeout(() => drop.forEach(d => delParts(d.p, d.n)), 8000);
       return r;
     } catch (e) { if (e.conflict) throw e; throw FB.err(e); }
   };
@@ -10104,6 +10113,70 @@ const GHP = {
 };
 addCSS(`.ghp-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 8px}@media(max-width:600px){.ghp-g{grid-template-columns:1fr}}.ghp-sec a{color:#0369a1}`);
 window.addEventListener('load', () => { try { GHP.mount(); } catch (e) { console.warn('GHP', e); } });
+/* ===== BẢO VỆ DỮ LIỆU FIREBASE =====
+   (1) Lịch sử: Firebase giữ 5 bản gần nhất, Admin "Quay về bản này" được.
+   (2) Chặn ghi đè bằng dữ liệu cũ: máy chưa tải dữ liệu từ Firebase trong lần mở này mà định đẩy lên thì phải xác nhận rõ ràng. */
+const FBH = {
+  list: null, ack: false, asking: null,
+  fbOn: () => { try { return GS.on && GS.cfg().mode === 'fb' && !(typeof FO !== 'undefined' && FO.on); } catch (e) { return false; } },
+  t: iso => iso ? new Date(iso).toLocaleString('vi-VN') : 'không rõ',
+  /* ---- (2) chặn ghi đè ---- */
+  async guard() {
+    if (!FBH.fbOn() || GS.fromRemote || FBH.ack) return true;
+    if (FBH.asking) return FBH.asking;
+    return FBH.asking = (async () => {
+      let i; try { i = await GS.call({ action: 'info' }, GS.cfg(), 20000); } catch (e) { return true; }
+      if (typeof FO !== 'undefined' && FO.on) return true;                      // vừa chuyển sang máy chủ dự phòng: cơ chế dự phòng tự lo
+      if (!i || !+i.ver) { GS.fromRemote = true; return true; }                 // Firebase còn trống: đẩy lần đầu
+      const mine = DB._meta && DB._meta.savedAt, older = mine && i.savedAt && mine < i.savedAt;
+      return await new Promise(ok => {
+        const m = Modal.open({ title: 'Dừng lại: dữ liệu trên máy này chưa phải bản mới nhất', width: 560, body: `
+          <p style="margin-top:0">Máy này <b>chưa tải dữ liệu từ Firebase</b> trong lần mở này. Nếu đẩy lên, dữ liệu trên máy này sẽ <b>thay toàn bộ</b> dữ liệu chung của mọi máy.</p>
+          <div class="fbh-cmp"><div><small>Trên máy này</small><b>${esc(FBH.t(mine))}</b>${older ? '<span class="badge b-red">CŨ HƠN</span>' : ''}</div><div><small>Trên Firebase (bản #${i.ver})</small><b>${esc(FBH.t(i.savedAt))}</b>${i.who ? `<em>${esc(i.who)}</em>` : ''}</div></div>
+          <p class="small muted" style="margin-bottom:0">Khuyên dùng: <b>Tải bản Firebase về</b>. Chỉ chọn ghi đè khi chắc chắn bản trên máy này đúng hơn (bản Firebase hiện tại vẫn được giữ trong Lịch sử phiên bản).</p>`,
+          foot: `<button class="btn danger" data-w>${ic('upload')} Vẫn ghi đè lên Firebase</button><button class="btn pri" data-r>${ic('download')} Tải bản Firebase về (khuyên dùng)</button>` });
+        m.el.querySelector('[data-r]').onclick = async () => { m.close(); try { Store.dirty = false; await GS.pull(false); toast(`${ic('check')} Đã tải bản mới nhất từ Firebase`, 'ok'); } catch (e) { toast(esc(e.message), 'err', 8000); } ok(false); };
+        m.el.querySelector('[data-w]').onclick = async () => { if (!await Modal.confirm(`Chắc chắn ghi đè dữ liệu chung bằng bản trên máy này${older ? ' (<b>cũ hơn</b> Firebase)' : ''}?`, { ok: 'Ghi đè', danger: true })) return; m.close(); FBH.ack = true; GS.fromRemote = true; ok(true); };
+        const x = m.el.querySelector('.modal-h .ibtn'); if (x) x.addEventListener('click', () => ok(false));
+      });
+    })().finally(() => { FBH.asking = null; });
+  },
+  /* ---- (1) lịch sử phiên bản ---- */
+  html() {
+    return `<div class="fbh-sec hub-card" style="margin-top:10px"><p class="hub-p"><b>Lịch sử phiên bản trên Firebase</b> <span class="badge b-violet">Chỉ Admin</span><br>Firebase tự giữ <b>5 bản lưu gần nhất</b>. Lỡ ghi nhầm (ví dụ máy có dữ liệu cũ đè lên) thì quay về bản trước ở đây.</p>
+      <div class="hub-btns" style="justify-content:flex-start;margin-top:0"><button class="btn" data-g="fhList">${ic('refresh')} Xem các bản trước</button></div><div data-fhl>${FBH.listHTML()}</div></div>`;
+  },
+  listHTML() {
+    const L = FBH.list; if (!L) return ''; const rows = L.hist || [];
+    return `<div class="bk-l"><div class="bk-r" style="background:#f0fdf4;border-color:#bbf7d0"><div><b>Bản hiện tại #${L.cur.ver}</b><small>${esc(FBH.t(L.cur.at))}${L.cur.who ? ' · ' + esc(L.cur.who) : ''}${L.cur.size ? ' · ' + F.num(L.cur.size / 1048576, 1) + ' MB' : ''}</small></div><span class="badge b-green">Đang dùng</span></div>
+      ${rows.map(h => `<div class="bk-r"><div><b>Bản #${h.ver}</b><small>${esc(FBH.t(h.at))}${h.who ? ' · ' + esc(h.who) : ''}${h.size ? ' · ' + F.num(h.size / 1048576, 1) + ' MB' : ''}</small></div><button class="btn sm" data-g="fhBack" data-v="${h.ver}">${ic('download')} Quay về bản này</button></div>`).join('') || '<p class="hub-p" style="margin:6px 0 0">Chưa có bản trước nào. Từ lần lưu tới, Firebase bắt đầu giữ lịch sử.</p>'}</div>`;
+  },
+  async act(a, b) {
+    if (!BK.admin()) return toast('Chỉ Admin được xem lịch sử phiên bản', 'err');
+    const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
+    if (!FBH.fbOn()) return toast('Máy này cần đang kết nối Firebase', 'err');
+    if (a === 'fhList') return busy(async () => { FBH.list = await GS.call({ action: 'hist' }, GS.cfg(), 30000); const el = HUB.el.querySelector('[data-fhl]'); if (el) el.innerHTML = FBH.listHTML(); });
+    if (a === 'fhBack') return busy(async () => {
+      const v = +b.dataset.v, h = ((FBH.list || {}).hist || []).find(x => x.ver === v) || {};
+      if (!await Modal.confirm(`Quay về <b>bản #${v}</b> (lưu lúc ${esc(FBH.t(h.at))}${h.who ? ', ' + esc(h.who) : ''})?<br><span class="small muted">Dữ liệu của mọi máy sẽ trở về bản này. Bản hiện tại vẫn được giữ trong lịch sử để quay lại nếu cần.</span>`, { ok: 'Quay về bản này', danger: true, title: 'Quay về bản trước' })) return;
+      const j = await GS.call({ action: 'getver', ver: v }, GS.cfg(), 90000); if (!j.data || !j.data.settings) throw new Error('Bản này không có dữ liệu hợp lệ');
+      const keep = { gsync: DB.settings.gsync, cfcloud: DB.settings.cfcloud, fodrive: DB.settings.fodrive }, me = Auth.user && Auth.user.id;
+      DB = j.data; DB._meta = DB._meta || {}; delete DB._meta.shell; delete DB._meta.sample; App.cfg.migrate && App.cfg.migrate(DB); Object.entries(keep).forEach(([k, x]) => { if (x) DB.settings[k] = x; });
+      try { Auth.user = DB.users.find(u => u.id === me) || Auth.user; Auth.chip(); } catch (e) { }
+      GS.fromRemote = true; await GS.push(true); if (GS.err) throw new Error('Chưa đưa lên được Firebase: ' + GS.err);
+      FBH.list = null; App.render(); toast(`${ic('check')} Đã quay về bản #${v}. Mọi máy sẽ nhận bản này.`, 'ok', 7000); HUB.setTab('gdata');
+    });
+  },
+  mount() {
+    const ap = GS.apply; GS.apply = function () { const r = ap.apply(this, arguments); GS.fromRemote = true; return r; };
+    if (Store.draftUse) { const du = Store.draftUse; Store.draftUse = function () { const r = du.apply(this, arguments); GS.fromRemote = false; FBH.ack = false; return r; }; }
+    const p0 = GS.push; GS.push = async function () { const self = this, a = arguments; if (!(await FBH.guard())) { GS.busy = false; Store.status(); return; } return p0.apply(self, a); };
+    const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { if (BK.admin() && body && !body.querySelector('.fbh-sec') && (HUB.gsMode || GS.cfg().mode || 'fb') === 'fb') { const t = body.querySelector('[data-g="up"]'), card = t && t.closest('.hub-card'); if (card) card.insertAdjacentHTML('afterend', FBH.html()); } } catch (e) { console.warn('FBH', e); } return r; };
+    const a0 = GS.act; GS.act = function (a, b) { if (/^fh[A-Z]/.test(a || '')) return FBH.act(a, b); return a0.apply(this, arguments); };
+  }
+};
+addCSS(`.fbh-cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.fbh-cmp>div{border:1px solid #e6e9f0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}.fbh-cmp small{color:#64748b;font-size:11.5px}.fbh-cmp em{font-style:normal;font-size:11.5px;color:#475569}.fbh-cmp .badge{align-self:flex-start}`);
+window.addEventListener('load', () => { try { FBH.mount(); } catch (e) { console.warn('FBH', e); } });
 </script>
 
 
