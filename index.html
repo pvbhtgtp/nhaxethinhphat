@@ -1745,6 +1745,29 @@ const tuyenNhom = t => { const p = String(t || '').split(/\s*(?:<>|<->|↔|⇄|-
 function empTuyen(ym, eid) { const c = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe === eid && l.tuyen && String(l.ngay).startsWith(ym)) { const g = tuyenNhom(l.tuyen); c[g] = (c[g] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); } }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ t, n })); }
 const allTuyen = ym => [...new Set([...(DB.lichchay || []).filter(l => l.tuyen && String(l.ngay).startsWith(ym)).map(l => l.tuyen), ...(DB.giochay || []).map(g => g.tuyen).filter(Boolean)].map(tuyenNhom))].sort((a, b) => a.localeCompare(b, 'vi'));
 const allNhom = () => [...new Set([...(DB.lichchay || []).map(l => l.tuyen), ...(DB.giochay || []).map(g => g.tuyen)].filter(Boolean).map(tuyenNhom))].sort((a, b) => a.localeCompare(b, 'vi'));
+/* 2 nhóm tuyến chính của nhà xe (gộp chiều đi + về). Lái xe được xếp vào 1 trong 2 nhóm; ai có chạy nhóm còn lại thì là "chạy chéo" */
+const MRT = {
+  list: [
+    { k: 'bh', n: 'BIÊN HÒA ⇄ VŨNG TÀU', s: 'BH', re: /bien hoa.*vung tau|vung tau.*bien hoa/ },
+    { k: 'hn', n: 'HỐ NAI ⇄ VŨNG TÀU', s: 'HN', re: /ho nai.*vung tau|vung tau.*ho nai/ }
+  ],
+  nm: t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(),
+  of(t) { const k = MRT.nm(t); return MRT.list.find(m => m.re.test(k)) || null; },
+  rank(g) { const i = MRT.list.findIndex(m => m.n === g); return i < 0 ? 9 : i; },
+  // công từng nhóm chính trong tháng (cả chiều đi và về)
+  cong(ym, eid) {
+    const o = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe !== eid || !String(l.ngay).startsWith(ym)) return; const m = MRT.of(l.tuyen); if (m) o[m.k] = (o[m.k] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); });
+    return o;
+  },
+  main(e, ym) {
+    const fx = e.tuyenChinh && MRT.of(e.tuyenChinh); if (fx) return fx;
+    const c = MRT.cong(ym, e.id), L = MRT.list.filter(m => c[m.k] > 0).sort((a, b) => c[b.k] - c[a.k]);
+    return L[0] || null;
+  },
+  cross(e, ym) { if (!isDriver(e)) return 0; const m = MRT.main(e, ym); if (!m) return 0; return MRT.cong(ym, e.id)[m.o.k] || 0; },
+  badge(e, ym) { const m = MRT.main(e, ym), x = MRT.cross(e, ym); return m && x ? ` <span class="cc-x" title="Nhóm ${esc(m.n)}, có chạy ${esc(m.o.n)} (chiều đi và về) ${F.num ? F.num(x) : x} công">+${F.num ? F.num(x) : x} công ${esc(m.o.s)}</span>` : ''; }
+};
+MRT.list[0].o = MRT.list[1]; MRT.list[1].o = MRT.list[0];
 /* Tuyến chính: đặt cố định trong hồ sơ, hoặc tự động = nhóm tuyến có nhiều công nhất trong tháng. Lương CK và BHXH chỉ trừ ở tuyến chính */
 function tuyenChinh(e, ym) { if (!e) return ''; if (e.tuyenChinh) return e.tuyenChinh; const T = empTuyen(ym, e.id); return T.length ? T[0].t : ''; }
 function calcPay(e, ym) {
@@ -2177,14 +2200,15 @@ const vCham = {
   title: 'Bảng chấm công', icon: 'calcheck', desc: 'Lái xe tự tính công từ Lịch chạy · Văn phòng tự điền X ngày làm việc',
   tools: () => monthTool(), after: bindMonth,
   sel() { return Array.isArray(UI.ccPbs) ? UI.ccPbs : (UI.ccPbs = UI.pb ? [UI.pb] : []); },
-  grp(e, ym = UI.m) { if (!isDriver(e)) return '~Văn phòng'; return tuyenChinh(e, ym) || '~~Lái xe chưa có lịch chạy'; },
-  emps(allGrp) { const ym = UI.m, end = ym + '-31', gs = UI.ccGrps || []; return DB.employees.filter(e => (!e.ngayVao || e.ngayVao <= end) && (e.trangThai !== 'Nghỉ việc' || summarize(ym, e.id).has) && (!vCham.sel().length || vCham.sel().includes(e.phongBan)) && (allGrp || !gs.length || gs.includes(vCham.grp(e, ym)))); },
+  grp(e, ym = UI.m) { if (!isDriver(e)) return '~Văn phòng'; const m = MRT.main(e, ym); return m ? m.n : (tuyenChinh(e, ym) || '~~Lái xe chưa có lịch chạy'); },
+  inSel(e, ym, gs) { const g = vCham.grp(e, ym); return gs.some(v => v.startsWith('x:') ? (g === v.slice(2) && MRT.cross(e, ym) > 0) : v === g); },
+  emps(allGrp) { const ym = UI.m, end = ym + '-31', gs = UI.ccGrps || []; return DB.employees.filter(e => (!e.ngayVao || e.ngayVao <= end) && (e.trangThai !== 'Nghỉ việc' || summarize(ym, e.id).has) && (!vCham.sel().length || vCham.sel().includes(e.phongBan)) && (allGrp || !gs.length || vCham.inSel(e, ym, gs))); },
   render(el) {
     const ym = UI.m, n = D.daysIn(ym), today = D.today(), all = vCham.emps(true);
     const q = (UI.ccq || '').toLowerCase();
     const GM = new Map(), grpOf = e => vCham.grp(e, ym);
     const gSel = Array.isArray(UI.ccGrps) ? UI.ccGrps : (UI.ccGrps = []), gAll = {}; all.forEach(e => { const g = grpOf(e); gAll[g] = (gAll[g] || 0) + 1; });
-    const found = all.filter(e => !q || (e.ten + ' ' + e.ma).toLowerCase().includes(q)).map((e, i) => ({ e, i, g: grpOf(e) })).filter(x => !gSel.length || gSel.includes(x.g)).sort((a, b) => { const r = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0; return r(a.g) - r(b.g) || a.g.localeCompare(b.g, 'vi') || a.i - b.i; }).map(x => (GM.set(x.e, x.g), x.e));
+    const found = all.filter(e => !q || (e.ten + ' ' + e.ma).toLowerCase().includes(q)).map((e, i) => ({ e, i, g: grpOf(e) })).filter(x => !gSel.length || vCham.inSel(x.e, ym, gSel)).sort((a, b) => { const r = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0; return r(a.g) - r(b.g) || a.g.localeCompare(b.g, 'vi') || a.i - b.i; }).map(x => (GM.set(x.e, x.g), x.e));
     const gCount = {}; found.forEach(e => { const g = GM.get(e); gCount[g] = (gCount[g] || 0) + 1; }); let lastG = null;
     const pst = pgState('cc', 20), emps = pageSlice(pst, found);
     App.subtitle = F.month(ym);
@@ -2192,8 +2216,8 @@ const vCham = {
     el.innerHTML = `
       ${(() => { const sel = vCham.sel(), s0 = UI.ccPbs; UI.ccPbs = []; const A = vCham.emps(); UI.ccPbs = s0; const cnt = p => A.filter(e => e.phongBan === p).length;
         return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('users')} Phòng ban</span><button class="${!sel.length ? 'on' : ''}" data-pbv="">Tất cả <b>${A.length}</b></button>${S().phongBan.filter(p => cnt(p) || sel.includes(p)).map(p => `<button class="${sel.includes(p) ? 'on' : ''}" data-pbv="${esc(p)}">${sel.includes(p) ? ic('check') : ''}${esc(p)} <b>${cnt(p)}</b></button>`).join('')}${sel.length ? `<span class="cc-pbn">Đang chọn ${sel.length} phòng ban · ${all.length} người</span>` : ''}</div>`; })()}
-      ${(() => { const rk = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0, G = Object.keys(gAll).filter(g => !g.startsWith('~')).sort((a, b) => a.localeCompare(b, 'vi')); if (!G.length) return '';
-        return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('bus')} Nhóm tuyến</span><button class="${!gSel.length ? 'on' : ''}" data-grv="">Tất cả <b>${all.length}</b></button>${G.map(g => `<button class="${gSel.includes(g) ? 'on' : ''}" data-grv="${esc(g)}">${gSel.includes(g) ? ic('check') : ''}${esc(g.replace(/^~+/, ''))} <b>${gAll[g]}</b></button>`).join('')}${gSel.length ? `<span class="cc-pbn">Đang chọn ${gSel.length} nhóm · ${found.length} người</span>` : ''}</div>`; })()}
+      ${(() => { const rk = g => g.startsWith('~~') ? 2 : g.startsWith('~') ? 1 : 0, G = Object.keys(gAll).filter(g => !g.startsWith('~')).sort((a, b) => (MRT.rank(a) - MRT.rank(b)) || a.localeCompare(b, 'vi')); if (!G.length) return ''; const XC = MRT.list.map(m => ({ v: 'x:' + m.n, m, n: all.filter(e => vCham.grp(e, ym) === m.n && MRT.cross(e, ym)).length })).filter(x => x.n || gSel.includes(x.v));
+        return `<div class="cc-pb no-print"><span class="cc-pbl">${ic('bus')} Nhóm tuyến</span><button class="${!gSel.length ? 'on' : ''}" data-grv="">Tất cả <b>${all.length}</b></button>${G.map(g => `<button class="${gSel.includes(g) ? 'on' : ''}" data-grv="${esc(g)}">${gSel.includes(g) ? ic('check') : ''}${esc(g.replace(/^~+/, ''))} <b>${gAll[g]}</b></button>`).join('')}${XC.length ? `<span class="cc-pbl" style="margin-left:6px">Chạy chéo</span>${XC.map(x => `<button class="cc-xb ${gSel.includes(x.v) ? 'on' : ''}" data-grv="${esc(x.v)}" title="Lái xe nhóm ${esc(x.m.n)} có chạy tuyến ${esc(x.m.o.n)} (cả chiều đi và về)">${gSel.includes(x.v) ? ic('check') : ''}${esc(x.m.s)} chạy qua ${esc(x.m.o.s)} <b>${x.n}</b></button>`).join('')}` : ''}${gSel.length ? `<span class="cc-pbn">Đang chọn ${gSel.length} nhóm · ${found.length} người</span>` : ''}</div>`; })()}
       ${(() => { const R = tuyenRieng(ym); if (!R.length) return ''; const ed = !Auth.user || Auth.can('chamcong', 'edit') || Auth.can('caidat', 'edit'), G = {};
         R.forEach(t => { (G[tuyenNhom(t)] = G[tuyenNhom(t)] || []).push(t); });
         return `<details class="cc-ct no-print" ${UI.ccCtOpen ? 'open' : ''}><summary>${ic('bus')} Công lái xe theo tuyến <span>${R.length} tuyến · ${Object.keys(G).length} nhóm · bấm để chỉnh công/chuyến</span></summary><div class="cc-ctb">${Object.entries(G).map(([g, L]) => `<div class="cc-ctg"><b>${ic('bus')} ${esc(g)}</b>${L.map(t => `<label><span>${esc(t)}</span><input class="inp sm num" type="number" min="0" step="0.25" data-ct="${esc(t)}" value="${congTuyen(t)}" ${ed ? '' : 'disabled'}><em>công / chuyến</em></label>`).join('')}</div>`).join('')}<p class="small muted">Mỗi tuyến (chiều đi, chiều về) chấm công riêng: số công trong ô ngày = số chuyến của từng tuyến trong Lịch chạy × công/chuyến của tuyến đó. Danh sách lái xe được gom theo nhóm tuyến.</p></div></details>`; })()}
@@ -2209,7 +2233,7 @@ const vCham = {
       <div class="pg-host"><div class="cc-wrap"><table class="cc"><thead><tr><th class="nm">Nhân viên<br><small style="font-weight:500">${F.month(ym)}</small></th>
         ${days.map(d => `<th class="${ym + '-' + pad(d) === today ? 'td' : isOff(ym, d) ? 'we' : ''}">${d}<br>${D.dowName[D.dow(ym, d)]}</th>`).join('')}
         <th>Công<br>làm</th><th>Tiền<br>công</th><th>Chi phí<br>khác</th><th>Lương<br>CK</th><th>Trừ<br>BHXH</th><th>Nợ kỳ<br>trước</th><th>Thực<br>nhận</th><th>Nợ chuyển<br>kỳ sau</th></tr></thead>
-        <tbody>${emps.map(e => { const eg = GM.get(e), gh = eg !== lastG ? (lastG = eg, `<tr class="cc-grp"><td colspan="${n + 9}"><div class="cc-gs">${ic(eg.startsWith('~V') ? 'building' : 'bus')} ${esc(eg.replace(/^~+/, ''))} <span>${gCount[eg]} người</span></div></td></tr>`) : ''; const a = att(ym, e.id), drv = isDriver(e), lc = drv ? lcDays(ym, e.id) : {}, au = drv ? {} : autoDays(ym, e); return gh + `<tr data-e="${e.id}" class="${drv && PO.of(ym, e.id).noChuyen ? 'po-row' : ''}"><td class="nm"><b>${esc(e.ten)}</b>${drv ? ` <span class="cc-drv" data-tip="Ngày công tự lấy từ Lịch chạy">${ic('bus')}</span>` : ''}</td>
+        <tbody>${emps.map(e => { const eg = GM.get(e), gh = eg !== lastG ? (lastG = eg, `<tr class="cc-grp"><td colspan="${n + 9}"><div class="cc-gs">${ic(eg.startsWith('~V') ? 'building' : 'bus')} ${esc(eg.replace(/^~+/, ''))} <span>${gCount[eg]} người</span></div></td></tr>`) : ''; const a = att(ym, e.id), drv = isDriver(e), lc = drv ? lcDays(ym, e.id) : {}, au = drv ? {} : autoDays(ym, e); return gh + `<tr data-e="${e.id}" class="${drv && PO.of(ym, e.id).noChuyen ? 'po-row' : ''}"><td class="nm"><b>${esc(e.ten)}</b>${drv ? ` <span class="cc-drv" data-tip="Ngày công tự lấy từ Lịch chạy">${ic('bus')}</span>${MRT.badge(e, ym)}` : ''}</td>
           ${days.map(d => { const k = a.d[d] || '', auto = !k && (lc[d] || au[d]), c = CODES[k || (auto ? 'X' : '')], lv = !k && lc[d] ? F.num(lc[d].cong) : ''; return `<td class="d ${isOff(ym, d) ? 'we' : ''} ${auto ? 'lc' : ''} ${lv ? 'num' : ''}" data-e="${e.id}" data-d="${d}" style="${c ? `background:${c.bg};color:${c.c}` : ''}"${!k && au[d] ? ' data-tip="Tự điền X · chấm ký hiệu khác nếu nghỉ"' : ''}${lc[d] ? ` data-tip="${F.num(lc[d].cong)} công · ${lc[d].n} chuyến${lc[d].gio.length ? ' (' + esc(lc[d].gio.join(', ')) + ')' : ''}\n${esc(Object.entries(lc[d].tu).map(([g, c]) => g + ': ' + F.num(c) + ' công').join('\n'))}\nXe: ${esc(lc[d].xe.join(', ') || 'chưa gán xe')} · tiền tài ${F.money(lc[d].tt)} đ"` : ''}>${k || lv || (auto ? 'X' : '')}</td>`; }).join('')}
           ${ccRowSum(ym, e.id)}</tr>`; }).join('') || `<tr><td class="nm">Chưa có nhân viên</td></tr>`}</tbody></table></div><div class="tbl-pager" id="ccP">${pagerHTML(pst, found.length)}</div></div>
       <p class="small muted">Công chuẩn: <b>${S().congChuan}</b> ngày/tháng · Ngày nghỉ tuần: <b>${S().ngayNghi === 'T7CN' ? 'Thứ 7 và Chủ nhật' : 'Chủ nhật'}</b> · Công hưởng lương = đi làm + công tác + phép + lễ. Sửa trong Cài đặt.</p>`;
@@ -7211,7 +7235,7 @@ addCSS(`.brand .logo.flip{animation:logoFlip .45s cubic-bezier(.2,.8,.3,1.2)}@ke
 
 addCSS(`.cc-pb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-6px 0 14px}.cc-pbl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#475467;margin-right:4px}.cc-pbl svg{width:15px;height:15px}
 .cc-pb button{border:1px solid #d6e4f0;background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:#334155;cursor:pointer;display:inline-flex;gap:6px;align-items:center}.cc-pb button b{font-size:11px;background:#f1f5f9;color:#64748b;border-radius:99px;padding:1px 7px}
-.cc-pb button:hover{border-color:var(--p);color:var(--p-d)}.cc-pb button.on{background:var(--p);border-color:var(--p);color:#fff}.cc-pb button.on b{background:rgba(255,255,255,.25);color:#fff}.cc-pb button svg{width:13px;height:13px}.cc-pbn{font-size:12px;color:#64748b;margin-left:4px}`);
+.cc-x{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:99px;background:#fef3c7;color:#b45309;font-size:10.5px;font-weight:700;white-space:nowrap}.cc-pb button.cc-xb{border-style:dashed}.cc-pb button:hover{border-color:var(--p);color:var(--p-d)}.cc-pb button.on{background:var(--p);border-color:var(--p);color:#fff}.cc-pb button.on b{background:rgba(255,255,255,.25);color:#fff}.cc-pb button svg{width:13px;height:13px}.cc-pbn{font-size:12px;color:#64748b;margin-left:4px}`);
 addCSS(`.tb-right{display:flex;align-items:center;gap:8px;margin-left:12px;padding-left:12px;border-left:1px solid #dbe7f3;flex:none}
 .tb-right .save-state{margin:0;color:#64748b;font-size:12px;white-space:nowrap}.tb-right .save-state span{max-width:130px;overflow:hidden;text-overflow:ellipsis}
 .tb-save{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:999px;border:0;background:var(--p);color:#fff;font:inherit;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(14,165,233,.3);white-space:nowrap}.tb-save:hover{background:var(--p-d)}.tb-save svg{width:16px;height:16px}
