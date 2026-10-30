@@ -9236,6 +9236,55 @@ addCSS(`.rtp-h{margin:16px 0 6px;font-size:14px;color:#111}.rtp-h small{font-wei
 Object.assign(ACT, { rtpPrint: () => RTP.print(), rtpExcel: () => RTP.excel() });
 Object.assign(Auth.ACT_PERM, { rtpPrint: ['chamcong', 'view'], rtpExcel: ['chamcong', 'view'] });
 
+/* ===== Firebase: lưu dữ liệu lớn (trên 10 MB) =====
+   Firestore giới hạn mỗi lần ghi khoảng 10 MB. Cách lưu mới:
+   1) ghi các phần dữ liệu thành nhiều đợt nhỏ (mỗi đợt dưới 8 MB) với tên phần mới;
+   2) chốt phiên bản trong 1 giao dịch nhỏ (chỉ tài liệu "meta"), có kiểm tra máy khác vừa lưu;
+   3) xóa các phần cũ. Máy khác chỉ đọc theo "meta" nên không bao giờ đọc phải bản ghi dở. */
+{
+  const call0 = FB.call;
+  const bytes = s => { try { return new Blob([s]).size; } catch (e) { return s.length * 3; } };
+  const delParts = async (p, n) => { for (let i = 0; i < n; i += 400) { const b = FB.db.batch(); for (let k = i; k < Math.min(n, i + 400); k++) b.delete(FB.col().doc(p + k)); await b.commit().catch(() => { }); } };
+  FB.call = async function (body, c) {
+    if (!body || (body.action !== 'put' && body.action !== 'get')) return call0.apply(this, arguments);
+    await FB.ready(c); const meta = FB.col().doc('meta');
+    try {
+      if (body.action === 'get') {
+        const s = await meta.get(); if (!s.exists || !s.data().n) return { ok: true, ver: 0, data: null };
+        const m = s.data(), p = m.p || 'c', parts = await Promise.all(Array.from({ length: m.n }, (_, i) => FB.col().doc(p + i).get()));
+        if (parts.some(x => !x.exists)) { const er = new Error('Dữ liệu trên Firebase vừa được máy khác cập nhật, đang thử lại'); er.code = 'aborted'; throw er; }
+        return { ok: true, ver: +m.ver || 0, who: m.who || '', data: JSON.parse(parts.map(x => x.data().d).join('')) };
+      }
+      if (!body.data || !body.data.settings) throw new Error('Dữ liệu trống, không lưu');
+      const txt = JSON.stringify(body.data), n = Math.max(1, Math.ceil(txt.length / FB.CH));
+      const s0 = await meta.get(), m0 = s0.exists ? s0.data() : {};
+      if (!body.force && s0.exists && +body.baseVer !== (+m0.ver || 0)) { const er = new Error('Dữ liệu trên Firebase đã có bản mới hơn'); er.conflict = true; er.ver = +m0.ver || 0; throw er; }
+      const p = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + '_';
+      // 1) ghi các phần theo đợt (≤ 8 MB, ≤ 400 tài liệu mỗi đợt)
+      let b = FB.db.batch(), sz = 0, cnt = 0;
+      for (let i = 0; i < n; i++) {
+        const d = txt.slice(i * FB.CH, (i + 1) * FB.CH), z = bytes(d) + 200;
+        if (cnt && (sz + z > 8e6 || cnt >= 400)) { await b.commit(); b = FB.db.batch(); sz = 0; cnt = 0; }
+        b.set(FB.col().doc(p + i), { d }); sz += z; cnt++;
+      }
+      if (cnt) await b.commit();
+      // 2) chốt phiên bản
+      let r;
+      try {
+        r = await FB.db.runTransaction(async t => {
+          const s = await t.get(meta), m = s.exists ? s.data() : {}, cur = +m.ver || 0;
+          if (!body.force && s.exists && +body.baseVer !== cur) { const er = new Error('Dữ liệu trên Firebase đã có bản mới hơn'); er.conflict = true; er.ver = cur; throw er; }
+          const nv = cur + 1; t.set(meta, { ver: nv, n, p, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length });
+          return { ok: true, ver: nv, old: { p: m.p || 'c', n: +m.n || 0 } };
+        });
+      } catch (e) { delParts(p, n); throw e; }
+      // 3) dọn các phần cũ (chờ vài giây để máy khác đang đọc bản cũ đọc xong)
+      const old = r.old; delete r.old; if (old.n && old.p !== p) setTimeout(() => delParts(old.p, old.n), 8000);
+      return r;
+    } catch (e) { if (e.conflict) throw e; throw FB.err(e); }
+  };
+}
+
 /* ===== TỰ CHUYỂN DỰ PHÒNG: Firebase lỗi (mất kết nối / hết dung lượng) → tự dùng Google Drive; Firebase có lại → đưa bản mới nhất từ Drive về Firebase =====
    - Luôn ưu tiên Firebase. Drive (Apps Script, file Code.gs) chỉ dùng khi Firebase lỗi.
    - Cấu hình do Admin bật trong tab Lưu trữ Google; lưu trong dữ liệu chung nên mọi máy đã từng mở app đều nhận được (không có trong file GitHub). */
