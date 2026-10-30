@@ -8474,7 +8474,7 @@ const ACC = {
       const pick = [...m.el.querySelectorAll('[data-i]:checked')].map(c => L[+c.dataset.i]); if (!pick.length) return toast('Chọn ít nhất 1 nhân viên', 'err');
       const pw = ACC.readPw(m); if (!pw) return; const role = q('#accRole').value; q('[data-ok]').disabled = true;
       const made = [];
-      for (const x of pick) { const u = { id: uid(), user: x.p, ten: x.e.ten || x.p, role, active: true, mustChange: true, empId: x.e.id }; await Auth.setPass0(u, pw); DB.users.push(u); made.push(u); }
+      for (const x of pick) { const u = { id: uid(), user: x.p, ten: x.e.ten || x.p, role: role === '__auto' ? PQ.roleFor(x.e) : role, active: true, mustChange: true, empId: x.e.id }; if (role === '__auto') { u.roleMode = 'auto'; u.roleAuto = u.role; } await Auth.setPass0(u, pw); DB.users.push(u); made.push(u); }
       Store.changed(); m.close();
       const lines = made.map(u => `<b>${esc(u.ten)}</b> · ${esc(u.user)}`);
       if (fbOk) { const r = await ACC.provisionAll(made, pw, 'Đang cấp'); r.bad.forEach(b => lines.push(`<span class="acc-bad">Chưa cấp được ${esc(b)}</span>`)); }
@@ -9215,7 +9215,13 @@ const RTP = {
   },
   // cột giống Bảng chấm công, bỏ Mã NV và Phòng ban
   cols() { const c = vCham.cols(); return [c[1], ...c.slice(3)]; },
-  rowsOf(m) { const ym = UI.m, n = D.daysIn(ym); return RTP.emps(m).map(e => { const a = att(ym, e.id), s = summarize(ym, e.id), lc = s.drv ? lcDays(ym, e.id) : {}, au = s.drv ? {} : autoDays(ym, e), x = MRT.cross(e, ym), mn = MRT.main(e, ym);
+  /* công của lái xe chỉ tính trên các tuyến thuộc nhóm m, theo từng ngày */
+  congNhom(e, ym, m) { const d = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe !== e.id || !String(l.ngay).startsWith(ym)) return; const g = MRT.of(l.tuyen); if (!g || g.k !== m.k) return; const k = +String(l.ngay).slice(8, 10); d[k] = (d[k] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); }); return d; },
+  rowsOf(m) { const ym = UI.m, n = D.daysIn(ym); return RTP.emps(m).map(e => { const mn0 = MRT.main(e, ym);
+    /* lái xe chạy chéo (nhóm chính là tuyến khác): chỉ hiện số công chạy trên tuyến này, không lặp lương (lương nằm ở nhóm chính) */
+    if (mn0 && mn0.k !== m.k) { const d = RTP.congNhom(e, ym, m), tot = Object.values(d).reduce((x, y) => x + y, 0), tail = RTP.cols().length - 1 - n - 1;
+      return { e, cheo: true, tag: 'chạy chéo · lương tính ở nhóm ' + mn0.s, v: [e.ten, ...Array.from({ length: n }, (_, i) => d[i + 1] || ''), tot, ...Array(Math.max(0, tail)).fill('')] }; }
+    const a = att(ym, e.id), s = summarize(ym, e.id), lc = s.drv ? lcDays(ym, e.id) : {}, au = s.drv ? {} : autoDays(ym, e), x = MRT.cross(e, ym), mn = MRT.main(e, ym);
     return { e, tag: mn && mn.k !== m.k ? 'chạy chéo, nhóm ' + mn.s : x ? '+' + (F.num ? F.num(x) : x) + ' công ' + mn.o.s : '', v: [e.ten, ...Array.from({ length: n }, (_, i) => a.d[i + 1] || (lc[i + 1] ? lc[i + 1].cong : au[i + 1] ? 'X' : '')), s.lv, s.drv || s.tienCong ? s.tienCong : '', s.cpKhac, ...(o => [o.lck, o.bh, o.noTruoc, o.show ? o.thucNhan : '', o.noChuyen])(PO.of(ym, e.id))] }; }); },
   print() {
     const ym = UI.m, n = D.daysIn(ym), cols = RTP.cols(), L = RTP.pick(), num = v => typeof v === 'number' ? (v ? F.num(v) : '0') : esc(v);
@@ -9224,7 +9230,7 @@ const RTP = {
       const tot = cols.map((c, i) => c.sum ? R.reduce((a, r) => a + (+r.v[i] || 0), 0) : null);
       return `<h3 class="rtp-h">${esc(m.n)} <small>(${R.length} lái xe)</small></h3><table><thead>${head}</thead><tbody>${R.map((r, k) => `<tr><td class="c" style="padding:3px 2px;font-size:9.5px">${k + 1}</td>${r.v.map((v, i) => { const c = CODES[v], day = i > 0 && i <= n; return `<td class="${i > 0 ? 'c' : ''}" style="padding:3px 2px;font-size:9.5px;${i === 0 ? 'text-align:left;white-space:nowrap;' : ''}${c && day ? `background:${c.bg};color:${c.c};font-weight:700` : ''}">${i === 0 ? `<b>${esc(v)}</b>${r.tag ? `<br><i style="font-size:8.5px;color:#92400e">${esc(r.tag)}</i>` : ''}` : num(v)}</td>`; }).join('')}</tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2" style="padding:3px 4px;font-size:9.5px">Cộng</td>${tot.slice(1).map(t => `<td class="c" style="padding:3px 2px;font-size:9.5px">${t == null ? '' : F.num(t)}</td>`).join('')}</tr></tfoot></table>`; };
-    Print.run(`<div class="pr">${Print.head()}<h2>Bảng chấm công lái xe theo tuyến ${F.month(ym)}</h2><div class="pr-sub">${L.map(m => esc(m.n)).join(' · ')}</div>${L.map(sec).join('')}<div class="pr-note">${vCham.legend()}. Ô ngày ghi số công của lái xe trong ngày (mọi tuyến). Tuyến Biên Hòa ⇄ Vũng Tàu gồm chiều đi và về; Hố Nai ⇄ Vũng Tàu gồm chiều đi và về.</div>${Print.signs(['Người chấm công', 'Đội trưởng điều hành', 'Giám đốc'])}</div>`, { landscape: true, title: 'Bang cham cong lai xe theo tuyen ' + ym });
+    Print.run(`<div class="pr">${Print.head()}<h2>Bảng chấm công lái xe theo tuyến ${F.month(ym)}</h2><div class="pr-sub">${L.map(m => esc(m.n)).join(' · ')}</div>${L.map(sec).join('')}<div class="pr-note">${vCham.legend()}. Ô ngày ghi số công của lái xe trong ngày (mọi tuyến). Lái xe <i>chạy chéo</i> chỉ ghi số công chạy trên tuyến đó; lương của họ tính ở nhóm tuyến chính. Tuyến Biên Hòa ⇄ Vũng Tàu gồm chiều đi và về; Hố Nai ⇄ Vũng Tàu gồm chiều đi và về.</div>${Print.signs(['Người chấm công', 'Đội trưởng điều hành', 'Giám đốc'])}</div>`, { landscape: true, title: 'Bang cham cong lai xe theo tuyen ' + ym });
   },
   excel() {
     const ym = UI.m, L = RTP.pick(), cols = [{ label: 'STT', type: 'int', width: 5 }, ...RTP.cols()];
@@ -9235,6 +9241,211 @@ const RTP = {
 addCSS(`.rtp-h{margin:16px 0 6px;font-size:14px;color:#111}.rtp-h small{font-weight:500;color:#555;font-size:12px}.cc-pb .cc-rtp{margin-left:auto;background:#fff;border-style:solid}`);
 Object.assign(ACT, { rtpPrint: () => RTP.print(), rtpExcel: () => RTP.excel() });
 Object.assign(Auth.ACT_PERM, { rtpPrint: ['chamcong', 'view'], rtpExcel: ['chamcong', 'view'] });
+
+/* ===== PHÂN QUYỀN THEO PHÒNG BAN & CHỨC VỤ =====
+   3 lớp: (1) bộ vai trò mẫu theo nghiệp vụ nhà xe · (2) quy tắc gán vai trò theo phòng ban + chức vụ (xét từ trên xuống, khớp đầu tiên)
+   · (3) mỗi tài khoản chọn Tự động (đổi phòng ban/chức vụ là vai trò đổi theo) hoặc Thủ công (giữ nguyên vai trò Admin chọn).
+   Tài khoản Admin không bao giờ bị đổi tự động. */
+const PQ = {
+  V: ['view'], VA: ['view', 'add'], VAE: ['view', 'add', 'edit'], VE: ['view', 'edit'],
+  all: id => [...((Auth.MODS.find(m => m.id === id) || {}).acts || [])],
+  /* bộ vai trò mẫu: mỗi vai trò có mô tả để Admin hiểu vì sao */
+  tpl() {
+    const { V, VA, VAE, VE } = PQ, A = PQ.all;
+    return {
+      giamdoc: { name: 'Ban Giám đốc', desc: 'Xem toàn bộ, duyệt chấm công – bảng lương, giá vé, giờ chạy, hợp đồng vận chuyển. Không xóa dữ liệu.',
+        perms: { dashboard: V, nhanvien: VE, phuongtien: V, giochay: VE, banggia: VE, suachua: V, lylich: V, kmxe: V, nhienlieu: V, lichchay: VE, hdvc: VAE, hopdong: V, chamcong: VE, bangluong: VE, thue: V, caidat: V, data: V } },
+      ketoan: { name: 'Kế toán – Nhân sự', desc: 'Hồ sơ nhân viên, hợp đồng lao động, chấm công, bảng lương, thuế – bảo hiểm. Xem chi phí xe, dầu, sửa chữa để đối chiếu.',
+        perms: { dashboard: V, nhanvien: VAE, phuongtien: V, giochay: V, banggia: V, suachua: V, lylich: V, kmxe: V, nhienlieu: V, lichchay: V, hdvc: V, hopdong: V, chamcong: VE, bangluong: VE, thue: V, caidat: V, data: V } },
+      ql_dieuhanh: { name: 'Quản lý điều hành', desc: 'Toàn quyền lịch chạy, đặt vé, giờ chạy, hợp đồng vận chuyển; quản lý xe, km, dầu, sửa chữa; chấm công lái xe. Không xem lương.',
+        perms: { dashboard: [], nhanvien: V, phuongtien: VAE, giochay: A('giochay'), banggia: VAE, suachua: VAE, lylich: VAE, kmxe: A('kmxe'), nhienlieu: VAE, lichchay: A('lichchay'), hdvc: A('hdvc'), hopdong: [], chamcong: VE, bangluong: [], thue: [], caidat: [], data: [] } },
+      dieuhanh: { name: 'Nhân viên điều hành', desc: 'Xếp xe, lái xe, đặt vé; nhập km, phiếu dầu; lập hợp đồng vận chuyển. Không xóa chuyến, không xem lương.',
+        perms: { dashboard: [], nhanvien: V, phuongtien: V, giochay: V, banggia: V, suachua: V, lylich: V, kmxe: VA, nhienlieu: VA, lichchay: VAE, hdvc: VAE, hopdong: [], chamcong: V, bangluong: [], thue: [], caidat: [], data: [] } },
+      truong_ve: { name: 'Trưởng phòng vé', desc: 'Toàn quyền đặt vé tại quầy (kể cả hủy, xóa vé), chỉnh giá vé, lập hợp đồng vận chuyển. Không xem lương.',
+        perms: { dashboard: [], nhanvien: [], phuongtien: V, giochay: V, banggia: VAE, suachua: [], lylich: [], kmxe: [], nhienlieu: [], lichchay: A('lichchay'), hdvc: VAE, hopdong: [], chamcong: [], bangluong: [], thue: [], caidat: [], data: [] } },
+      banve: { name: 'Nhân viên bán vé', desc: 'Bán vé, giữ chỗ, gửi hàng theo chuyến; xem giờ chạy, giá vé. Không xóa vé, không xem lương.',
+        perms: { dashboard: [], nhanvien: [], phuongtien: V, giochay: V, banggia: V, suachua: [], lylich: [], kmxe: [], nhienlieu: [], lichchay: VAE, hdvc: V, hopdong: [], chamcong: [], bangluong: [], thue: [], caidat: [], data: [] } },
+      kythuat: { name: 'Kỹ thuật – Sửa chữa', desc: 'Hồ sơ xe, sửa chữa (toàn quyền), nhiên liệu, km xe; xem lịch chạy để bố trí xe vào xưởng.',
+        perms: { dashboard: [], nhanvien: [], phuongtien: VAE, giochay: V, banggia: [], suachua: A('suachua'), lylich: V, kmxe: VA, nhienlieu: VAE, lichchay: V, hdvc: [], hopdong: [], chamcong: [], bangluong: [], thue: [], caidat: [], data: [] } },
+      laixe: { name: 'Lái xe – Phụ xe', selfOnly: true, desc: 'Chỉ xem thông tin của chính mình: chuyến được phân (kèm khách để gọi), công và phiếu lương của mình; xem giờ chạy, giá vé. Không sửa dữ liệu.',
+        perms: { cuatoi: V, dashboard: [], nhanvien: [], phuongtien: [], giochay: V, banggia: V, suachua: [], lylich: [], kmxe: [], nhienlieu: [], lichchay: V, hdvc: [], hopdong: [], chamcong: [], bangluong: [], thue: [], caidat: [], data: [] } },
+      xem: { name: 'Chỉ xem', desc: 'Xem mọi màn hình nghiệp vụ, không sửa; không vào Cài đặt và Dữ liệu.',
+        perms: Object.fromEntries(Auth.MODS.map(m => [m.id, ['caidat', 'data'].includes(m.id) ? [] : ['view']])) }
+    };
+  },
+  /* quy tắc mặc định, xét từ trên xuống */
+  defRules: () => [
+    { cv: 'giám đốc, phó giám đốc', pb: '', role: 'giamdoc' },
+    { cv: '', pb: 'giám đốc', role: 'giamdoc' },
+    { cv: 'kế toán, nhân sự, thủ quỹ', pb: '', role: 'ketoan' },
+    { cv: 'lái xe, phụ xe, tài xế', pb: '', role: 'laixe' },
+    { cv: 'thợ, kỹ thuật', pb: '', role: 'kythuat' },
+    { cv: '', pb: 'kỹ thuật', role: 'kythuat' },
+    { cv: 'quản lý, trưởng', pb: 'phòng vé', role: 'truong_ve' },
+    { cv: '', pb: 'phòng vé', role: 'banve' },
+    { cv: 'quản lý, trưởng, đội trưởng', pb: 'điều hành', role: 'ql_dieuhanh' },
+    { cv: '', pb: 'điều hành', role: 'dieuhanh' }
+  ],
+  nm: s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim(),
+  kw: s => String(s || '').split(',').map(PQ.nm).filter(Boolean),
+  cfg() { const s = DB.settings; if (!s.pq) s.pq = { rules: PQ.defRules(), def: 'xem' }; return s.pq; },
+  /* tạo các vai trò mẫu còn thiếu (không đụng vai trò đang có) */
+  ensure(db) { try { const T = PQ.tpl(); db.roles = db.roles || {}; Object.entries(T).forEach(([k, r]) => { if (!db.roles[k]) db.roles[k] = { name: r.name, perms: JSON.parse(JSON.stringify(r.perms)), tpl: true, ...(r.selfOnly ? { selfOnly: true } : {}) }; else if (r.selfOnly && db.roles[k].tpl && db.roles[k].selfOnly == null) { db.roles[k].selfOnly = true; db.roles[k].perms.cuatoi = ['view']; } }); if (db.settings && !db.settings.pq) db.settings.pq = { rules: PQ.defRules(), def: 'xem' }; } catch (e) { } },
+  emp: u => (u.empId && (DB.employees || []).find(e => e.id === u.empId)) || empOfUser(u),
+  match(e) {
+    const c = PQ.cfg(), cv = PQ.nm(e && e.chucVu), pb = PQ.nm(e && e.phongBan);
+    for (let i = 0; i < c.rules.length; i++) { const r = c.rules[i], a = PQ.kw(r.cv), b = PQ.kw(r.pb); if (!a.length && !b.length) continue; if (a.length && !a.some(k => cv.includes(k))) continue; if (b.length && !b.some(k => pb.includes(k))) continue; if (DB.roles[r.role]) return { role: r.role, i }; }
+    return { role: DB.roles[c.def] ? c.def : 'xem', i: -1 };
+  },
+  roleFor: e => PQ.match(e).role,
+  /* đồng bộ tài khoản đang ở chế độ Tự động */
+  sync() {
+    let n = 0; (DB.users || []).forEach(u => {
+      if (u.roleMode !== 'auto') return;
+      if (u.role === 'admin') { u.roleMode = 'manual'; return; }
+      if (u.roleAuto && u.role !== u.roleAuto) { u.roleMode = 'manual'; delete u.roleAuto; return; }   // Admin vừa đổi tay → giữ thủ công
+      const e = PQ.emp(u); if (!e) return; const r = PQ.roleFor(e); if (r && r !== u.role && r !== 'admin') { u.role = r; n++; } u.roleAuto = u.role;
+    });
+    return n;
+  },
+  setAuto(u, on) { if (on) { if (u.role === 'admin') return false; u.roleMode = 'auto'; const e = PQ.emp(u); if (e) u.role = PQ.roleFor(e); u.roleAuto = u.role; } else { u.roleMode = 'manual'; delete u.roleAuto; } return true; },
+  /* ---- giao diện trong trang Người dùng ---- */
+  html() {
+    const c = PQ.cfg(), R = DB.roles, T = PQ.tpl(), opt = v => Object.entries(R).filter(([k]) => k !== 'admin').map(([k, r]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
+    const PB = [...new Set([...(DB.settings.phongBan || []), ...(DB.employees || []).map(e => e.phongBan).filter(Boolean)])], CV = [...new Set((DB.employees || []).map(e => e.chucVu).filter(Boolean))];
+    const U = (DB.users || []).map(u => { const e = PQ.emp(u), m = e ? PQ.match(e) : null; return { u, e, m }; });
+    const diff = U.filter(x => x.u.role !== 'admin' && x.m && x.m.role !== x.u.role).length, auto = U.filter(x => x.u.roleMode === 'auto').length;
+    const rules = c.rules.map((r, i) => `<tr><td class="c muted">${i + 1}</td>
+      <td><input class="inp sm pq-in" list="pqPB" data-pq-r="${i}" data-f="pb" value="${esc(r.pb)}" placeholder="Bất kỳ phòng ban"></td>
+      <td><input class="inp sm pq-in" list="pqCV" data-pq-r="${i}" data-f="cv" value="${esc(r.cv)}" placeholder="Bất kỳ chức vụ"></td>
+      <td class="c muted">→</td><td><select class="inp sm" data-pq-r="${i}" data-f="role">${opt(r.role)}</select>${R[r.role] ? '' : ' <span class="badge b-red">vai trò đã xóa</span>'}</td>
+      <td class="act"><button class="ibtn" data-pq="up" data-i="${i}" title="Đưa lên (ưu tiên hơn)" ${i ? '' : 'disabled'}>${ic('up')}</button><button class="ibtn" data-pq="down" data-i="${i}" title="Đưa xuống" ${i < c.rules.length - 1 ? '' : 'disabled'}>${ic('down')}</button><button class="ibtn del" data-pq="del" data-i="${i}" title="Xóa quy tắc">${ic('trash')}</button></td></tr>`).join('');
+    const people = U.map(({ u, e, m }) => { const ad = u.role === 'admin', au = u.roleMode === 'auto', mis = !ad && m && m.role !== u.role;
+      return `<tr class="${mis ? 'pq-mis' : ''}"><td><div class="who">${avatarHTML(u.ten || (e && e.ten) || u.user, e && e.avatar)}<div><b>${esc(u.ten || (e && e.ten) || u.user)}</b><small>${esc(u.user)}</small></div></div></td>
+        <td>${e ? `${esc(e.phongBan || '—')}<br><small class="muted">${esc(e.chucVu || 'chưa có chức vụ')}</small>` : '<span class="muted small">Chưa khớp nhân viên (theo số điện thoại / họ tên)</span>'}</td>
+        <td><span class="badge ${ad ? 'b-p' : 'b-green'}">${esc((R[u.role] || {}).name || u.role)}</span></td>
+        <td>${ad ? '<span class="muted small">Admin – không tự đổi</span>' : m ? `<span class="badge ${mis ? 'b-amber' : 'b-gray'}">${esc((R[m.role] || {}).name || m.role)}</span><br><small class="muted">${m.i >= 0 ? 'quy tắc ' + (m.i + 1) : 'không khớp quy tắc nào'}</small>` : '—'}</td>
+        <td>${ad ? '' : `<label class="pq-sw" title="${au ? 'Tự động: đổi phòng ban/chức vụ thì vai trò đổi theo' : 'Thủ công: giữ vai trò Admin đã chọn'}"><input type="checkbox" data-pq="mode" data-id="${u.id}" ${au ? 'checked' : ''} ${e ? '' : 'disabled'}><span>${au ? 'Tự động' : 'Thủ công'}</span></label>`}</td></tr>`; }).join('');
+    const roleCards = Object.entries(T).map(([k, t]) => `<div class="pq-rc"><b>${esc(t.name)}</b><small>${esc(t.desc)}</small><span>${Auth.MODS.filter(md => (t.perms[md.id] || []).length).map(md => `<i title="${esc(md.label)}: ${(t.perms[md.id]).map(a => Auth.ACTS[a]).join(', ')}" class="${t.perms[md.id].includes('del') ? 'f' : t.perms[md.id].some(a => a !== 'view') ? 'e' : ''}">${esc(md.label.split(' (')[0])}</i>`).join('')}</span></div>`).join('');
+    return `<div class="card" id="pqCard"><div class="card-h"><h3 class="pq-tt">${ic('shield')} Phân quyền theo phòng ban & chức vụ</h3><span class="sub">${auto} tài khoản tự động · ${diff ? `<b class="neg">${diff} tài khoản khác quy tắc</b>` : 'mọi tài khoản đúng quy tắc'}</span>
+      <div class="right"><button class="btn" data-pq="tplReset">${ic('refresh')} Đặt lại quyền mẫu</button><button class="btn pri" data-pq="applyAll" ${diff || auto < U.filter(x => x.u.role !== 'admin' && x.e).length ? '' : 'disabled'}>${ic('check')} Áp dụng cho mọi tài khoản</button></div></div>
+      <div class="card-b">
+        <div class="pq-grid">
+          <div><div class="pq-h">1 · Quy tắc gán vai trò <small>xét từ trên xuống, khớp quy tắc đầu tiên. Nhiều từ khóa cách nhau dấu phẩy, không phân biệt dấu.</small></div>
+            <div class="tbl-wrap free"><table class="tbl compact pq-t"><thead><tr><th>#</th><th>Phòng ban có chứa</th><th>Chức vụ có chứa</th><th></th><th>Vai trò</th><th></th></tr></thead><tbody>${rules}</tbody></table></div>
+            <div class="row" style="margin-top:8px"><button class="btn sm" data-pq="add">${ic('plus')} Thêm quy tắc</button><button class="btn sm" data-pq="rulesReset">${ic('refresh')} Quy tắc mặc định</button><span class="grow"></span><label class="row small" style="gap:6px">Không khớp quy tắc nào → <select class="inp sm" data-pq-def style="width:auto">${opt(c.def)}</select></label></div>
+            <datalist id="pqPB">${PB.map(x => `<option value="${esc(x)}">`).join('')}<option value="phòng vé"></datalist><datalist id="pqCV">${CV.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+          <div><div class="pq-h">2 · Bộ vai trò mẫu <small>chi tiết từng quyền chỉnh ở mục "Phân quyền theo vai trò" bên dưới</small></div><div class="pq-rcs">${roleCards}</div>
+            <div class="small muted" style="margin-top:6px"><i class="pq-k"></i> chỉ xem &nbsp; <i class="pq-k e"></i> có thêm/sửa &nbsp; <i class="pq-k f"></i> toàn quyền (có xóa)</div></div>
+        </div>
+        <div class="pq-h" style="margin-top:16px">3 · Tài khoản <small>dòng vàng: vai trò đang khác với quy tắc. <b>Tự động</b> = đổi phòng ban/chức vụ trong hồ sơ nhân viên thì vai trò tự đổi theo; Admin tự chỉnh vai trò thì tài khoản chuyển về Thủ công.</small></div>
+        <div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Tài khoản</th><th>Phòng ban · Chức vụ</th><th>Vai trò hiện tại</th><th>Theo quy tắc</th><th>Chế độ</th></tr></thead><tbody>${people || '<tr><td colspan="5" class="empty">Chưa có tài khoản</td></tr>'}</tbody></table></div>
+      </div></div>`;
+  },
+  mountIn(el) {
+    if (!el || el.querySelector('#pqCard')) return; const g = el.querySelector('.grid') || el;
+    const us = g.querySelector('#usT'); us ? us.insertAdjacentHTML('afterend', PQ.html()) : g.insertAdjacentHTML('afterbegin', PQ.html());
+    const card = el.querySelector('#pqCard'), c = PQ.cfg();
+    const redraw = () => { const y = window.scrollY; App.render(); window.scrollTo(0, y); };
+    card.addEventListener('change', e => {
+      const t = e.target;
+      if (t.dataset.pqR != null) { c.rules[+t.dataset.pqR][t.dataset.f] = t.value; Store.changed(); return redraw(); }
+      if (t.hasAttribute('data-pq-def')) { c.def = t.value; Store.changed(); return redraw(); }
+      if (t.dataset.pq === 'mode') { const u = DB.users.find(x => x.id === t.dataset.id); if (u) { PQ.setAuto(u, t.checked); App.changed(); } }
+    });
+    card.addEventListener('click', async e => {
+      const b = e.target.closest('[data-pq]'); if (!b || b.dataset.pq === 'mode') return; const a = b.dataset.pq, i = +b.dataset.i;
+      if (!Auth.can('users', 'edit')) return toast('Chỉ Admin được chỉnh phân quyền', 'err');
+      if (a === 'add') { c.rules.push({ pb: '', cv: '', role: 'xem' }); }
+      else if (a === 'del') { if (!await Modal.confirm(`Xóa quy tắc số ${i + 1}?`, { ok: 'Xóa', danger: true })) return; c.rules.splice(i, 1); }
+      else if (a === 'up' && i > 0) { [c.rules[i - 1], c.rules[i]] = [c.rules[i], c.rules[i - 1]]; }
+      else if (a === 'down' && i < c.rules.length - 1) { [c.rules[i + 1], c.rules[i]] = [c.rules[i], c.rules[i + 1]]; }
+      else if (a === 'rulesReset') { if (!await Modal.confirm('Thay toàn bộ quy tắc bằng bộ quy tắc mặc định?', { ok: 'Dùng mặc định' })) return; c.rules = PQ.defRules(); c.def = 'xem'; }
+      else if (a === 'tplReset') {
+        if (!await Modal.confirm('Đặt lại quyền của <b>9 vai trò mẫu</b> (Ban Giám đốc, Kế toán – Nhân sự, Quản lý điều hành, Nhân viên điều hành, Trưởng phòng vé, Nhân viên bán vé, Kỹ thuật – Sửa chữa, Lái xe – Phụ xe, Chỉ xem) về mức khuyến nghị?<br><span class="small muted">Vai trò Admin và các vai trò anh/chị tự tạo không bị ảnh hưởng.</span>', { ok: 'Đặt lại' })) return;
+        Object.entries(PQ.tpl()).forEach(([k, t]) => { DB.roles[k] = Object.assign(DB.roles[k] || {}, { name: t.name, perms: JSON.parse(JSON.stringify(t.perms)), tpl: true, selfOnly: !!t.selfOnly }); });
+      }
+      else if (a === 'applyAll') {
+        const L = (DB.users || []).filter(u => u.role !== 'admin').map(u => ({ u, e: PQ.emp(u) })).filter(x => x.e).map(x => ({ ...x, r: PQ.roleFor(x.e) }));
+        const ch = L.filter(x => x.r !== x.u.role), no = (DB.users || []).filter(u => u.role !== 'admin' && !PQ.emp(u));
+        if (!await Modal.confirm(`Chuyển <b>${L.length}</b> tài khoản sang chế độ <b>Tự động</b> và gán vai trò theo quy tắc?${ch.length ? `<div class="pq-chg">${ch.map(x => `<div><b>${esc(x.u.ten || x.u.user)}</b>: ${esc((DB.roles[x.u.role] || {}).name || x.u.role)} → <b>${esc((DB.roles[x.r] || {}).name)}</b></div>`).join('')}</div>` : '<br>Không tài khoản nào bị đổi vai trò.'}${no.length ? `<p class="small muted">${no.length} tài khoản chưa khớp nhân viên nên giữ nguyên.</p>` : ''}<p class="small muted">Tài khoản Admin không bị đổi.</p>`, { ok: 'Áp dụng', title: 'Áp dụng phân quyền theo phòng ban' })) return;
+        L.forEach(x => PQ.setAuto(x.u, true)); toast(`Đã áp dụng cho ${L.length} tài khoản${ch.length ? ', đổi vai trò ' + ch.length + ' người' : ''}`, 'ok', 6000);
+      }
+      else return;
+      App.changed();
+    });
+  },
+  mount() {
+    const c0 = App.changed; App.changed = function () { try { if (DB && DB.users) PQ.sync(); } catch (e) { } return c0.apply(this, arguments); };
+    const r0 = vUsers.render; vUsers.render = function (el) { const r = r0.apply(this, arguments); try { if (Auth.user && Auth.user.role === 'admin') PQ.mountIn(el); } catch (e) { console.warn('PQ', e); } return r; };
+    /* tạo tài khoản từ nhân viên: thêm lựa chọn "Tự động theo phòng ban & chức vụ" */
+    try { const o0 = Modal.open; Modal.open = function (o) { const m = o0.apply(this, arguments); try { const s = m.el && m.el.querySelector('#accRole'); if (s && !s.querySelector('[value="__auto"]')) { s.insertAdjacentHTML('afterbegin', '<option value="__auto">⚙ Tự động theo phòng ban & chức vụ</option>'); s.value = '__auto'; } } catch (e) { } return m; }; } catch (e) { }
+  }
+};
+{ const m0 = CFG.migrate; CFG.migrate = function (db) { const r = m0.apply(this, arguments); PQ.ensure(db); return r; }; }
+addCSS(`.pq-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px}@media(max-width:1250px){.pq-grid{grid-template-columns:1fr}}
+.pq-h{font-weight:700;font-size:13px;color:var(--p-d);margin-bottom:8px}.pq-h small{display:block;font-weight:400;color:#64748b;font-size:12px;margin-top:2px}
+.pq-tt{display:flex;align-items:center;gap:8px}.pq-tt svg{width:18px;height:18px;color:var(--p)}
+.pq-t td{white-space:normal}.pq-t .inp.sm{width:100%;min-width:90px}.pq-t select.inp.sm{min-width:130px}.pq-t td.act{white-space:nowrap}.pq-t .ibtn{width:26px}.pq-mis td{background:#fffbeb!important}
+.pq-rcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;max-height:430px;overflow:auto}
+.pq-rc{border:1px solid #e6e9f0;border-radius:10px;padding:8px 10px;background:#fff}.pq-rc b{display:block;font-size:13px}.pq-rc small{display:block;color:#64748b;font-size:11.5px;line-height:1.4;margin:2px 0 6px}
+.pq-rc span{display:flex;flex-wrap:wrap;gap:3px}.pq-rc i,.pq-k{font-style:normal;font-size:10.5px;padding:1px 6px;border-radius:99px;background:#f1f5f9;color:#475569}.pq-rc i.e,.pq-k.e{background:#dbeafe;color:#1d4ed8}.pq-rc i.f,.pq-k.f{background:#dcfce7;color:#15803d}.pq-k{display:inline-block;width:18px;height:10px;padding:0;vertical-align:middle}
+.pq-sw{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;cursor:pointer}.pq-sw input{width:16px;height:16px}
+.pq-chg{max-height:220px;overflow:auto;margin:8px 0;font-size:12.5px;line-height:1.7;border:1px solid #eef0f5;border-radius:8px;padding:6px 10px}`);
+window.addEventListener('load', () => { try { PQ.mount(); if (DB) { PQ.ensure(DB); } } catch (e) { console.warn('PQ', e); } });
+
+/* ===== LÁI XE CHỈ XEM THÔNG TIN CỦA CHÍNH MÌNH =====
+   Vai trò có "selfOnly" (mặc định: Lái xe – Phụ xe): Đặt vé / Điều hành chỉ hiện chuyến của mình (kèm khách của chuyến đó),
+   có trang "Thông tin của tôi" (hồ sơ, chuyến trong tháng, công, phiếu lương của chính mình). Ẩn trung tâm điều hành và trợ lý AI. */
+ICONS.up = ICONS.up || '<path d="m18 15-6-6-6 6"/>'; ICONS.down = ICONS.down || '<path d="m6 9 6 6 6-6"/>';
+if (!Auth.MODS.some(m => m.id === 'cuatoi')) Auth.MODS.unshift({ id: 'cuatoi', label: 'Thông tin của tôi (hồ sơ, chuyến, công, phiếu lương của chính mình)', acts: ['view'] });
+Auth.VIEWMOD.cuatoi = 'cuatoi';
+const DRV = {
+  on() { const u = Auth.user; if (!u || u.role === 'admin') return false; const r = DB.roles && DB.roles[u.role]; return !!(r && r.selfOnly); },
+  me: () => Auth.user ? PQ.emp(Auth.user) : null,
+  /* chạy hàm f với dữ liệu chuyến/vé đã lọc còn của chính mình, xong trả lại nguyên vẹn */
+  scoped(f) {
+    if (!DRV.on()) return f(); const e = DRV.me(), L0 = DB.lichchay, B0 = DB.datve;
+    const L = e ? (L0 || []).filter(l => l.laiXe === e.id || l.phuXe === e.id) : [], ids = new Set(L.map(l => l.id));
+    DB.lichchay = L; DB.datve = (B0 || []).filter(b => ids.has(b.chuyen));
+    try { return f(); } finally { DB.lichchay = L0; DB.datve = B0; }
+  }
+};
+const vMe = {
+  title: 'Thông tin của tôi', icon: 'user', desc: 'Hồ sơ, chuyến chạy, công và phiếu lương của chính bạn', print: false,
+  tools: () => `<label class="row small" style="gap:6px">Tháng <input type="month" class="inp" id="meM" value="${esc(UI.m)}"></label>`,
+  render(el) {
+    const e = DRV.me(), ym = UI.m;
+    const t = document.getElementById('meM'); if (t && !t.dataset.on) { t.dataset.on = 1; t.onchange = () => { if (t.value) { UI.m = t.value; App.render(); } }; }
+    if (!e) { el.innerHTML = `<div class="card"><div class="empty">Tài khoản này chưa gắn với hồ sơ nhân viên nào.<br>Nhờ quản lý kiểm tra số điện thoại trong hồ sơ nhân viên trùng với tên đăng nhập.</div></div>`; return; }
+    const T = (DB.lichchay || []).filter(l => (l.laiXe === e.id || l.phuXe === e.id) && String(l.ngay).startsWith(ym)).sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio));
+    const s = summarize(ym, e.id), po = (() => { try { return PO.of(ym, e.id); } catch (x) { return {}; } })(), today = D.today ? D.today() : new Date().toISOString().slice(0, 10);
+    const veh = id => ((DB.vehicles || []).find(v => v.id === id) || {}).bks || '—';
+    const bh = e.bangHetHan ? Math.round((new Date(e.bangHetHan) - new Date(today)) / 864e5) : null;
+    const kpi = (lb, v, sub = '', tone = '') => `<div class="kpi ${tone}"><div class="k-lb">${lb}</div><div class="k-v">${v}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
+    const pay = (() => { try { return payroll(ym).find(p => p.id === e.id); } catch (x) { return null; } })();
+    el.innerHTML = `<div class="me-top card"><div class="me-av">${avatarHTML(e.ten, e.avatar, 'avatar me-avi')}</div><div class="grow"><h2>${esc(e.ten)}</h2><div class="muted">${esc(e.chucVu || '')}${e.phongBan ? ' · ' + esc(e.phongBan) : ''}${e.sdt ? ' · ' + esc(e.sdt) : ''}</div>
+        ${e.bangHang || e.bangHetHan ? `<div class="me-gplx">Bằng lái hạng <b>${esc(e.bangHang || '—')}</b>${e.bangHetHan ? ` · hết hạn <b>${F.date(e.bangHetHan)}</b> ${bh != null && bh < 0 ? '<span class="badge b-red">Đã hết hạn</span>' : bh != null && bh <= 60 ? `<span class="badge b-amber">Còn ${bh} ngày</span>` : ''}` : ''}</div>` : ''}</div>
+        ${pay ? `<button class="btn pri" id="meSlip">${ic('receipt')} In phiếu lương ${F.month(ym)}</button>` : ''}</div>
+      <div class="kpis">${kpi('Số chuyến tháng ' + F.month(ym), T.reduce((a, l) => a + (+l.soChuyen || 1), 0))}${kpi('Công làm', F.num(s.lv || 0))}${kpi('Tiền công', F.money(s.tienCong || 0))}${po && po.show ? kpi('Thực nhận', F.money(po.thucNhan || 0), 'Sau trừ BH, nợ kỳ trước', 't-green') : ''}</div>
+      <div class="card"><div class="card-h"><h3>Chuyến của tôi · ${F.month(ym)}</h3><span class="sub">${T.length} chuyến</span></div><div class="card-b p0"><div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Ngày</th><th>Giờ</th><th>Tuyến</th><th>Xe</th><th class="r">Khách</th><th></th></tr></thead><tbody>
+        ${T.map(l => { const n = (DB.datve || []).filter(b => b.chuyen === l.id && !b.huy).length; return `<tr class="${l.ngay === today ? 'me-today' : ''}"><td>${F.date(l.ngay)}</td><td><b>${esc(l.gio || '')}</b></td><td>${esc(l.tuyen || '')}</td><td>${esc(veh(l.xeId))}</td><td class="r">${n}</td><td>${l.ngay === today ? '<span class="badge b-blue">Hôm nay</span>' : l.ngay > today ? '<span class="badge b-gray">Sắp chạy</span>' : ''}</td></tr>`; }).join('') || '<tr><td colspan="6"><div class="empty">Chưa có chuyến nào trong tháng này</div></td></tr>'}
+      </tbody></table></div></div></div>`;
+    const b = el.querySelector('#meSlip'); if (b) b.onclick = () => { const x = payroll(UI.m).find(p => p.id === e.id); if (x) Print.run(`<div class="pr">${slipHTML(x)}</div>`, { title: 'Phieu luong ' + (x.ma || '') + ' ' + UI.m }); };
+  }
+};
+CFG.views.cuatoi = vMe;
+if (!CFG.nav.some(g => g.items.includes('cuatoi'))) CFG.nav.unshift({ group: 'Cá nhân', items: ['cuatoi'] });
+{
+  const fv0 = Auth.firstView; Auth.firstView = function () { if (DRV.on() && Auth.canView('cuatoi')) return 'cuatoi'; return fv0.apply(this, arguments); };
+  const r0 = App.render; App.render = function () { const self = this, a = arguments; document.body.classList.toggle('drv-scope', DRV.on()); if (DRV.on() && ['lichchay', 'dieuhanh'].includes(App.cur)) return DRV.scoped(() => r0.apply(self, a)); return r0.apply(self, a); };
+  /* mọi nút bấm (in, xuất Excel, tìm vé…) của lái xe cũng chỉ thấy chuyến của mình */
+  window.addEventListener('load', () => { Object.keys(ACT).forEach(k => { const fn = ACT[k]; if (typeof fn !== 'function' || fn.__drv) return; const w = function () { const self = this, a = arguments; return DRV.on() ? DRV.scoped(() => fn.apply(self, a)) : fn.apply(self, a); }; w.__drv = 1; ACT[k] = w; }); });
+  window.addEventListener('load', () => { try { const h0 = HUB.open; HUB.open = function () { if (DRV.on()) return; return h0.apply(this, arguments); }; } catch (e) { } try { if (typeof BOT !== 'undefined' && BOT.toggle) { const b0 = BOT.toggle; BOT.toggle = function () { if (DRV.on()) return; return b0.apply(this, arguments); }; } } catch (e) { } });
+}
+addCSS(`body.drv-scope #hubBtn,body.drv-scope #botFab,body.drv-scope #botPanel,body.drv-scope .tb-save{display:none!important}
+.me-top{display:flex;align-items:center;gap:16px;padding:16px 18px;margin-bottom:18px;flex-wrap:wrap}.me-top h2{margin:0;font-size:19px}.me-avi{width:64px;height:64px;font-size:20px;border-radius:50%}
+.me-gplx{margin-top:6px;font-size:13px}.me-today td{background:#eff6ff!important}`);
 
 /* ===== Firebase: lưu dữ liệu lớn (trên 10 MB) =====
    Firestore giới hạn mỗi lần ghi khoảng 10 MB. Cách lưu mới:
@@ -9285,13 +9496,154 @@ Object.assign(Auth.ACT_PERM, { rtpPrint: ['chamcong', 'view'], rtpExcel: ['chamc
   };
 }
 
+/* ===== MÁY CHỦ DỰ PHÒNG CLOUDFLARE (Workers + R2) =====
+   - Dữ liệu được NÉN (gzip) + MÃ HÓA AES-256-GCM trên máy trước khi gửi; khóa sinh từ "mã kết nối Cloudflare" (PBKDF2-SHA256, 210.000 vòng).
+   - Mỗi yêu cầu ký HMAC-SHA256 bằng khóa riêng (WORKER_SECRET) + thời điểm + mã dùng một lần. Mã kết nối không bao giờ đi qua mạng.
+   - Cấu hình (Admin) nằm trong dữ liệu chung để mọi máy tự chuyển được khi Firebase lỗi; file GitHub không chứa. */
+const CF = {
+  K: 'cf.cfg', KS: 'cf.st', SALT: 'nhaxe-thinhphat/cloudflare/v1', ITER: 210000, keys: new Map(), busy: false, list: null,
+  te: new TextEncoder(), td: new TextDecoder(),
+  hex: b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''),
+  norm: u => String(u || '').replace(/[\s​-‍﻿ ]+/g, '').replace(/\/+$/, ''),
+  okUrl: u => /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[\w\-./]*)?$/i.test(u || ''),
+  /* cấu hình chung (trong dữ liệu) + bản lưu trên máy để tự chuyển cả khi Firebase lỗi lúc mở app */
+  shared() { try { return Object.assign({ url: '', pass: '', on: false, fo: false, every: 30 }, (DB && DB.settings && DB.settings.cfcloud) || {}); } catch (e) { return { url: '', pass: '', on: false, fo: false, every: 30 }; } },
+  cfg() { const s = CF.shared(); if (s.url && s.pass) return s; try { const l = JSON.parse(localStorage.getItem(CF.K) || '{}') || {}; return Object.assign(s, l); } catch (e) { return s; } },
+  cache() { try { const s = CF.shared(); if (s.fo && s.url && s.pass) localStorage.setItem(CF.K, JSON.stringify({ url: s.url, pass: s.pass, fo: true })); else if (DB && DB.settings && DB.settings.cfcloud) localStorage.removeItem(CF.K); } catch (e) { } },
+  ok: c => CF.okUrl(CF.norm(c.url)) && String(c.pass || '').length >= 12,
+  foReady() { const c = CF.cfg(); return !!(c.fo && CF.ok(c)); },
+  st() { try { return JSON.parse(localStorage.getItem(CF.KS) || '{}') || {}; } catch (e) { return {}; } },
+  setSt(o) { try { localStorage.setItem(CF.KS, JSON.stringify(Object.assign(CF.st(), o))); } catch (e) { } },
+  /* ---- khóa ---- */
+  async derive(pass) {
+    if (CF.keys.has(pass)) return CF.keys.get(pass);
+    const base = await crypto.subtle.importKey('raw', CF.te.encode(pass), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: CF.te.encode(CF.SALT), iterations: CF.ITER, hash: 'SHA-256' }, base, 512));
+    const authHex = CF.hex(bits.slice(0, 32));
+    const k = { authHex, mac: await crypto.subtle.importKey('raw', bits.slice(0, 32), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), enc: await crypto.subtle.importKey('raw', bits.slice(32, 64), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']) };
+    CF.keys.set(pass, k); return k;
+  },
+  /* ---- nén + mã hóa: [N X 1][cờ nén][iv 12 byte][dữ liệu mã hóa + thẻ xác thực] ---- */
+  async seal(text, k) {
+    let raw = CF.te.encode(text), flag = 0;
+    if (typeof CompressionStream !== 'undefined') { try { raw = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); flag = 1; } catch (e) { raw = CF.te.encode(text); flag = 0; } }
+    const iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: CF.te.encode('NX1') }, k.enc, raw));
+    const out = new Uint8Array(16 + ct.length); out.set([0x4E, 0x58, 0x31, flag]); out.set(iv, 4); out.set(ct, 16); return out;
+  },
+  async open(buf, k) {
+    const b = new Uint8Array(buf); if (b[0] !== 0x4E || b[1] !== 0x58 || b[2] !== 0x31) throw new Error('Dữ liệu trên Cloudflare không đúng định dạng');
+    let pt; try { pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(4, 16), additionalData: CF.te.encode('NX1') }, k.enc, b.slice(16))); }
+    catch (e) { throw new Error('Không giải mã được dữ liệu Cloudflare: mã kết nối khác với lúc lưu, hoặc dữ liệu đã bị sửa'); }
+    if (b[3] === 1) pt = new Uint8Array(await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    return CF.td.decode(pt);
+  },
+  /* ---- gọi Worker (giao thức giống máy chủ Apps Script để dùng chung cơ chế sao lưu / tự chuyển) ---- */
+  async call(body, c = CF.cfg(), ms = 90000) {
+    const url = CF.norm(c.url); if (!CF.ok({ url, pass: c.pass })) throw new Error('Chưa nhập đúng địa chỉ Worker Cloudflare hoặc mã kết nối (từ 12 ký tự)');
+    const k = await CF.derive(c.pass), act = body.action, name = body.name || '', who = encodeURIComponent(String(body.who || '').slice(0, 100));
+    let payload = null; if ((act === 'put' || act === 'snap') && body.data) payload = await CF.seal(JSON.stringify(body.data), k);
+    const ts = Date.now(), nonce = CF.hex(crypto.getRandomValues(new Uint8Array(16))), base = body.baseVer == null ? '' : String(body.baseVer), len = payload ? payload.length : 0;
+    const sig = CF.hex(await crypto.subtle.sign('HMAC', k.mac, CF.te.encode([act, ts, nonce, base, body.force ? 1 : 0, name, who, len].join('\n'))));
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), ms); let r;
+    try { r = await fetch(url, { method: 'POST', mode: 'cors', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: ac.signal, body: payload, headers: { 'Content-Type': 'application/octet-stream', 'X-Act': act, 'X-Ts': String(ts), 'X-Nonce': nonce, 'X-Sig': sig, 'X-Base': base, 'X-Force': body.force ? '1' : '0', 'X-Name': name, 'X-Who': who } }); }
+    catch (e) { const er = new Error(e && e.name === 'AbortError' ? 'Cloudflare phản hồi quá lâu' : 'Không kết nối được máy chủ Cloudflare'); er.code = 'unavailable'; clearTimeout(to); throw er; }
+    if (/json/.test(r.headers.get('Content-Type') || '')) {
+      const j = await r.json().finally(() => clearTimeout(to));
+      if (!j.ok) { const er = new Error(j.description || 'Lỗi Cloudflare'); er.conflict = !!j.conflict; er.ver = j.ver; er.status = r.status; throw er; }
+      return j;
+    }
+    const buf = await r.arrayBuffer().finally(() => clearTimeout(to)), data = JSON.parse(await CF.open(buf, k));
+    return { ok: true, data, ver: +(r.headers.get('X-Ver') || 0), at: r.headers.get('X-At') || '', who: decodeURIComponent(r.headers.get('X-Who') || ''), name: r.headers.get('X-Name') || name };
+  },
+  /* ---- sao lưu tự động (máy Admin) ---- */
+  async run(force) {
+    const c = CF.cfg(); if (!BK.admin() || !CF.ok(c) || (!c.on && !force) || CF.busy || !DB || (FO.on && FO.tgt === 'cf')) return;
+    const st = CF.st(), due = !st.at || (Date.now() - new Date(st.at).getTime()) >= (+c.every || 30) * 60000, txt = JSON.stringify(DB), sg = BK.hash(txt);
+    if (!force && (!due || sg === (st.sig || ''))) return;
+    CF.busy = true; CF.paint();
+    try { const j = await CF.call({ action: 'put', data: DB, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c); CF.setSt({ at: new Date().toISOString(), sig: sg, err: '', ver: j.ver, kb: Math.round(txt.length / 1024) }); if (force) toast(`${ic('check')} Đã sao lưu sang Cloudflare (đã mã hóa)`, 'ok', 3500); }
+    catch (e) { CF.setSt({ err: e.message }); if (force) toast(esc(e.message), 'err', 8000); }
+    finally { CF.busy = false; CF.paint(); }
+  },
+  stHTML() {
+    const c = CF.cfg(), st = CF.st(), good = CF.ok(c) && c.on && !st.err;
+    const t = CF.busy ? 'Đang sao lưu sang Cloudflare…' : !CF.ok(c) ? 'Chưa cài đặt Cloudflare' : !c.on ? 'Đang tắt sao lưu tự động' : st.err ? 'Lần sao lưu gần nhất bị lỗi' : 'Đang tự sao lưu (đã mã hóa)';
+    return `<div class="hub-zs ${good ? 'ok' : ''}">${ic(good ? 'check' : 'alert')}<div><b>${t}</b><small>${st.err && c.on ? esc(st.err) : 'Lần gần nhất: ' + BK.ago(st.at) + (st.kb ? ' · ' + (st.kb > 1024 ? F.num(st.kb / 1024, 1) + ' MB' : st.kb + ' KB') + ' trước khi nén' : '')}${c.fo && CF.ok(c) ? ' · tự chuyển khi Firebase lỗi: <b>bật</b>' : ''}</small></div></div>`;
+  },
+  paint() { const el = document.querySelector('[data-cfst]'); if (el) el.innerHTML = CF.stHTML(); },
+  html() {
+    const c = CF.shared(), opt = [[15, '15 phút'], [30, '30 phút'], [60, '1 giờ'], [180, '3 giờ'], [720, '12 giờ']].map(([v, l]) => `<option value="${v}" ${+c.every === v ? 'selected' : ''}>${l}</option>`).join('');
+    return `<div class="cf-sec"><div class="hub-h">Máy chủ dự phòng Cloudflare <span class="badge b-violet" style="margin-left:6px">Chỉ Admin</span> <span class="badge b-green">Mã hóa đầu-cuối</span></div>
+      <div class="hub-card"><div data-cfst style="margin-bottom:12px">${CF.stHTML()}</div>
+        <p class="hub-p">Thứ tự dùng: <b>Firebase</b> (chính) → <b>Cloudflare</b> → <b>Google Drive</b>. Dữ liệu được nén và mã hóa AES-256 ngay trên máy, Cloudflare chỉ giữ bản đã mã hóa. Cách tạo Worker: xem file <b>worker.js</b> và hướng dẫn kèm theo.</p>
+        <label class="hub-f"><span>Địa chỉ Worker <small>(dạng https://ten-worker.ten-ban.workers.dev)</small></span><input class="inp" data-cf="url" placeholder="https://nhaxe-backup.xxx.workers.dev" value="${esc(c.url)}"></label>
+        <label class="hub-f"><span>Mã kết nối Cloudflare <small>(tự đặt, từ 12 ký tự, nên dài và khó đoán; mất mã này là không giải mã được bản lưu)</small></span><div class="hub-pw"><input class="inp" data-cf="pass" type="password" autocomplete="new-password" value="${esc(c.pass)}"><button class="ibtn" data-g="cfeye">${ic('eye')}</button></div></label>
+        <div class="cf-sec-k"><span>WORKER_SECRET để dán vào Cloudflare:</span><code data-cfsec>${c.pass && c.pass.length >= 12 ? 'đang tính…' : '— nhập mã kết nối trước —'}</code><button class="btn sm" data-g="cfcopy">${ic('copy')} Sao chép</button></div>
+        <div class="row" style="margin:6px 0 10px"><label class="row small" style="gap:8px;font-weight:600"><input type="checkbox" data-cf="on" ${c.on ? 'checked' : ''}> Bật sao lưu tự động</label><span class="grow"></span><label class="row small" style="gap:6px">Tần suất <select class="inp sm" data-cf="every" style="width:auto">${opt}</select></label></div>
+        <label class="bk-fo"><input type="checkbox" data-cf="fo" ${c.fo ? 'checked' : ''}><span><b>Tự chuyển sang Cloudflare khi Firebase lỗi</b> (ưu tiên trước Google Drive) – áp dụng cho mọi máy. Firebase có lại thì tự đưa bản mới nhất về Firebase.</span></label>
+        <div class="hub-btns"><button class="btn" data-g="cftest">${ic('check')} Thử kết nối</button><button class="btn pri" data-g="cfsave">${ic('save')} Lưu cài đặt</button><button class="btn" data-g="cfnow" ${CF.ok(c) ? '' : 'disabled'}>${ic('upload')} Sao lưu ngay</button></div>
+      </div>
+      <div class="hub-card" style="margin-top:10px"><p class="hub-p"><b>Khôi phục từ Cloudflare</b>: chọn bản mới nhất hoặc bản theo ngày (30 ngày). App tự cất bản hiện tại sang Cloudflare trước khi khôi phục.</p>
+        <div class="hub-btns" style="justify-content:flex-start"><button class="btn" data-g="cflist" ${CF.ok(c) ? '' : 'disabled'}>${ic('refresh')} Xem các bản lưu trên Cloudflare</button></div><div data-cflist>${CF.listHTML()}</div></div></div>`;
+  },
+  listHTML() {
+    if (!CF.list) return ''; if (!CF.list.length) return '<p class="hub-p" style="margin-top:8px">Chưa có bản lưu nào trên Cloudflare.</p>';
+    return `<div class="bk-l">${CF.list.map(f => `<div class="bk-r"><div><b>${esc(f.label || f.name)}</b><small>${f.at ? new Date(f.at).toLocaleString('vi-VN') : ''}${f.size ? ' · ' + (f.size > 1048576 ? F.num(f.size / 1048576, 1) + ' MB' : Math.round(f.size / 1024) + ' KB') + ' đã nén' : ''}</small></div><button class="btn sm" data-g="cfrest" data-n="${esc(f.name)}">${ic('download')} Khôi phục</button></div>`).join('')}</div>`;
+  },
+  form() { const q = k => HUB.el.querySelector(`[data-cf="${k}"]`); return { url: CF.norm((q('url') || {}).value), pass: ((q('pass') || {}).value || '').trim(), on: !!(q('on') || {}).checked, fo: !!(q('fo') || {}).checked, every: +((q('every') || {}).value || 30) }; },
+  async showSecret() { const el = HUB.el && HUB.el.querySelector('[data-cfsec]'); if (!el) return; const p = CF.form().pass; if (p.length < 12) { el.textContent = '— nhập mã kết nối (từ 12 ký tự) —'; return; } el.textContent = 'đang tính…'; try { el.textContent = (await CF.derive(p)).authHex; } catch (e) { el.textContent = 'Trình duyệt không hỗ trợ mã hóa'; } },
+  async act(a, b) {
+    if (!BK.admin()) return toast('Chỉ Admin được thao tác máy chủ Cloudflare', 'err');
+    const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
+    const need = c => { if (!CF.okUrl(c.url)) throw new Error('Nhập địa chỉ Worker dạng https://ten-worker.ten-ban.workers.dev'); if (c.pass.length < 12) throw new Error('Mã kết nối Cloudflare phải từ 12 ký tự'); };
+    if (a === 'cfeye') { const i = b.parentElement.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; return; }
+    if (a === 'cfcopy') { const p = CF.form().pass; if (p.length < 12) return toast('Nhập mã kết nối trước (từ 12 ký tự)', 'err'); const s = (await CF.derive(p)).authHex; try { await navigator.clipboard.writeText(s); toast('Đã sao chép WORKER_SECRET. Dán vào Cloudflare → Worker → Settings → Variables and Secrets', 'ok', 7000); } catch (e) { toast('Bôi đen dòng mã và sao chép bằng Ctrl+C', 'err'); } return; }
+    if (a === 'cftest') return busy(async () => { const c = CF.form(); need(c); const j = await CF.call({ action: 'info' }, c, 30000); toast(`Kết nối được Cloudflare${j.ver ? ' · có bản lưu #' + j.ver + (j.at ? ' lúc ' + new Date(j.at).toLocaleString('vi-VN') : '') : ' · chưa có bản lưu nào'}`, 'ok', 7000); });
+    if (a === 'cfsave') return busy(async () => {
+      const c = CF.form(); if (c.url || c.pass || c.on || c.fo) need(c); if (c.on || c.fo) await CF.call({ action: 'info' }, c, 30000);
+      const old = CF.shared(); DB.settings.cfcloud = { url: c.url, pass: c.pass, on: c.on, fo: c.fo, every: c.every, at: new Date().toISOString() }; CF.cache(); Store.changed();
+      if (old.url !== c.url || old.pass !== c.pass) CF.setSt({ at: '', sig: '', err: '' }); CF.list = null; HUB.setTab('gdata');
+      toast(c.on ? 'Đã lưu. Đang sao lưu lần đầu sang Cloudflare…' : 'Đã lưu cài đặt Cloudflare', 'ok'); if (c.on) CF.run(true);
+    });
+    if (a === 'cfnow') return busy(async () => { need(CF.cfg()); await CF.run(true); });
+    if (a === 'cflist') return busy(async () => { const j = await CF.call({ action: 'list' }); CF.list = j.files || []; const el = HUB.el.querySelector('[data-cflist]'); if (el) el.innerHTML = CF.listHTML(); });
+    if (a === 'cfrest') return busy(async () => {
+      const n = b.dataset.n, f = (CF.list || []).find(x => x.name === n) || { name: n };
+      if (!await Modal.confirm(`Khôi phục dữ liệu từ bản Cloudflare <b>${esc(f.label || n)}</b>${f.at ? ' (' + new Date(f.at).toLocaleString('vi-VN') + ')' : ''}?<br><span class="small muted">Toàn bộ dữ liệu hiện tại ${GS.on ? 'trên mọi máy ' : ''}sẽ được thay bằng bản này. Bản hiện tại được cất sang Cloudflare trước.</span>`, { ok: 'Khôi phục', danger: true, title: 'Khôi phục từ Cloudflare' })) return;
+      await CF.call({ action: 'snap', data: DB, who: GS.who() });
+      const j = await CF.call({ action: 'getbk', name: n }); if (!j.data || !j.data.settings) throw new Error('Bản lưu này không có dữ liệu hợp lệ');
+      const gs = DB.settings.gsync, cfc = DB.settings.cfcloud, me = Auth.user && Auth.user.id;
+      DB = j.data; DB._meta = DB._meta || {}; delete DB._meta.shell; delete DB._meta.sample; App.cfg.migrate && App.cfg.migrate(DB); if (gs) DB.settings.gsync = gs; if (cfc) DB.settings.cfcloud = cfc;
+      try { Auth.user = DB.users.find(u => u.id === me) || Auth.user; Auth.chip(); } catch (e) { }
+      if (GS.on) { await GS.push(true); if (GS.err) throw new Error('Đã khôi phục trên máy này nhưng chưa đưa lên được nơi lưu chính: ' + GS.err); }
+      App.changed(); CF.list = null; toast(`${ic('check')} Đã khôi phục dữ liệu từ Cloudflare`, 'ok', 6000); HUB.setTab('gdata');
+    });
+  },
+  mount() {
+    const d0 = GS.draw; GS.draw = function (body) { const r = d0.apply(this, arguments); try { if (BK.admin() && body && !body.querySelector('.cf-sec')) { const bk = body.querySelector('.bk-sec'); bk ? bk.insertAdjacentHTML('beforebegin', CF.html()) : body.insertAdjacentHTML('beforeend', CF.html()); const p = body.querySelector('[data-cf="pass"]'); if (p) p.addEventListener('input', () => { clearTimeout(CF._t); CF._t = setTimeout(CF.showSecret, 500); }); setTimeout(CF.showSecret, 50); } } catch (e) { console.warn('CF', e); } return r; };
+    const a0 = GS.act; GS.act = function (a, b) { if (/^cf/.test(a || '')) return CF.act(a, b); return a0.apply(this, arguments); };
+    const ap = GS.apply; GS.apply = function () { const r = ap.apply(this, arguments); CF.cache(); return r; };
+    setInterval(() => CF.run(false), 60000); setTimeout(() => CF.run(false), 25000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') CF.run(false); });
+  }
+};
+addCSS(`.cf-sec-k{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 8px;font-size:12px;color:#475467;margin:-2px 0 10px}.cf-sec-k>span{grid-column:1/-1;font-weight:600}.cf-sec-k code{display:block;min-width:0;word-break:break-all;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:6px 8px;font:11.5px/1.4 ui-monospace,Consolas,monospace}`);
+window.addEventListener('load', () => { try { CF.mount(); CF.cache(); } catch (e) { console.warn('CF', e); } });
+
 /* ===== TỰ CHUYỂN DỰ PHÒNG: Firebase lỗi (mất kết nối / hết dung lượng) → tự dùng Google Drive; Firebase có lại → đưa bản mới nhất từ Drive về Firebase =====
    - Luôn ưu tiên Firebase. Drive (Apps Script, file Code.gs) chỉ dùng khi Firebase lỗi.
    - Cấu hình do Admin bật trong tab Lưu trữ Google; lưu trong dữ liệu chung nên mọi máy đã từng mở app đều nhận được (không có trong file GitHub). */
 const FO = {
   K: 'fo.cfg', KS: 'fo.st', on: false, reason: '', since: '', fails: 0, needPull: false, probeT: null, pollT: null, rec: false, entering: null,
   cfg() { try { const c = JSON.parse(localStorage.getItem(FO.K) || '{}') || {}; c.url = String(c.url || '').replace(/[\s\u200B-\u200D\uFEFF\u00A0]+/g, ''); return c; } catch (e) { return {}; } },
-  ready() { const c = FO.cfg(); return !!(c.on && /^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(c.url || '') && (c.key || '').length >= 6); },
+  gasReady() { const c = FO.cfg(); return !!(c.on && /^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(c.url || '') && (c.key || '').length >= 6); },
+  /* các máy chủ dự phòng, theo thứ tự ưu tiên: Cloudflare rồi Google Drive */
+  tlist() { const L = []; if (typeof CF !== 'undefined' && CF.foReady()) L.push({ id: 'cf', name: 'Cloudflare', call: (b, ms) => CF.call(b, CF.cfg(), ms) }); if (FO.gasReady()) L.push({ id: 'gas', name: 'Google Drive', call: (b, ms) => { const c = FO.cfg(); return FO.call0.call(GS, b, { url: c.url, key: c.key, mode: 'gas' }, ms); } }); return L; },
+  ready() { return FO.tlist().length > 0; },
+  tgt: '', target() { const L = FO.tlist(); return L.find(t => t.id === FO.tgt) || L[0]; },
+  tname() { const t = FO.target(); return t ? t.name : 'máy chủ dự phòng'; },
+  /* thử lần lượt từng máy chủ dự phòng, dùng máy chủ đầu tiên trả lời được */
+  async pick(body, ms) { let last; for (const t of FO.tlist()) { try { const r = await t.call(body, ms); FO.tgt = t.id; return r; } catch (e) { last = e; } } throw last || new Error('Chưa cài máy chủ dự phòng'); },
   cache() { try { const f = DB && DB.settings && DB.settings.fodrive; if (!f) return; if (f.on && f.url && f.key) localStorage.setItem(FO.K, JSON.stringify({ on: true, url: f.url, key: f.key })); else localStorage.removeItem(FO.K); } catch (e) { } },
   lastOk() { try { return localStorage.getItem(FO.KS) || ''; } catch (e) { return ''; } },
   markOk() { try { localStorage.setItem(FO.KS, new Date().toISOString()); } catch (e) { } },
@@ -9303,11 +9655,11 @@ const FO = {
     if (['unavailable', 'deadline-exceeded', 'auth/network-request-failed', 'internal', 'cancelled'].includes(c) || /quá lâu|offline|network|mạng|thư viện Firebase|Failed to fetch|Không kết nối được (Firebase|Firestore)/i.test(m)) return 'net';
     return '';
   },
-  dcall(body, ms = 90000) { const c = FO.cfg(); return FO.call0.call(GS, body, { url: c.url, key: c.key, mode: 'gas' }, ms); },
+  dcall(body, ms = 90000) { const t = FO.target(); if (!t) return Promise.reject(new Error('Chưa cài máy chủ dự phòng')); return t.call(body, ms); },
   tag: w => '[Dự phòng] ' + String(w || '').replace(/^\[Dự phòng\]\s*/, ''),
   async drive(body, ms) {
     if (body.action === 'put') {
-      if (FO.needPull && !body.force) { const er = new Error('Trên Drive dự phòng đã có bản mới hơn do máy khác lưu'); er.conflict = true; throw er; }
+      if (FO.needPull && !body.force) { const er = new Error('Trên ' + FO.tname() + ' dự phòng đã có bản mới hơn do máy khác lưu'); er.conflict = true; throw er; }
       body = { ...body, baseVer: GS.ver, who: FO.tag(body.who || GS.who()) };
     }
     const r = await FO.dcall(body, ms);
@@ -9318,7 +9670,7 @@ const FO = {
   async enter(e) {
     if (FO.on) return; if (FO.entering) return FO.entering;
     return FO.entering = (async () => {
-      const k = FO.kind(e), dj = await FO.dcall({ action: 'info' }, 30000);   // Drive cũng lỗi → báo lỗi gốc
+      const k = FO.kind(e), dj = await FO.pick({ action: 'info' }, 30000);   // Drive cũng lỗi → báo lỗi gốc
       const live = GS.on && DB && !(DB._meta && DB._meta.shell);
       const driveNewer = /^\[Dự phòng\]/.test(dj.who || '') && (!FO.lastOk() || (dj.at || '') > FO.lastOk());
       FO.on = true; FO.reason = k; FO.since = new Date().toISOString(); FO.fails = 0;
@@ -9327,7 +9679,7 @@ const FO = {
         else { const r = await FO.dcall({ action: 'put', data: DB, force: true, who: FO.tag(GS.who()) }); GS.ver = +r.ver || 0; FO.needPull = false; }
       } else { GS.ver = +dj.ver || 0; FO.needPull = false; }
       FO.start(); FO.paint();
-      setTimeout(() => toast(`${ic('alert')} Firebase ${k === 'quota' ? 'đã hết dung lượng / hạn mức hôm nay' : 'đang mất kết nối'}. App tự chuyển sang <b>Google Drive dự phòng</b>, vẫn dùng và lưu bình thường.`, 'err', 9000), 400);
+      setTimeout(() => toast(`${ic('alert')} Firebase ${k === 'quota' ? 'đã hết dung lượng / hạn mức hôm nay' : 'đang mất kết nối'}. App tự chuyển sang <b>${FO.tname()} dự phòng</b>, vẫn dùng và lưu bình thường.`, 'err', 9000), 400);
     })().finally(() => { FO.entering = null; });
   },
   start() {
@@ -9348,24 +9700,24 @@ const FO = {
       const dj = await FO.dcall({ action: 'get' }), fi = await FO.call1.call(GS, { action: 'info' }, GS.cfg(), 30000);
       let pushed = false;
       if (dj.data && dj.data.settings && /^\[Dự phòng\]/.test(dj.who || '') && (!fi.savedAt || (dj.at || '') > fi.savedAt)) {
-        await FO.call1.call(GS, { action: 'put', data: dj.data, force: true, who: 'Từ Drive dự phòng · ' + GS.who() }, GS.cfg(), 120000); pushed = true;
+        await FO.call1.call(GS, { action: 'put', data: dj.data, force: true, who: 'Từ ' + FO.tname() + ' dự phòng · ' + GS.who() }, GS.cfg(), 120000); pushed = true;
       }
-      FO.on = false; FO.reason = ''; FO.needPull = false; clearInterval(FO.pollT); clearInterval(FO.probeT); FO.markOk();
+      FO.on = false; FO.reason = ''; FO.needPull = false; FO.tgt = ''; clearInterval(FO.pollT); clearInterval(FO.probeT); FO.markOk();
       await GS.pull(false); GS.err = ''; try { GS.after(); } catch (e) { } Store.status(); FO.paint();
-      toast(`${ic('check')} Firebase đã hoạt động lại${pushed ? ' · đã đưa bản mới nhất từ Drive lên Firebase' : ''}. App quay về dùng Firebase.`, 'ok', 8000);
+      toast(`${ic('check')} Firebase đã hoạt động lại${pushed ? ' · đã đưa bản mới nhất từ ' + FO.tname() + ' lên Firebase' : ''}. App quay về dùng Firebase.`, 'ok', 8000);
     } finally { FO.rec = false; FO.paint(); }
   },
   /* mở app khi Firebase lỗi: lấy dữ liệu từ Drive rồi đăng nhập bằng tài khoản app như bình thường */
   async bootDrive(next, e) {
-    GS.loading('Firebase đang lỗi · đang tải dữ liệu dự phòng từ Google Drive…');
+    GS.loading('Firebase đang lỗi · đang tải dữ liệu từ máy chủ dự phòng…');
     try {
-      const j = await FO.dcall({ action: 'get' });
-      if (!j.data || !j.data.settings) throw new Error('Drive dự phòng chưa có dữ liệu');
+      const j = await FO.pick({ action: 'get' });
+      if (!j.data || !j.data.settings) throw new Error('Máy chủ dự phòng chưa có dữ liệu');
       FO.on = true; FO.reason = FO.kind(e) || 'net'; FO.since = new Date().toISOString();
       GS.apply(j.data, j.ver); GS.on = true; GS.last = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
       $$('.gs-wrap').forEach(n => n.remove()); GS.loading(false);
       next(); try { GS.after(); } catch (x) { } FO.start(); FO.paint();
-      setTimeout(() => toast(`${ic('alert')} Firebase đang lỗi. Đang dùng <b>Google Drive dự phòng</b>${j.at ? ' (lưu lúc ' + new Date(j.at).toLocaleString('vi-VN') + ')' : ''}.`, 'err', 9000), 600);
+      setTimeout(() => toast(`${ic('alert')} Firebase đang lỗi. Đang dùng <b>${FO.tname()} dự phòng</b>${j.at ? ' (lưu lúc ' + new Date(j.at).toLocaleString('vi-VN') + ')' : ''}.`, 'err', 9000), 600);
       return true;
     } catch (x) { GS.loading(false); return false; }
   },
@@ -9374,7 +9726,7 @@ const FO = {
     if (!FO.on) { if (b) b.remove(); document.body.classList.remove('fo-on'); return; }
     if (!b) { b = document.createElement('div'); b.id = 'foBar'; b.dataset.runtime = '1'; document.body.appendChild(b); }
     document.body.classList.add('fo-on');
-    b.innerHTML = `${ic('alert')}<span><b>Đang dùng Google Drive dự phòng</b> · Firebase ${FO.reason === 'quota' ? 'hết dung lượng / hạn mức' : 'mất kết nối'} từ ${new Date(FO.since).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} · ${FO.rec ? 'Firebase đã có lại, đang đưa dữ liệu về…' : 'tự quay về Firebase khi có lại'}</span><button class="btn sm" data-fo="probe">${ic('refresh')} Thử Firebase</button>`;
+    b.innerHTML = `${ic('alert')}<span><b>Đang dùng ${FO.tname()} dự phòng</b> · Firebase ${FO.reason === 'quota' ? 'hết dung lượng / hạn mức' : 'mất kết nối'} từ ${new Date(FO.since).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} · ${FO.rec ? 'Firebase đã có lại, đang đưa dữ liệu về…' : 'tự quay về Firebase khi có lại'}</span><button class="btn sm" data-fo="probe">${ic('refresh')} Thử Firebase</button>`;
     b.querySelector('[data-fo]').onclick = () => { toast('Đang thử kết nối Firebase…', '', 2500); FO.probe(); };
   },
   mount() {
@@ -9392,12 +9744,12 @@ const FO = {
       }
     };
     const a0 = GS.apply; GS.apply = function () { const r = a0.apply(this, arguments); FO.cache(); return r; };
-    const s0 = GS.statusText; GS.statusText = function () { const r = s0.apply(this, arguments); if (FO.on) r[1] = r[1].replace(/Google|Firebase/g, 'Drive dự phòng'); return r; };
+    const s0 = GS.statusText; GS.statusText = function () { const r = s0.apply(this, arguments); if (FO.on) r[1] = r[1].replace(/Google|Firebase/g, FO.tname() + ' dự phòng'); return r; };
     /* đăng nhập 1 lần: Firebase lỗi khi mở app → tự vào bằng dữ liệu Drive */
     const lf0 = FBU.loginForm; FBU.loginForm = function (next, msg) {
       if (FO.ready() && !FO.on && msg && FO.kind({ message: msg })) { const a = arguments; FO.bootDrive(next, { message: msg }).then(ok => { if (!ok) lf0.apply(FBU, a); }); return; }
       const r = lf0.apply(this, arguments);
-      if (FO.ready() && !FO.on) { const f = document.querySelector('.gs-wrap form'); if (f && !f.querySelector('[data-fodrive]')) { f.insertAdjacentHTML('beforeend', `<button class="btn" type="button" data-fodrive style="width:100%;justify-content:center;margin-top:8px;font-size:12.5px;height:34px">${ic('database')} Firebase đang lỗi? Vào bằng dữ liệu dự phòng Drive</button>`); f.querySelector('[data-fodrive]').onclick = async () => { const ok = await FO.bootDrive(next, { message: 'mạng' }); if (!ok) toast('Không tải được dữ liệu từ Drive dự phòng', 'err', 6000); }; } }
+      if (FO.ready() && !FO.on) { const f = document.querySelector('.gs-wrap form'); if (f && !f.querySelector('[data-fodrive]')) { f.insertAdjacentHTML('beforeend', `<button class="btn" type="button" data-fodrive style="width:100%;justify-content:center;margin-top:8px;font-size:12.5px;height:34px">${ic('database')} Firebase đang lỗi? Vào bằng dữ liệu dự phòng</button>`); f.querySelector('[data-fodrive]').onclick = async () => { const ok = await FO.bootDrive(next, { message: 'mạng' }); if (!ok) toast('Không tải được dữ liệu từ Drive dự phòng', 'err', 6000); }; } }
       return r;
     };
   }
