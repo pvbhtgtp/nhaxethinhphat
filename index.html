@@ -10109,10 +10109,10 @@ const TK = {
     try {
       const col = FB.col(); TK.migrated = (await col.doc('m_tk').get()).exists;
       await Promise.all(TK.KINDS.map(k => TK.listen(k)));
-      TK.live = true; TK.err = '';
+      TK.live = true; TK.err = ''; TK.fail = '';
       try { Lock.attach(); } catch (e) { }
       TK.flush(); TK.paint();
-    } catch (e) { TK.started = false; TK.live = false; TK.unsub.forEach(f => { try { f(); } catch (x) { } }); TK.unsub = []; console.warn('TK.start', e); setTimeout(() => TK.start(), 8000); }
+    } catch (e) { TK.fail = String((e && (e.code || e.message)) || e); TK.started = false; TK.live = false; TK.unsub.forEach(f => { try { f(); } catch (x) { } }); TK.unsub = []; console.warn('TK.start', e); setTimeout(() => TK.start(), 8000); }
   },
   listen(kind) {
     return new Promise((ok, no) => {
@@ -10494,6 +10494,12 @@ const HS = {
     return d < 0 ? `<span class="badge b-red">Hết hạn ${F.date(h.hetHan)}</span>` : d <= 30 ? `<span class="badge b-amber">Còn ${d} ngày · ${F.date(h.hetHan)}</span>` : `<span class="muted small">Hạn ${F.date(h.hetHan)}</span>`;
   },
   who: () => dvLog.who() || (Auth.user && (Auth.user.ten || Auth.user.user)) || '',
+  VER: 'v1.4 · tự tạo PDF khi Lưu',
+  status() {
+    const fb = !!(typeof FB !== 'undefined' && FB.db && GS.on), live = typeof TK !== 'undefined' && TK.live;
+    const ok = (b, t) => `<span class="${b ? 'hs-ok' : 'hs-bad'}">${b ? '✔' : '✘'} ${t}</span>`;
+    return `<div class="hs-st">${ok(fb, 'Kết nối Firebase')}${ok(live, 'Đồng bộ trực tiếp' + (live ? '' : ' · ' + esc((typeof TK !== 'undefined' && TK.fail) || 'đang kết nối…')))}<span class="muted">Bản ${HS.VER}</span>${!live && fb ? '<button class="btn sm" data-hs="retry">Thử kết nối lại</button>' : ''}</div>${!fb ? '<div class="banner warn" style="margin-bottom:10px">Chưa kết nối Firebase: thư mục và liên kết vẫn lưu được, nhưng <b>tải tệp / lưu PDF cần kết nối Firebase</b>.</div>' : ''}`;
+  },
   /* ---------- vẽ màn hình ---------- */
   tree(id, lv) {
     return HS.kids(id).map(f => {
@@ -10526,14 +10532,15 @@ const HS = {
       <div class="card hs-side"><div class="card-h"><h3>${ic('folder')} Cây thư mục</h3><button class="btn sm" data-hs="newF" data-id="">${ic('plus')} Thư mục gốc</button></div><div class="card-b p0">
         <div class="hs-n${!cur ? ' on' : ''}" data-hs="sel" data-id="" data-drop="" style="padding-left:8px"><span class="hs-t">·</span>${ic('folder')}<span class="nm">Tất cả hồ sơ</span><em>${HS.H().length || ''}</em></div>
         ${HS.tree('', 0) || '<div class="empty small" style="padding:14px">Chưa có thư mục.<br><button class="btn sm pri" data-hs="seed" style="margin-top:8px">Tạo cây thư mục mẫu cho nhà xe</button></div>'}</div></div>
-      <div class="hs-main">${live ? '' : `<div class="banner warn" style="margin-bottom:10px">Chưa kết nối Firebase: thư mục và liên kết vẫn lưu được, nhưng <b>tải tệp lên cần kết nối Firebase</b>.</div>`}${main}</div></div>`;
+      <div class="hs-main">${HS.status()}${main}</div></div>`;
     const qi = $('#hsQ'); if (qi && HS._fq) { qi.focus(); const n = qi.value.length; qi.setSelectionRange(n, n); }
   },
   tools: () => `<label class="search"><input class="inp" id="hsQ" placeholder="Tìm thư mục, hồ sơ…" value="${esc(HS.q)}">${ic('search')}</label>
     <button class="btn" data-hs="newF" data-id="${HS.sel}">${ic('plus')} Thư mục${HS.sel ? ' con' : ''}</button>
     <button class="btn pri" data-hs="up">${ic('upload')} Tải hồ sơ lên</button><button class="btn" data-hs="link">${ic('link')} Thêm liên kết</button>
     ${HS.sel ? `<button class="btn" data-hs="renF" data-id="${HS.sel}">${ic('edit')} Đổi tên</button><button class="btn" data-hs="movF" data-id="${HS.sel}">${ic('folder')} Chuyển</button><button class="btn danger" data-hs="delF" data-id="${HS.sel}">${ic('trash')} Xóa</button>` : ''}
-    ${HS.sel && /phương tiện|phuong tien|\bxe\b/i.test((HS.by(HS.sel) || {}).ten || '') ? `<button class="btn" data-hs="veh">${ic('folder')} Thư mục theo từng xe</button>` : ''}`,
+    ${HS.sel && /phương tiện|phuong tien|\bxe\b/i.test((HS.by(HS.sel) || {}).ten || '') ? `<button class="btn" data-hs="veh">${ic('folder')} Thư mục theo từng xe</button>` : ''}
+    ${HS.sel && ['hop dong lao dong', 'nhan su'].includes(HS.norm((HS.by(HS.sel) || {}).ten)) ? `<button class="btn" data-hs="bulk">${ic('file')} Tạo PDF hợp đồng cho mọi nhân viên</button>` : ''}`,
   /* ---------- thao tác ---------- */
   commit() { const y = window.scrollY; App.changed(); window.scrollTo(0, y); },
   folderOpts(skip) { const ban = skip ? HS.desc(skip) : new Set(); return [{ value: '', label: '(Gốc)' }, ...HS.F().filter(f => !ban.has(f.id)).map(f => ({ value: f.id, label: HS.ptxt(f.id) })).sort((a, b) => a.label.localeCompare(b.label, 'vi', { numeric: true }))]; },
@@ -10548,6 +10555,8 @@ const HS = {
     if (a === 'movF') { const f = Fo(); return f && Form.open({ title: 'Chuyển thư mục “' + esc(f.ten) + '”', width: 480, cols: 1, fields: [{ key: 'cha', label: 'Chuyển vào', type: 'select', options: HS.folderOpts(f.id), full: true }], value: { cha: f.cha || '' }, onSave: v => { f.cha = v.cha || ''; if (f.cha) HS.open.add(f.cha); HS.commit(); } }); }
     if (a === 'delF') return HS.delFolder(id);
     if (a === 'seed') return HS.seed();
+    if (a === 'retry') { TK.started = false; TK.fail = ''; TK.start(); toast('Đang thử kết nối lại…', '', 2000); return setTimeout(() => App.render(), 2500); }
+    if (a === 'bulk') return HS.bulkHD();
     if (a === 'veh') return HS.vehFolders();
     if (a === 'up') return HS.pick();
     if (a === 'link') return HS.linkForm(null);
@@ -10761,29 +10770,40 @@ Object.assign(HS, {
   },
   /* lưu PDF hợp đồng lao động của nhân viên vào Nhân sự / Hợp đồng lao động / tên. Trả về true nếu đã lưu */
   async archiveHD(emps, o = {}) {
-    if (!(typeof TK !== 'undefined' && TK.live && FB.db)) { if (!o.quiet) toast('Chưa kết nối Firebase nên chưa lưu hợp đồng PDF vào hồ sơ', 'err', 5000); return false; }
-    let n = 0, where = '';
+    if (!(typeof FB !== 'undefined' && FB.db && GS.on)) { toast('Chưa kết nối Firebase nên chưa lưu được PDF hợp đồng vào hồ sơ. Hãy kiểm tra mục Lưu trữ Google/Firebase.', 'err', 7000); return { n: 0, skip: 0, fail: emps.length }; }
+    let n = 0, skip = 0, fail = 0, where = '';
     for (const e of emps) {
       try {
         if (!e || !e.ten) continue;
         const info = hdInfo(e), so = String(info.soHD || '').replace(/\.{2,}/g, '').replace(/[\\/:*?"<>|]+/g, '-').replace(/^-+|-+$/g, ''), ref = 'hdld:' + e.id + ':' + (info.soHD || '');
         const sig = PM.h(hdHTML(e)), old = HS.H().find(h => h.ref === ref);
-        if (old && old.sig === sig && old.mime === 'application/pdf') continue;               // hợp đồng không đổi: không tạo lại
+        if (old && old.sig === sig && old.mime === 'application/pdf') { skip++; continue; }               // hợp đồng không đổi: không tạo lại
         const bytes = await HS.hdPdf(e), b64 = HS.b64bytes(bytes);
-        if (b64.length > HS.MAX * 1.34) { toast('PDF hợp đồng của ' + esc(e.ten) + ' quá lớn (' + HS.size(bytes.length) + '), không lưu được', 'err', 6000); continue; }
+        if (b64.length > HS.MAX * 1.34) { toast('PDF hợp đồng của ' + esc(e.ten) + ' quá lớn (' + HS.size(bytes.length) + '), không lưu được', 'err', 6000); fail++; continue; }
         const folder = HS.ensure(['Nhân sự', 'Hợp đồng lao động', e.ten]), lan = old ? (old.lan || 1) + 1 : 1;
         const id = await HS.store(b64, { folder, ten: 'Hợp đồng lao động - ' + e.ten + (so ? ' (' + so + ')' : ''), tenFile: `HĐLĐ${so ? ' ' + so : ''} - ${e.ten}.pdf`, mime: 'application/pdf', size: bytes.length, ref, ghiChu: `Tự tạo PDF khi lưu/in · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
         const it = HS.H().find(x => x.id === id); if (it) { it.sig = sig; Store.changed(); }
         n++; where = HS.ptxt(folder);
-      } catch (x) { console.warn('archiveHD', x); toast('Không tạo được PDF hợp đồng của ' + esc((e && e.ten) || '') + ': ' + esc(x.message || x), 'err', 6000); }
+      } catch (x) { fail++; console.warn('archiveHD', x); toast('Không tạo được PDF hợp đồng của ' + esc((e && e.ten) || '') + ': ' + esc(x.message || x), 'err', 6000); }
     }
     if (n && !o.quiet) toast(n === 1 ? `Đã lưu PDF hợp đồng vào hồ sơ “${esc(where)}”` : `Đã lưu ${n} PDF hợp đồng vào “Nhân sự / Hợp đồng lao động”`, 'ok', 4500);
     if (n && App.cur === 'hoso') App.render();
-    return n > 0;
+    return { n, skip, fail };
+  },
+  async bulkHD() {
+    const L = (DB.employees || []).filter(e => e.ten && (typeof hdActive !== 'function' || hdActive(e)));
+    if (!L.length) return toast('Chưa có nhân viên', 'err');
+    if (!await Modal.confirm(`Tạo PDF hợp đồng lao động cho <b>${L.length}</b> nhân viên và lưu vào từng thư mục riêng?<br><span class="muted small">Mỗi hợp đồng mất khoảng 1–2 giây. Hợp đồng không đổi so với bản đã lưu sẽ được bỏ qua.</span>`, { ok: 'Tạo PDF', title: 'Tạo PDF hợp đồng hàng loạt' })) return;
+    const t = document.createElement('div'); t.className = 'hs-prog'; t.dataset.runtime = '1'; document.body.appendChild(t);
+    let n = 0, skip = 0, fail = 0;
+    try { for (let i = 0; i < L.length; i++) { t.textContent = `Đang tạo PDF ${i + 1}/${L.length}: ${L[i].ten}…`; const r = await HS.archiveHD([L[i]], { quiet: true }); if (!r) continue; n += r.n; skip += r.skip; fail += r.fail; if (r.fail && !FB.db) break; } }
+    finally { t.remove(); }
+    toast(`Xong: tạo ${n} PDF${skip ? ', bỏ qua ' + skip + ' (không đổi)' : ''}${fail ? ', lỗi ' + fail : ''}`, fail ? 'err' : 'ok', 6000); App.render();
   },
   afterEmpSave(e) {          // bấm Lưu trong form nhân viên: tự tạo PDF hợp đồng cho nhân viên đó
-    if (!e || !e.ten || !(typeof TK !== 'undefined' && TK.live)) return;
-    setTimeout(() => HS.archiveHD([e]), 300);
+    if (!e || !e.ten) return;
+    toast('Đang tạo PDF hợp đồng của ' + esc(e.ten) + '…', '', 2500);
+    setTimeout(async () => { const r = await HS.archiveHD([e]); if (r && !r.n && r.skip && !r.fail) toast('PDF hợp đồng của ' + esc(e.ten) + ' đã có trong hồ sơ (nội dung không đổi)', 'ok', 4000); }, 300);
   }
 });
 {
@@ -10799,7 +10819,8 @@ Object.assign(HS, {
   };
 }
 
-addCSS(`.hs{display:grid;grid-template-columns:310px minmax(0,1fr);gap:16px;align-items:start}@media(max-width:900px){.hs{grid-template-columns:1fr}}
+addCSS(`.hs-st{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;background:#f8fafc;border:1px solid #e3e7ef;border-radius:8px;padding:6px 12px;margin-bottom:10px}.hs-ok{color:#047857;font-weight:600}.hs-bad{color:#b91c1c;font-weight:600}
+.hs{display:grid;grid-template-columns:310px minmax(0,1fr);gap:16px;align-items:start}@media(max-width:900px){.hs{grid-template-columns:1fr}}
 .hs-side .card-h h3{display:flex;align-items:center;gap:6px}.hs-side .card-h h3 svg,.hs-bc svg,.hs-tbl .muted svg{width:16px;height:16px;color:#d97706;vertical-align:-3px}.hs-empty svg,.empty svg{max-width:40px;max-height:40px}
 .hs-side{position:sticky;top:84px;max-height:calc(100vh - 100px);overflow:auto}
 .hs-n{display:flex;align-items:center;gap:6px;padding:7px 10px 7px 8px;cursor:pointer;border-left:3px solid transparent;font-size:13.5px}.hs-n:hover{background:var(--p-50)}.hs-n.on{background:var(--p-100);border-left-color:var(--p);font-weight:700}
