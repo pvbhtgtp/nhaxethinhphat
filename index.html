@@ -2016,12 +2016,12 @@ function empForm(e) {
       if (DB.employees.some(x => x.ma === d.ma && x !== e)) { toast('Mã nhân viên đã tồn tại', 'err'); return false; }
       if (isNew) DB.employees.push({ id: uid(), ...d }); else Object.assign(e, d);
       App.changed(); toast('Đã lưu nhân viên ' + esc(d.ten), 'ok');
+      try { HS.afterEmpSave(isNew ? DB.employees[DB.employees.length - 1] : e); } catch (x) { console.warn('HS.afterEmpSave', x); }
     },
     onDelete: isNew ? null : () => { DB.employees = DB.employees.filter(x => x !== e); App.changed(); }
   });
   if (!isNew) tvBind(fm, e);
   lpAttach(fm, () => { const d = readForm(fm.el, EMP_FIELDS()); return d.ten ? `<div class="pr">${hdHTML({ ...(e || {}), ...d })}</div>` : ''; }, { caption: 'Xem trước hợp đồng lao động', empty: 'Nhập họ tên để xem trước hợp đồng' });
-  try { HS.empPrint(fm, e, isNew); } catch (x) { console.warn('HS.empPrint', x); }
 }
 const gplxDays = e => e.bangHetHan ? D.diff(e.bangHetHan, D.today()) : null;
 const gplxText = e => { const n = gplxDays(e); return n === null ? '' : n < 0 ? 'Đã hết hạn' : n <= 90 ? 'Còn ' + n + ' ngày' : 'Còn hạn'; };
@@ -10717,34 +10717,73 @@ Object.assign(HS, {
     return `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>@page{size:A4;margin:15mm}html{background:#e5e7eb}body{margin:0}.sheet{width:210mm;min-height:297mm;margin:12px auto;background:#fff;padding:15mm;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.2)}.bar{position:sticky;top:0;background:#111827;color:#fff;padding:8px 14px;font:14px sans-serif;text-align:right}.bar button{padding:6px 16px;border-radius:6px;border:0;background:#10b981;color:#fff;font-weight:700;cursor:pointer}@media print{html{background:#fff}.sheet{margin:0;box-shadow:none;width:auto;min-height:0;padding:0}.bar{display:none}}\n${HS.hdCss()}</style></head><body><div class="bar">${esc(title)} · bản lưu hồ sơ <button onclick="print()">In</button></div><div class="sheet">${body}</div></body></html>`;
   },
   b64u: s => btoa(unescape(encodeURIComponent(s))),
-  async archiveHD(emps) {
-    if (!(typeof TK !== 'undefined' && TK.live && FB.db)) return toast('Chưa kết nối Firebase nên chưa lưu bản in hợp đồng vào hồ sơ', 'err', 5000);
+  /* ---------- tạo PDF không cần thư viện: chia trang A4 -> vẽ ra ảnh (SVG foreignObject) -> ghép vào PDF ---------- */
+  pageImg(pageHtml, S) {
+    const W = 794, H = 1123, pad = Math.round(15 / 25.4 * 96), box = document.createElement('div');
+    box.innerHTML = pageHtml;
+    const wrap = document.createElement('div'); wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    wrap.style.cssText = `width:${W}px;height:${H}px;box-sizing:border-box;padding:${pad}px;background:#fff;overflow:hidden`;
+    const st = document.createElement('style'); st.textContent = HS.hdCss(); wrap.appendChild(st);
+    while (box.firstChild) wrap.appendChild(box.firstChild);
+    const xml = new XMLSerializer().serializeToString(wrap);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%">${xml}</foreignObject></svg>`;
+    return new Promise((ok, no) => {
+      const img = new Image();
+      img.onload = () => { try { const c = document.createElement('canvas'); c.width = Math.round(W * S); c.height = Math.round(H * S); const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); const u = c.toDataURL('image/jpeg', 0.8), bin = atob(u.split(',')[1]), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); ok({ w: c.width, h: c.height, d: a }); } catch (e) { no(e); } };
+      img.onerror = () => no(new Error('Không dựng được trang PDF'));
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+  },
+  makePdf(pages) {            // mỗi trang A4 (595x842 pt) chứa 1 ảnh JPEG
+    const enc = new TextEncoder(), parts = [], off = []; let len = 0;
+    const put = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+    const obj = (n, body) => { off[n] = len; put(`${n} 0 obj\n`); put(body); put('\nendobj\n'); };
+    const N = pages.length; put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, `<< /Type /Pages /Count ${N} /Kids [${pages.map((_, i) => (3 + i * 3) + ' 0 R').join(' ')}] >>`);
+    pages.forEach((p, i) => {
+      const pg = 3 + i * 3, ct = pg + 1, im = pg + 2, c = 'q 595.28 0 0 841.89 0 0 cm /Im0 Do Q';
+      obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`);
+      obj(ct, `<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+      off[im] = len; put(`${im} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.d.length} >>\nstream\n`); put(p.d); put('\nendstream\nendobj\n');
+    });
+    const total = 3 + N * 3, xr = len; let t = `xref\n0 ${total}\n0000000000 65535 f \n`;
+    for (let i = 1; i < total; i++) t += String(off[i]).padStart(10, '0') + ' 00000 n \n';
+    put(t + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+    const out = new Uint8Array(len); let o = 0; parts.forEach(b => { out.set(b, o); o += b.length; }); return out;
+  },
+  b64bytes(u) { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); },
+  async hdPdf(e) {
+    const vw = Math.round((210 - 30) / 25.4 * 96), vh = Math.round((297 - 30) / 25.4 * 96);
+    const pages = PrintDlg.paginate([hdHTML(e)], vw, vh), imgs = [];
+    for (const p of pages) imgs.push(await HS.pageImg(p, 1.75));
+    return HS.makePdf(imgs);
+  },
+  /* lưu PDF hợp đồng lao động của nhân viên vào Nhân sự / Hợp đồng lao động / tên. Trả về true nếu đã lưu */
+  async archiveHD(emps, o = {}) {
+    if (!(typeof TK !== 'undefined' && TK.live && FB.db)) { if (!o.quiet) toast('Chưa kết nối Firebase nên chưa lưu hợp đồng PDF vào hồ sơ', 'err', 5000); return false; }
     let n = 0, where = '';
     for (const e of emps) {
       try {
-        const info = hdInfo(e), so = String(info.soHD || '').replace(/\.{2,}/g, '').replace(/[\\/:*?"<>|]+/g, '-').replace(/^-+|-+$/g, ''), tenFile = `HĐLĐ${so ? ' ' + so : ''} - ${e.ten}.html`;
-        const b64 = HS.b64u(HS.snap('Hợp đồng lao động - ' + e.ten, hdHTML(e)));
-        if (b64.length > HS.MAX * 1.34) { toast('Hợp đồng của ' + esc(e.ten) + ' quá lớn, không lưu được vào hồ sơ', 'err'); continue; }
-        const folder = HS.ensure(['Nhân sự', 'Hợp đồng lao động', e.ten]), ref = 'hdld:' + e.id + ':' + (info.soHD || '');
-        const old = HS.H().find(h => h.ref === ref), lan = old ? (old.lan || 1) + 1 : 1;
-        await HS.store(b64, { folder, ten: 'Hợp đồng lao động - ' + e.ten + (so ? ' (' + so + ')' : ''), tenFile, mime: 'text/html', size: Math.round(b64.length * 0.75), ref, ghiChu: `Tự lưu khi in · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
+        if (!e || !e.ten) continue;
+        const info = hdInfo(e), so = String(info.soHD || '').replace(/\.{2,}/g, '').replace(/[\\/:*?"<>|]+/g, '-').replace(/^-+|-+$/g, ''), ref = 'hdld:' + e.id + ':' + (info.soHD || '');
+        const sig = PM.h(hdHTML(e)), old = HS.H().find(h => h.ref === ref);
+        if (old && old.sig === sig && old.mime === 'application/pdf') continue;               // hợp đồng không đổi: không tạo lại
+        const bytes = await HS.hdPdf(e), b64 = HS.b64bytes(bytes);
+        if (b64.length > HS.MAX * 1.34) { toast('PDF hợp đồng của ' + esc(e.ten) + ' quá lớn (' + HS.size(bytes.length) + '), không lưu được', 'err', 6000); continue; }
+        const folder = HS.ensure(['Nhân sự', 'Hợp đồng lao động', e.ten]), lan = old ? (old.lan || 1) + 1 : 1;
+        const id = await HS.store(b64, { folder, ten: 'Hợp đồng lao động - ' + e.ten + (so ? ' (' + so + ')' : ''), tenFile: `HĐLĐ${so ? ' ' + so : ''} - ${e.ten}.pdf`, mime: 'application/pdf', size: bytes.length, ref, ghiChu: `Tự tạo PDF khi lưu/in · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
+        const it = HS.H().find(x => x.id === id); if (it) { it.sig = sig; Store.changed(); }
         n++; where = HS.ptxt(folder);
-      } catch (x) { console.warn('archiveHD', x); toast('Không lưu được hợp đồng của ' + esc(e.ten) + ': ' + esc(x.message || x), 'err', 6000); }
+      } catch (x) { console.warn('archiveHD', x); toast('Không tạo được PDF hợp đồng của ' + esc((e && e.ten) || '') + ': ' + esc(x.message || x), 'err', 6000); }
     }
-    if (n) { toast(n === 1 ? `Đã lưu bản in vào hồ sơ “${esc(where)}”` : `Đã lưu ${n} bản in hợp đồng vào “Nhân sự / Hợp đồng lao động”`, 'ok', 4500); if (App.cur === 'hoso') App.render(); }
+    if (n && !o.quiet) toast(n === 1 ? `Đã lưu PDF hợp đồng vào hồ sơ “${esc(where)}”` : `Đã lưu ${n} PDF hợp đồng vào “Nhân sự / Hợp đồng lao động”`, 'ok', 4500);
+    if (n && App.cur === 'hoso') App.render();
+    return n > 0;
   },
-  empPrint(fm, e, isNew) {                 // nút "In hợp đồng" trong form sửa nhân viên: lưu thông tin + in + tự lưu bản in
-    if (!Auth.can('hopdong', 'view')) return;
-    const foot = fm.el.querySelector('.modal-f'); if (!foot) return;
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.innerHTML = ic('printer') + ' In hợp đồng';
-    b.title = 'Lưu thông tin, in hợp đồng lao động và tự lưu bản in vào hồ sơ Nhân sự / Hợp đồng lao động / tên nhân viên';
-    foot.insertBefore(b, foot.querySelector('[data-cancel]'));
-    b.onclick = () => {
-      const fields = EMP_FIELDS(); if (!checkForm(fm.el, fields)) return; const d = readForm(fm.el, fields);
-      if (DB.employees.some(x => x.ma === d.ma && x !== e)) return toast('Mã nhân viên đã tồn tại', 'err');
-      if (!e) { e = { id: uid(), ...d }; DB.employees.push(e); } else Object.assign(e, d);
-      App.changed(); fm.close(); hdPrint([e]);
-    };
+  afterEmpSave(e) {          // bấm Lưu trong form nhân viên: tự tạo PDF hợp đồng cho nhân viên đó
+    if (!e || !e.ten || !(typeof TK !== 'undefined' && TK.live)) return;
+    setTimeout(() => HS.archiveHD([e]), 300);
   }
 });
 {
