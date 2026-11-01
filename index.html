@@ -2021,6 +2021,7 @@ function empForm(e) {
   });
   if (!isNew) tvBind(fm, e);
   lpAttach(fm, () => { const d = readForm(fm.el, EMP_FIELDS()); return d.ten ? `<div class="pr">${hdHTML({ ...(e || {}), ...d })}</div>` : ''; }, { caption: 'Xem trước hợp đồng lao động', empty: 'Nhập họ tên để xem trước hợp đồng' });
+  try { HS.empPrint(fm, e, isNew); } catch (x) { console.warn('HS.empPrint', x); }
 }
 const gplxDays = e => e.bangHetHan ? D.diff(e.bangHetHan, D.today()) : null;
 const gplxText = e => { const n = gplxDays(e); return n === null ? '' : n < 0 ? 'Đã hết hạn' : n <= 90 ? 'Còn ' + n + ' ngày' : 'Còn hạn'; };
@@ -2953,7 +2954,7 @@ function hdHTML(e) {
   const cv = String(e.moTaCV || '').split('\n').map(x => x.trim()).filter(Boolean);
   const pc = (v, dk) => +v > 0 ? `${F.money(v)} đồng/tháng` : 'Không áp dụng';
   const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký và ghi rõ họ tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký, ghi rõ họ tên và đóng dấu)</i>${Auth.can('users', 'view') && (c.chuKyGD || c.conDau) ? `<div style="position:relative;height:92px;margin-top:4px">${c.conDau ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:50%;top:0;transform:translateX(-42%);height:86px;max-width:42%;object-fit:contain;opacity:.85;mix-blend-mode:multiply;z-index:2">` : ''}${c.chuKyGD ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:50%;top:12px;transform:translateX(-62%);height:68px;max-width:46%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}</div><b>${esc(c.daiDien || '')}</b>` : ''}</td></tr></table>`;
-  return `<div class="hd">
+  return `<div class="hd" data-hdid="${esc(e.id || '')}">
   <table class="hd-top"><tr><td style="width:40%"><b>${coHead(c.ten)}</b><br><b><i>Số: ${R.SOHD}</i></b></td><td><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>-----***-----</td></tr></table>
   <div style="margin-top:8px">${HD_CANCU.map(x => `<p>- ${x}</p>`).join('')}</div>
   <p>Chúng tôi, một bên là:</p>
@@ -10486,7 +10487,7 @@ const HS = {
   size: n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : (n || 0) + ' B',
   ico(h) {
     if (h.loai === 'link') return '🔗'; const m = String(h.mime || ''), x = String(h.tenFile || '').toLowerCase().split('.').pop();
-    if (m.startsWith('image/')) return '🖼️'; if (x === 'pdf') return '📕'; if (/^(doc|docx|odt|rtf|txt)$/.test(x)) return '📝'; if (/^(xls|xlsx|csv|ods)$/.test(x)) return '📊'; if (/^(zip|rar|7z)$/.test(x)) return '🗜️'; return '📎';
+    if (m.startsWith('image/')) return '🖼️'; if (x === 'pdf') return '📕'; if (/^(doc|docx|odt|rtf|txt|html)$/.test(x)) return '📝'; if (/^(xls|xlsx|csv|ods)$/.test(x)) return '📊'; if (/^(zip|rar|7z)$/.test(x)) return '🗜️'; return '📎';
   },
   hanBadge(h) {
     if (!h.hetHan) return ''; const d = Math.round((new Date(h.hetHan) - new Date(D.today())) / 864e5);
@@ -10596,10 +10597,9 @@ const HS = {
         if (f.size > HS.MAX) { toast(`“${esc(f.name)}” lớn ${HS.size(f.size)} (tối đa ${HS.size(HS.MAX)}). Hãy tải lên Google Drive rồi dùng “Thêm liên kết”.`, 'err', 7000); continue; }
         t.textContent = 'Đang tải lên: ' + f.name + '…';
         try {
-          const b64 = await HS.readB64(f), id = uid(), n = Math.max(1, Math.ceil(b64.length / HS.CH));
-          for (let i = 0; i < n; i++) await FB.col().doc('hf_' + id + '_' + i).set({ t: 'hf', id, i, d: b64.slice(i * HS.CH, (i + 1) * HS.CH) });
-          HS.H().push({ id, loai: 'file', folder: folder || '', ten: f.name.replace(/\.[^.]+$/, ''), tenFile: f.name, mime: f.type || '', size: f.size, n, hetHan: ex.hetHan || '', ghiChu: ex.ghiChu || '', nguoi: HS.who(), tg: dvLog.now() });
-          Store.changed(); ok++; last = folder || '';
+          const b64 = await HS.readB64(f);
+          await HS.store(b64, { folder: folder || '', ten: f.name.replace(/\.[^.]+$/, ''), tenFile: f.name, mime: f.type || '', size: f.size, hetHan: ex.hetHan, ghiChu: ex.ghiChu });
+          ok++; last = folder || '';
         } catch (e) { console.warn(e); toast('Không tải được “' + esc(f.name) + '”: ' + esc(e.message || e), 'err', 6000); }
       }
     } finally { t.remove(); HS.busy--; }
@@ -10616,7 +10616,7 @@ const HS = {
       if (parts.some(p => !p.exists)) throw new Error('Tệp chưa được lưu đủ trên máy chủ');
       const bin = atob(parts.map(p => p.data().d).join('')), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       const blob = new Blob([u], { type: h.mime || 'application/octet-stream' });
-      if (/^(image\/|application\/pdf|text\/plain)/.test(h.mime || '')) { const w = window.open(URL.createObjectURL(blob), '_blank'); if (w) return; }
+      if (/^(image\/|application\/pdf|text\/plain|text\/html)/.test(h.mime || '')) { const w = window.open(URL.createObjectURL(blob), '_blank'); if (w) return; }
       download(blob, h.tenFile || h.ten);
     } catch (e) { toast('Không mở được: ' + esc(e.message || e), 'err', 6000); }
   },
@@ -10696,6 +10696,69 @@ Object.assign(HS, {
 });
 Object.keys(HS.SAVE).forEach(id => { const v = CFG.views[id]; if (!v) return; const t0 = v.tools; v.tools = function () { const base = typeof t0 === 'function' ? t0.apply(this, arguments) : (t0 || ''); return base + HS.saveBtn(id); }; });
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-hsave]'); if (b) HS.saveDlg(b.dataset.hsave); });
+
+
+/* ---------- tự lưu bản in hợp đồng lao động vào hồ sơ nhân viên ---------- */
+Object.assign(HS, {
+  async store(b64, o) {                    // ghi nội dung (base64) và hồ sơ; trùng "ref" thì cập nhật bản cũ thay vì tạo thêm
+    const n = Math.max(1, Math.ceil(b64.length / HS.CH)), it = o.ref ? HS.H().find(h => h.ref === o.ref) : null, id = it ? it.id : uid();
+    for (let i = 0; i < n; i++) await FB.col().doc('hf_' + id + '_' + i).set({ t: 'hf', id, i, d: b64.slice(i * HS.CH, (i + 1) * HS.CH) });
+    if (it) {
+      for (let i = n; i < (it.n || 1); i++) { try { await FB.col().doc('hf_' + id + '_' + i).delete(); } catch (e) { } }
+      Object.assign(it, { folder: o.folder, tenFile: o.tenFile, mime: o.mime, size: o.size, n, lan: (it.lan || 1) + 1, nguoi: HS.who(), tg: dvLog.now(), ghiChu: o.ghiChu != null ? o.ghiChu : it.ghiChu });
+    } else HS.H().push({ id, loai: 'file', folder: o.folder, ten: o.ten, tenFile: o.tenFile, mime: o.mime, size: o.size, n, hetHan: o.hetHan || '', ghiChu: o.ghiChu || '', ref: o.ref || '', lan: 1, nguoi: HS.who(), tg: dvLog.now() });
+    Store.changed(); return id;
+  },
+  hdCss() {
+    const r = []; for (const ss of document.styleSheets) { let rs; try { rs = ss.cssRules; } catch (e) { continue; } for (const x of rs) if (x.selectorText && /(^|[\s,>+~(])\.(hd|pagebreak|sig-img|nosig)\b|\.hd-/.test(x.selectorText)) r.push(x.cssText); }
+    return r.join('\n');
+  },
+  snap(title, body) {       // tệp HTML độc lập: mở bằng trình duyệt, bấm In là ra đúng khổ A4
+    return `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>@page{size:A4;margin:15mm}html{background:#e5e7eb}body{margin:0}.sheet{width:210mm;min-height:297mm;margin:12px auto;background:#fff;padding:15mm;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.2)}.bar{position:sticky;top:0;background:#111827;color:#fff;padding:8px 14px;font:14px sans-serif;text-align:right}.bar button{padding:6px 16px;border-radius:6px;border:0;background:#10b981;color:#fff;font-weight:700;cursor:pointer}@media print{html{background:#fff}.sheet{margin:0;box-shadow:none;width:auto;min-height:0;padding:0}.bar{display:none}}\n${HS.hdCss()}</style></head><body><div class="bar">${esc(title)} · bản lưu hồ sơ <button onclick="print()">In</button></div><div class="sheet">${body}</div></body></html>`;
+  },
+  b64u: s => btoa(unescape(encodeURIComponent(s))),
+  async archiveHD(emps) {
+    if (!(typeof TK !== 'undefined' && TK.live && FB.db)) return toast('Chưa kết nối Firebase nên chưa lưu bản in hợp đồng vào hồ sơ', 'err', 5000);
+    let n = 0, where = '';
+    for (const e of emps) {
+      try {
+        const info = hdInfo(e), so = String(info.soHD || '').replace(/\.{2,}/g, '').replace(/[\\/:*?"<>|]+/g, '-').replace(/^-+|-+$/g, ''), tenFile = `HĐLĐ${so ? ' ' + so : ''} - ${e.ten}.html`;
+        const b64 = HS.b64u(HS.snap('Hợp đồng lao động - ' + e.ten, hdHTML(e)));
+        if (b64.length > HS.MAX * 1.34) { toast('Hợp đồng của ' + esc(e.ten) + ' quá lớn, không lưu được vào hồ sơ', 'err'); continue; }
+        const folder = HS.ensure(['Nhân sự', 'Hợp đồng lao động', e.ten]), ref = 'hdld:' + e.id + ':' + (info.soHD || '');
+        const old = HS.H().find(h => h.ref === ref), lan = old ? (old.lan || 1) + 1 : 1;
+        await HS.store(b64, { folder, ten: 'Hợp đồng lao động - ' + e.ten + (so ? ' (' + so + ')' : ''), tenFile, mime: 'text/html', size: Math.round(b64.length * 0.75), ref, ghiChu: `Tự lưu khi in · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
+        n++; where = HS.ptxt(folder);
+      } catch (x) { console.warn('archiveHD', x); toast('Không lưu được hợp đồng của ' + esc(e.ten) + ': ' + esc(x.message || x), 'err', 6000); }
+    }
+    if (n) { toast(n === 1 ? `Đã lưu bản in vào hồ sơ “${esc(where)}”` : `Đã lưu ${n} bản in hợp đồng vào “Nhân sự / Hợp đồng lao động”`, 'ok', 4500); if (App.cur === 'hoso') App.render(); }
+  },
+  empPrint(fm, e, isNew) {                 // nút "In hợp đồng" trong form sửa nhân viên: lưu thông tin + in + tự lưu bản in
+    if (!Auth.can('hopdong', 'view')) return;
+    const foot = fm.el.querySelector('.modal-f'); if (!foot) return;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.innerHTML = ic('printer') + ' In hợp đồng';
+    b.title = 'Lưu thông tin, in hợp đồng lao động và tự lưu bản in vào hồ sơ Nhân sự / Hợp đồng lao động / tên nhân viên';
+    foot.insertBefore(b, foot.querySelector('[data-cancel]'));
+    b.onclick = () => {
+      const fields = EMP_FIELDS(); if (!checkForm(fm.el, fields)) return; const d = readForm(fm.el, fields);
+      if (DB.employees.some(x => x.ma === d.ma && x !== e)) return toast('Mã nhân viên đã tồn tại', 'err');
+      if (!e) { e = { id: uid(), ...d }; DB.employees.push(e); } else Object.assign(e, d);
+      App.changed(); fm.close(); hdPrint([e]);
+    };
+  }
+});
+{
+  const open0 = PrintDlg.open;           // mọi đường in hợp đồng (danh sách, xem trước, in tất cả, form nhân viên) đều tự lưu
+  PrintDlg.open = function (o) {
+    const r = open0.apply(this, arguments);
+    try {
+      const ids = [...new Set(((o && o.htmls) || []).map(h => (String(h).match(/data-hdid="([^"]*)"/) || [])[1]).filter(Boolean))];
+      const emps = ids.map(id => (DB.employees || []).find(x => x.id === id)).filter(Boolean);
+      if (emps.length && Auth.can('hopdong', 'view')) setTimeout(() => HS.archiveHD(emps), 50);
+    } catch (e) { console.warn('hd archive', e); }
+    return r;
+  };
+}
 
 addCSS(`.hs{display:grid;grid-template-columns:310px minmax(0,1fr);gap:16px;align-items:start}@media(max-width:900px){.hs{grid-template-columns:1fr}}
 .hs-side .card-h h3{display:flex;align-items:center;gap:6px}.hs-side .card-h h3 svg,.hs-bc svg,.hs-tbl .muted svg{width:16px;height:16px;color:#d97706;vertical-align:-3px}.hs-empty svg,.empty svg{max-width:40px;max-height:40px}
