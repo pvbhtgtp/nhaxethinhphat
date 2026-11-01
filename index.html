@@ -2956,7 +2956,7 @@ function hdHTML(e) {
   const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký và ghi rõ họ tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký, ghi rõ họ tên và đóng dấu)</i>${Auth.can('users', 'view') && (c.chuKyGD || c.conDau) ? `<div style="position:relative;height:92px;margin-top:4px">${c.conDau ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:50%;top:0;transform:translateX(-42%);height:86px;max-width:42%;object-fit:contain;opacity:.85;mix-blend-mode:multiply;z-index:2">` : ''}${c.chuKyGD ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:50%;top:12px;transform:translateX(-62%);height:68px;max-width:46%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}</div><b>${esc(c.daiDien || '')}</b>` : ''}</td></tr></table>`;
   return `<div class="hd" data-hdid="${esc(e.id || '')}">
   <table class="hd-top"><tr><td style="width:40%"><b>${coHead(c.ten)}</b><br><b><i>Số: ${R.SOHD}</i></b></td><td><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>-----***-----</td></tr></table>
-  <div style="margin-top:8px">${HD_CANCU.map(x => `<p>- ${x}</p>`).join('')}</div>
+  <div style="margin-top:8px">${hdPartPs(e, 'cancu', HD_CANCU).map(x => `<p>- ${x}</p>`).join('')}</div>
   <p>Chúng tôi, một bên là:</p>
   <p><b>NGƯỜI SỬ DỤNG LAO ĐỘNG (BÊN A):</b></p><p><b>${esc(c.ten || '')}</b></p>
   <p>Người đại diện: Ông ${hv(c.daiDien)} &nbsp; Chức vụ: ${hv(c.chucVuDD)}</p><p>Địa chỉ: ${hv(c.diaChi)}</p><p>MST: ${hv(c.mst)}</p><p>Số điện thoại: ${hv(c.sdt)} &nbsp; Email: ${hv(c.email)}</p>
@@ -2968,14 +2968,14 @@ function hdHTML(e) {
   <p>Sau khi trao đổi, hai bên đồng ý ký kết Hợp đồng lao động (“HĐLĐ”) và cam kết thực hiện đúng các điều khoản cụ thể sau đây:</p>
   <div class="hd-h">ĐIỀU 1. ĐIỀU KHOẢN CHUNG</div>
   <p>1.1. Loại HĐLĐ: ${l11}.</p><p>1.2. Thời hạn HĐLĐ: kể từ ngày ${hd8(tu)}${loai === HD_LOAI[2] ? '' : ' đến hết ngày ' + hd8(den)}.</p>
-  <p>1.3. Nơi làm việc: tại trụ sở ${esc(c.ten || '')}</p><p>1.4. Vị trí: ${up(e.chucVu)}. Phòng ban: ${up(e.phongBan)}.</p><p>1.5. Nhiệm vụ công việc:</p>${HD_D1b.map(x => `<p>${x}</p>`).join('')}
-  ${HD_DIEU.map(([h, ps]) => `<div class="hd-h">${h}</div>${ps.map(p).join('')}`).join('')}
+  <p>1.3. Nơi làm việc: tại trụ sở ${esc(c.ten || '')}</p><p>1.4. Vị trí: ${up(e.chucVu)}. Phòng ban: ${up(e.phongBan)}.</p><p>1.5. Nhiệm vụ công việc:</p>${hdPartPs(e, 'd1b', HD_D1b).map(x => `<p>${x}</p>`).join('')}
+  ${hdDieu(e).map(([h, ps]) => `<div class="hd-h">${h}</div>${ps.map(p).join('')}`).join('')}
   <div style="margin-top:12px">${sig}</div>
   <div class="pagebreak"></div>
   <p class="hd-c"><b>PHỤ LỤC I<br>BẢNG MÔ TẢ CÔNG VIỆC CHI TIẾT</b></p>
   <table><tr><td style="width:30%"><b>Vị trí</b></td><td>${up(e.chucVu)}</td></tr><tr><td><b>Người hướng dẫn và quản lý trực tiếp</b></td><td>${esc(c.chucVuDD || 'Giám đốc')}: ${hv(c.daiDien)}</td></tr>
   <tr><td><b>Công việc cần thực hiện</b></td><td>${cv.length ? cv.map(x => `<p>- ${esc(x)}</p>`).join('') : '<p>Triển khai và hoàn thành các nhiệm vụ chuyên môn theo đúng chức năng của vị trí, đảm bảo tiến độ và chất lượng công việc.</p>' + HD_CV.map(([a, b]) => `<p><b>${a}</b><br>${b}</p>`).join('')}</td></tr>
-  <tr><td><b>Yêu cầu</b></td><td>${HD_YC.map(x => `<p>- ${x}</p>`).join('')}</td></tr></table>
+  <tr><td><b>Yêu cầu</b></td><td>${hdPartPs(e, 'yc', HD_YC).map(x => `<p>- ${x}</p>`).join('')}</td></tr></table>
   <div class="pagebreak"></div>
   <p class="hd-c"><b>PHỤ LỤC II<br>BẢNG MỨC PHỤ CẤP, HỖ TRỢ CỦA NGƯỜI LAO ĐỘNG</b><br><i>(Kèm theo Hợp đồng lao động số ${R.SOHD} ký ngày ${R.TU})</i><br><i>Hai bên thống nhất các khoản phụ cấp, hỗ trợ áp dụng đối với Người lao động như sau:</i></p>
   <table><thead><tr><th style="width:36px">STT</th><th>Khoản phụ cấp/hỗ trợ</th><th>Mức áp dụng</th><th>Điều kiện chi trả</th></tr></thead><tbody>
@@ -3137,12 +3137,72 @@ const PrintDlg = {
 };
 const hdPrint = list => PrintDlg.open({ htmls: list.map(hdHTML), title: list.length === 1 ? 'Hợp đồng lao động - ' + list[0].ten : 'Hợp đồng lao động' });
 
+/* ---------- Soạn hợp đồng lao động TỪNG PHẦN rồi lưu PDF hoàn chỉnh vào hồ sơ ----------
+   Mỗi phần (Căn cứ, Điều 1.5, Điều 2-8, Phụ lục I) sửa riêng, lưu ngay, xem kết quả bên phải.
+   Sửa riêng cho hợp đồng này: e.hdTuyChinh[khóa]. Sửa chung cho mọi hợp đồng (Admin): S().hdMau[khóa]. Công việc Phụ lục I: e.moTaCV. */
+const HDX = {
+  own: (e, k) => (e && e.hdTuyChinh && e.hdTuyChinh[k]) || null,
+  com: k => (S().hdMau && S().hdMau[k]) || null,
+  get(e, k) { return HDX.own(e, k) || HDX.com(k); },
+  lines: t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean),
+  parts() {
+    return [
+      { k: 'cancu', t: 'Căn cứ ký kết', def: () => ({ ps: HD_CANCU.slice() }) },
+      { k: 'd1b', t: 'Điều 1.5 · Nhiệm vụ công việc', def: () => ({ ps: HD_D1b.slice() }) },
+      ...HD_DIEU.map(([h, ps], i) => ({ k: 'd' + (i + 2), t: h, hasH: true, def: () => ({ h, ps: ps.slice() }) })),
+      { k: 'cv', t: 'Phụ lục I · Công việc cần thực hiện' },
+      { k: 'yc', t: 'Phụ lục I · Yêu cầu đối với người lao động', def: () => ({ ps: HD_YC.slice() }) }];
+  },
+  stat(e, p) { if (p.k === 'cv') return e.moTaCV ? 'Đã nhập riêng cho hợp đồng này' : ''; return HDX.own(e, p.k) ? 'Đã sửa riêng cho hợp đồng này' : HDX.com(p.k) ? 'Đang theo mẫu chung đã sửa' : ''; },
+  cur(e, p) {
+    if (p.k === 'cv') return { ps: e.moTaCV ? HDX.lines(e.moTaCV) : HD_CV.map(([a, b]) => a + ': ' + b) };
+    const o = HDX.get(e, p.k), d = p.def(); return o ? { h: o.h || d.h, ps: o.ps.slice() } : d;
+  },
+  pdfName: e => 'HĐLĐ ' + String(hdInfo(e).soHD || '').replace(/[\\/:*?"<>|]+/g, '-') + ' - ' + e.ten + '.pdf'
+};
+const hdPartPs = (e, k, def) => { const o = HDX.get(e, k); return o && o.ps && o.ps.length ? o.ps.map(esc) : def; };
+const hdDieu = e => HD_DIEU.map(([h, ps], i) => { const o = HDX.get(e, 'd' + (i + 2)); return o && o.ps ? [esc(o.h || h), o.ps.map(esc)] : [h, ps]; });
+addCSS(`.hdx{display:grid;grid-template-columns:350px minmax(0,1fr);gap:14px}.hdx-l{max-height:70vh;overflow:auto;padding-right:4px}.hdx-r{max-height:70vh;overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:16px}
+.hdx-h{font-weight:700;font-size:14px;margin-bottom:8px}.hdx-h small{display:block;font-weight:400;color:#64748b;font-size:12px;margin-top:2px}.hdx-i{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:6px;background:#fff}.hdx-i.ed{border-color:#86efac;background:#f0fdf4}.hdx-i .mn{flex:1;min-width:0}.hdx-i b{display:block;font-size:12.5px;line-height:1.35}.hdx-i small{color:#64748b;font-size:11.5px}.hdx-i.ed small{color:#15803d}
+@media(max-width:900px){.hdx{grid-template-columns:1fr}.hdx-l,.hdx-r{max-height:none}}`);
 function hdPreview(e) {
-  const m = Modal.open({ title: 'Hợp đồng lao động · ' + esc(e.ten), width: 900, body: `<div class="pr">${hdHTML(e)}</div>`, foot: `<button class="btn left" data-ed>${ic('edit')} Sửa thông tin HĐ</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-pr>${ic('printer')} In hợp đồng</button>` });
-  m.el.querySelector('[data-no]').onclick = () => m.close();
-  m.el.querySelector('[data-pr]').onclick = () => hdPrint([e]);
-  m.el.querySelector('[data-ed]').onclick = () => { m.close(); empForm(e); };
+  const can = Auth.can('nhanvien', 'edit'), adm = typeof HS !== 'undefined' && HS.adm(), cmn = Auth.can('caidat', 'edit'); let editing = null, busy = false;
+  const m = Modal.open({ title: 'Soạn hợp đồng lao động · ' + esc(e.ten), width: 1180, body: '<div class="hdx"><div class="hdx-l"></div><div class="hdx-r pr"></div></div>',
+    foot: `<button class="btn left" data-ed>${ic('edit')} Sửa thông tin HĐ</button><button class="btn" data-no>Đóng</button><button class="btn" data-pr>${ic('printer')} In</button><button class="btn" data-dl>${ic('download')} Tải PDF</button>${adm ? `<button class="btn pri" data-ar>${ic('folder')} Lưu PDF vào hồ sơ</button>` : ''}` });
+  const q = s => m.el.querySelector(s), L = q('.hdx-l'), R = q('.hdx-r'), prev = () => { R.innerHTML = hdHTML(e); };
+  const list = () => {
+    editing = null;
+    L.innerHTML = `<div class="hdx-h">Các phần của hợp đồng<small>${can ? 'Bấm “Sửa” ở từng phần. Sửa xong phần nào lưu ngay phần đó, kết quả hiện bên phải.' : 'Bạn chỉ có quyền xem và in hợp đồng.'}</small></div>` + HDX.parts().map(p => { const s = HDX.stat(e, p); return `<div class="hdx-i ${s ? 'ed' : ''}"><div class="mn"><b>${esc(p.t)}</b><small>${s || 'Mặc định'}</small></div>${can ? `<button class="btn sm" data-edit="${p.k}">${ic('edit')} Sửa</button>` : ''}</div>`; }).join('') + `<div class="muted small" style="margin-top:8px">Lương, thời hạn, thông tin hai bên và phụ cấp lấy từ hồ sơ nhân viên: bấm “Sửa thông tin HĐ”.</div>`;
+    L.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => edit(b.dataset.edit));
+  };
+  const edit = k => {
+    const p = HDX.parts().find(x => x.k === k), c = HDX.cur(e, p); editing = k;
+    L.innerHTML = `<div class="hdx-h">${esc(p.t)}</div>${p.hasH ? `<label class="field"><span>Tiêu đề Điều</span><input class="inp" id="hxH" value="${esc(c.h)}"></label>` : ''}<label class="field"><span>Nội dung (mỗi dòng là một đoạn)</span><textarea class="inp" id="hxT" rows="15" style="line-height:1.45">${esc(c.ps.join('\n'))}</textarea></label><div class="muted small" style="margin:4px 0 8px">${p.k === 'cv' ? 'Mỗi dòng là một đầu việc.' : p.hasH ? 'Dòng bắt đầu bằng # sẽ in đậm (tiểu mục). Giữ nguyên các mã {LUONG} {LUONGCHU} {TU} {GIO} {NGAYLAM} {NGAYTRA} {SOHD}: hợp đồng tự điền số liệu.' : 'Mỗi dòng là một đoạn.'}</div>${cmn && p.k !== 'cv' ? '<label class="ppd-chk"><input type="checkbox" id="hxC"> Áp dụng cho mọi hợp đồng (đặt làm mẫu chung)</label>' : ''}<div class="row" style="gap:6px;margin-top:10px"><button class="btn pri" data-sv>${ic('check')} Lưu phần này</button><button class="btn" data-cc>Hủy</button><span class="grow"></span><button class="btn danger" data-rs>Về mặc định</button></div>`;
+    const t = L.querySelector('#hxT'); t.focus();
+    L.querySelector('[data-cc]').onclick = list;
+    L.querySelector('[data-sv]').onclick = () => {
+      const ps = HDX.lines(t.value); if (!ps.length) return toast('Nội dung đang trống. Muốn bỏ chỉnh sửa hãy bấm “Về mặc định”.', 'err', 5000);
+      if (k === 'cv') e.moTaCV = ps.join('\n');
+      else { const o = { ps }; if (p.hasH) o.h = (L.querySelector('#hxH').value || '').trim() || p.def().h; const all = L.querySelector('#hxC'); if (all && all.checked) { S().hdMau = S().hdMau || {}; S().hdMau[k] = o; if (e.hdTuyChinh) delete e.hdTuyChinh[k]; } else { e.hdTuyChinh = e.hdTuyChinh || {}; e.hdTuyChinh[k] = o; } }
+      Store.changed(); prev(); list(); toast('Đã lưu phần “' + esc(p.t) + '”', 'ok');
+    };
+    L.querySelector('[data-rs]').onclick = async () => {
+      if (k === 'cv') { e.moTaCV = ''; }
+      else if (HDX.own(e, k)) delete e.hdTuyChinh[k];
+      else if (HDX.com(k)) { if (!cmn) return toast('Phần này đang theo mẫu chung do quản lý đặt. Hãy sửa riêng cho hợp đồng này nếu cần.', 'err', 6000); if (!await Modal.confirm('Bỏ chỉnh sửa <b>mẫu chung</b> của phần này? Mọi hợp đồng chưa sửa riêng sẽ quay về nội dung mặc định.', { ok: 'Bỏ mẫu chung', danger: true })) return; delete S().hdMau[k]; }
+      Store.changed(); prev(); list(); toast('Đã về mặc định', 'ok');
+    };
+  };
+  const guard = () => { if (editing) { toast('Hãy bấm “Lưu phần này” hoặc “Hủy” trước đã', 'err'); return false; } return !busy; };
+  const run = async (btn, fn) => { if (!guard()) return; busy = true; const t0 = btn.innerHTML; btn.disabled = true; btn.textContent = 'Đang tạo PDF…'; try { await fn(); } catch (x) { console.warn('hdx', x); toast('Không tạo được PDF: ' + esc(x.message || x), 'err', 7000); } finally { busy = false; btn.disabled = false; btn.innerHTML = t0; } };
+  q('[data-no]').onclick = () => m.close();
+  q('[data-pr]').onclick = () => { if (guard()) hdPrint([e]); };
+  q('[data-ed]').onclick = () => { if (!guard()) return; m.close(); empForm(e); };
+  q('[data-dl]').onclick = ev => run(ev.currentTarget, async () => { download(new Blob([await HS.hdPdf(e)], { type: 'application/pdf' }), HDX.pdfName(e)); });
+  if (adm) q('[data-ar]').onclick = ev => run(ev.currentTarget, async () => { const r = await HS.archiveHD([e]); if (r && !r.n && r.skip) toast('PDF đang lưu trong hồ sơ đã khớp nội dung hiện tại, không cần lưu lại', 'ok', 5000); });
+  list(); prev();
 }
+
 
 /* ---------- Nghỉ việc: Đơn xin nghỉ việc + Quyết định thôi việc (trong hồ sơ nhân viên) ---------- */
 const TV_HT = [
