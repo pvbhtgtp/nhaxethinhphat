@@ -10706,6 +10706,72 @@ Object.assign(HS, {
 Object.keys(HS.SAVE).forEach(id => { const v = CFG.views[id]; if (!v) return; const t0 = v.tools; v.tools = function () { const base = typeof t0 === 'function' ? t0.apply(this, arguments) : (t0 || ''); return base + HS.saveBtn(id); }; });
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-hsave]'); if (b) HS.saveDlg(b.dataset.hsave); });
 
+/* ---------- nút "Lưu vào hồ sơ" ngay trong form chỉnh sửa ----------
+   Chụp nội dung ĐANG NHẬP trong form (kể cả khi chưa bấm Lưu, kể cả thêm mới) thành PDF rồi cất vào Lưu trữ hồ sơ,
+   đúng thư mục như nút "Lưu hồ sơ" (VD: Nhân sự / Hồ sơ lái xe, phụ xe / tên nhân viên). Mỗi lần bấm tạo một bản mới. Chỉ Admin. */
+Object.assign(HS, {
+  formCfg(o) {
+    if (!HS.adm() || !o || !Array.isArray(o.fields)) return null;
+    const ks = o.fields.filter(f => f.type !== 'section').map(f => f.key); if (ks.length < 4) return null;
+    return ks.includes('cccd') && ks.includes('luongCB') ? HS.SAVE.nhanvien : (HS.SAVE[App.cur] || null);
+  },
+  fval(root, f, v) {
+    const el = root.querySelector(`[name="${f.key}"]`); if (!el) return '';
+    if (f.type === 'checkbox') return el.checked ? 'Có' : 'Không';
+    if (f.type === 'image') return el.value ? '(đã chọn ảnh)' : '';
+    if (el.value === '') return '';
+    if (f.type === 'select') return (el.options && el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : el.value).trim();
+    const x = v[f.key]; if (x === '' || x == null) return '';
+    if (f.type === 'money') return F.money(x);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(x))) return F.date(x);
+    return String(x);
+  },
+  frows(m, o) {
+    const v = readForm(m.el, o.fields), out = [];
+    o.fields.forEach(f => { const lab = String(f.label || f.key).replace(/<[^>]*>/g, '').trim(); if (f.type === 'section') return void out.push({ sec: lab }); const t = HS.fval(m.el, f, v); if (t !== '') out.push({ l: lab, t: t.length > 1800 ? t.slice(0, 1800) + '…' : t }); });
+    return { v, rows: out.filter((r, i) => !r.sec || (out[i + 1] && !out[i + 1].sec)) };
+  },
+  fname(m, o, v) {
+    for (const k of ['ten', 'bks', 'xeId', 'xe', 'nvId', 'nhanVienId', 'empId']) { const f = o.fields.find(x => x.key === k); if (!f) continue; const t = HS.fval(m.el, f, v); if (t) return t.replace(/\s*\([^)]*\)\s*$/, '').replace(/[\\/:*?"<>|]+/g, '-').trim(); }
+    return '';
+  },
+  fpages(c, o, name, rows) {
+    const st = 'font-family:Arial,\'Segoe UI\',sans-serif;color:#111;font-size:14px;line-height:1.45;', ttl = String(o.title || '').replace(/<[^>]*>/g, '');
+    const head = `<div style="${st}"><div style="font-size:12px;color:#666">${esc(CFG.title)}</div><div style="font-size:20px;font-weight:700;margin:2px 0 4px">${esc(c.t)}${name ? ' · ' + esc(name) : ''}</div><div style="font-size:12px;color:#666;margin-bottom:10px">Nội dung form “${esc(ttl)}” · lưu lúc ${esc(dvLog.fmt(dvLog.now()))} · ${esc(HS.who())}</div>`;
+    const hh = r => r.sec ? 44 : r.t.split('\n').reduce((s, x) => s + Math.max(1, Math.ceil(x.length / 52)), 0) * 21 + 13;
+    const html = r => r.sec ? `<div style="margin:14px 0 4px;font-weight:700;color:#0f766e;border-bottom:2px solid #0f766e;padding-bottom:2px">${esc(r.sec)}</div>` : `<div style="display:flex;border-bottom:1px solid #e5e7eb;padding:6px 0"><div style="width:190px;flex:none;color:#555;padding-right:10px">${esc(r.l)}</div><div style="flex:1;min-width:0;font-weight:600;white-space:pre-wrap;word-break:break-word">${esc(r.t)}</div></div>`;
+    const P = []; let cur = [], used = 100; rows.forEach(r => { const h = hh(r); if (used + h > 950 && cur.length) { P.push(cur); cur = []; used = 0; } cur.push(html(r)); used += h; }); if (cur.length) P.push(cur);
+    return P.map((p, i) => (i ? `<div style="${st}">` : head) + p.join('') + (P.length > 1 ? `<div style="margin-top:8px;font-size:11px;color:#888;text-align:right">Trang ${i + 1}/${P.length}</div>` : '') + '</div>');
+  },
+  async formSave(m, o, c, btn) {
+    const { v, rows } = HS.frows(m, o); if (!rows.length) return toast('Form chưa có nội dung nào để lưu', 'err');
+    const name = HS.fname(m, o, v), live = typeof FB !== 'undefined' && FB.db && GS.on, n = new Date(), p2 = x => String(x).padStart(2, '0'), stamp = D.today().replace(/-/g, '') + '-' + p2(n.getHours()) + p2(n.getMinutes());
+    const t0 = btn.innerHTML; btn.disabled = true; btn.textContent = 'Đang tạo PDF…';
+    try {
+      const imgs = []; for (const pg of HS.fpages(c, o, name, rows)) imgs.push(await HS.pageImg(pg, 1.6));
+      const bytes = HS.makePdf(imgs), tenFile = `${c.t}${name ? ' - ' + name : ''} ${stamp}.pdf`;
+      if (!live) { download(new Blob([bytes], { type: 'application/pdf' }), tenFile); return void toast('Chưa kết nối Firebase nên chưa cất vào hồ sơ được. Đã tải PDF về máy, bạn đưa vào hồ sơ sau.', 'err', 8000); }
+      const b64 = HS.b64bytes(bytes); if (b64.length > HS.MAX * 1.34) throw new Error('PDF quá lớn (' + HS.size(bytes.length) + ')');
+      const folder = HS.ensure(c.ent && name ? [...c.p, name] : c.p);
+      await HS.store(b64, { folder, ten: `${c.t}${name ? ' - ' + name : ''} (lưu từ form)`, tenFile, mime: 'application/pdf', size: bytes.length, ghiChu: `Nội dung form “${String(o.title || '').replace(/<[^>]*>/g, '')}” lưu lúc ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
+      toast('Đã lưu nội dung form vào hồ sơ “' + esc(HS.ptxt(folder)) + '”', 'ok', 5000);
+    } catch (e) { console.warn('formSave', e); toast('Không lưu được vào hồ sơ: ' + esc(e.message || e), 'err', 7000); }
+    finally { btn.disabled = false; btn.innerHTML = t0; }
+  }
+});
+{
+  const fo = Form.open;
+  Form.open = function (o) {
+    const m = fo.apply(this, arguments);
+    try {
+      const c = HS.formCfg(o), sv = c && m.el.querySelector('[data-save]');
+      if (sv) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.dataset.hsform = '1'; b.title = 'Lưu nội dung đang nhập thành PDF vào Lưu trữ hồ sơ / ' + c.p.join(' / ') + ' (không cần bấm Lưu)'; b.innerHTML = ic('folder') + ' Lưu vào hồ sơ'; b.onclick = () => HS.formSave(m, o, c, b); sv.before(b); }
+    } catch (e) { console.warn('hsform', e); }
+    return m;
+  };
+}
+
+
 
 /* ---------- tự lưu bản in hợp đồng lao động vào hồ sơ nhân viên ---------- */
 Object.assign(HS, {
