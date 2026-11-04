@@ -1,7 +1,16 @@
 {
-  "updatedAt": "2026-11-04T01:05:16.223Z",
+  "updatedAt": "2026-11-04T08:53:39.110Z",
   "source": "https://webgia.com/gia-xang-dau/petrolimex/",
   "unit": "dong/lit",
+  "vung": 1,
+  "hieuLuc": "2026-11-04 15:53",
+  "gia": {
+    "E10 RON95-III": 23230,
+    "E5 RON92-II": 23200,
+    "DO 0,001S-V": 30270,
+    "DO 0,05S-II": 28870
+  },
+  "truoc": {},
   "items": [
     {
       "name": "Xăng E10 RON 95 mức 5",
