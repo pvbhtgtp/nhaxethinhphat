@@ -11479,9 +11479,9 @@ const LVC = {
           ${row('Hành trình tuyến:', dot(paOk && pa.loTrinhDi, 14), '(áp dụng đối với tuyến cố định)')}
         </td><td style="${C};vertical-align:top;width:24%"><b>Thủ trưởng đơn vị</b><br><i style="font-size:11.5px">(Ký tên và đóng dấu)</i><div style="position:relative;height:84px;margin-top:4px">${img(c.conDau, 84) ? `<div style="position:absolute;left:4px;top:0;opacity:.85">${img(c.conDau, 84)}</div>` : ''}${img(c.chuKyGD, 50) ? `<div style="position:absolute;right:4px;top:18px">${img(c.chuKyGD, 50)}</div>` : ''}</div><b>${esc(gd)}</b></td></tr>
         <tr><td style="${C};width:12%"><b>Lượt xe thực hiện</b></td><td style="${C};width:24%"><b>Bến xe đi, đến</b></td><td style="${C};width:24%"><b>Giờ xe chạy</b></td><td style="${C};width:16%"><b>Số khách</b></td><td style="${C}"><b>Bến xe</b><br><i style="font-size:11.5px">(Ký tên và đóng dấu)</i></td></tr>
-        <tr><td rowspan="2" style="${C}">Lượt đi</td><td style="${B1}">Bến xe đi: ${dot(benDi, 10)}</td><td style="${C}">xuất bến<br>${gn(o.gio, o.ngay)}</td><td style="${C}"><b>${B.length}</b></td><td style="${B1};height:46px"></td></tr>
+        <tr><td rowspan="2" style="${C}">Lượt đi</td><td style="${B1}">Bến xe đi: ${dot(benDi, 10)}</td><td style="${C}">xuất bến<br>${gn(o.gio, o.ngay)}</td><td style="${C}"></td><td style="${B1};height:46px"></td></tr>
         <tr><td style="${B1}">Bến xe nơi đến: ${dot(benDen, 8)}</td><td style="${C}">đến bến<br>${gn('', '')}</td><td style="${C}"></td><td style="${B1};height:46px"></td></tr>
-        <tr><td rowspan="2" style="${C}">Lượt về</td><td style="${B1}">Bến xe đi: ${dot(ret ? benDen : '', 10)}</td><td style="${C}">xuất bến<br>${ret ? gn(ret.gio, ret.ngay) : gn('', '')}</td><td style="${C}"><b>${ret ? nRet : ''}</b></td><td style="${B1};height:46px"></td></tr>
+        <tr><td rowspan="2" style="${C}">Lượt về</td><td style="${B1}">Bến xe đi: ${dot(ret ? benDen : '', 10)}</td><td style="${C}">xuất bến<br>${ret ? gn(ret.gio, ret.ngay) : gn('', '')}</td><td style="${C}"></td><td style="${B1};height:46px"></td></tr>
         <tr><td style="${B1}">Bến xe nơi đến: ${dot(ret ? benDi : '', 8)}</td><td style="${C}">đến bến<br>${gn('', '')}</td><td style="${C}"></td><td style="${B1};height:46px"></td></tr>
         <tr><td colspan="5" style="padding:0;border:0"><table style="width:100%;border-collapse:collapse"><tr>${sg('LÁI XE 1', l1.id ? l1 : null)}${sg('LÁI XE 2', l2)}${sg('ĐIỀU HÀNH', dh)}</tr></table></td></tr>
       </table>
@@ -12941,7 +12941,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-04T16:30';
+const APP_BUILD = '2026-11-04T16:35';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
