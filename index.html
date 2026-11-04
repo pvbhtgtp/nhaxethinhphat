@@ -12142,6 +12142,119 @@ addCSS(`.au-rm{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-siz
    Google Drive (Kho hồ sơ, thư mục "_Anh he thong") và trong Firestore chỉ còn mã tham chiếu "nxdrv:<id>".
    Khi tải từ Firebase: mã tham chiếu được đổi lại thành ảnh (lấy từ bộ nhớ đệm IndexedDB của máy, thiếu thì tải từ Drive),
    nên toàn bộ màn hình, bản in trong app vẫn dùng ảnh như cũ. Chưa kết nối Google Drive thì giữ nguyên cách lưu cũ. */
+/* ===== Đặt vé · Kiểu sơ đồ ghế (chọn mẫu giao diện, lưu theo từng máy) =====
+   Chỉ đổi cách hiển thị ô ghế, giữ nguyên ý nghĩa màu: giữ chỗ (cam) · đã xác nhận (xanh dương) · đã thu (xanh lá) · đã lên xe (xanh đậm). */
+const SM = {
+  key: 'tgtp:sm',
+  list: [['goc', 'Mặc định (nổi 3D)'], ['phang', 'Tối giản · thẻ trắng viền màu'], ['cam', 'Cam năng động'], ['ghe', 'Hình ghế xe'], ['dem', 'Nền tối sang trọng'], ['pastel', 'Pastel nhẹ nhàng']],
+  get() { try { const v = localStorage.getItem(SM.key) || 'goc'; return SM.list.some(x => x[0] === v) ? v : 'goc'; } catch (e) { return 'goc'; } },
+  apply(v) { v = v || SM.get(); if (v === 'goc') document.documentElement.removeAttribute('data-sm'); else document.documentElement.setAttribute('data-sm', v); },
+  set(v) { try { localStorage.setItem(SM.key, v); } catch (e) { } SM.apply(v); toast('Đã đổi kiểu sơ đồ ghế: ' + (SM.list.find(x => x[0] === v) || [, ''])[1], 'ok', 2000); },
+  pick() { const c = SM.get(); return `<label class="sm-pk" title="Kiểu sơ đồ ghế (chỉ áp dụng trên máy này)">${ic('palette')}<select class="inp" data-sm-pick>${SM.list.map(x => `<option value="${x[0]}" ${x[0] === c ? 'selected' : ''}>${x[1]}</option>`).join('')}</select></label>`; }
+};
+document.addEventListener('change', e => { const s = e.target.closest && e.target.closest('[data-sm-pick]'); if (s) SM.set(s.value); });
+{ const vp0 = VT.pick; VT.pick = function () { const r = vp0.apply(this, arguments); return App.cur === 'lichchay' ? r + SM.pick() : r; }; }
+SM.apply();
+addCSS(`.sm-pk{display:inline-flex;align-items:center;gap:6px;margin-right:6px}.sm-pk>svg{width:16px;height:16px;color:#667085}.sm-pk select{height:34px;padding:0 28px 0 10px;font-size:13px;min-width:200px}
+/* --- chung cho các kiểu mới: bỏ hiệu ứng nghiêng 3D, giữ nâng nhẹ khi rê chuột --- */
+html[data-sm] .dv-grid .dv-seat{transform:translateY(var(--ty,0));transition:transform .15s ease,box-shadow .15s ease,background .15s ease}
+html[data-sm] .dv-grid .dv-seat::after{display:none}
+html[data-sm] .dv-grid .dv-seat .tag,html[data-sm] .dv-grid .dv-seat .no,html[data-sm] .dv-grid .dv-seat .pr,html[data-sm] .dv-grid .dv-seat .qk{transform:none}
+
+/* ===== 1. Tối giản · thẻ trắng viền màu ===== */
+html[data-sm=phang] .dv-body:has(.dv-grid){background:#f4f6fa}
+html[data-sm=phang] .dv-grid{gap:10px}
+html[data-sm=phang] .dv-grid .dv-seat{border-radius:12px;border:1px solid #e4e7ec;background:#fff!important;box-shadow:0 1px 2px rgba(16,24,40,.06);color:#1f2937}
+html[data-sm=phang] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt){background:#fff!important;border:1.5px dashed #d0d5dd;box-shadow:none}
+html[data-sm=phang] .dv-grid .dv-seat:not(.lk):hover{--ty:-2px;box-shadow:0 8px 18px -8px rgba(16,24,40,.25)}
+html[data-sm=phang] .dv-grid .dv-seat.bk,html[data-sm=phang] .dv-grid .dv-seat.pd,html[data-sm=phang] .dv-grid .dv-seat.len.bk,html[data-sm=phang] .dv-grid .dv-seat.len.pd{border-left:6px solid var(--smc);background:#fff!important;color:#1f2937;box-shadow:0 1px 3px rgba(16,24,40,.08)}
+html[data-sm=phang] .dv-grid .dv-seat.bk{--smc:#f59e0b}html[data-sm=phang] .dv-grid .dv-seat.bk.xn{--smc:#3b82f6}html[data-sm=phang] .dv-grid .dv-seat.pd{--smc:#22c55e}
+html[data-sm=phang] .dv-grid .dv-seat.len.bk,html[data-sm=phang] .dv-grid .dv-seat.len.pd{--smc:#047857;background:#ecfdf5!important}
+html[data-sm=phang] .dv-grid .dv-seat.bk *,html[data-sm=phang] .dv-grid .dv-seat.pd *{color:#1f2937}
+html[data-sm=phang] .dv-grid .dv-seat .tel,html[data-sm=phang] .dv-grid .dv-seat .by,html[data-sm=phang] .dv-grid .dv-seat .dp em{color:#475467!important}
+html[data-sm=phang] .dv-grid .dv-seat.bk .no,html[data-sm=phang] .dv-grid .dv-seat.pd .no{color:var(--smc)!important}
+html[data-sm=phang] .dv-grid .dv-seat .tag{color:#fff!important}
+html[data-sm=phang] .dv-grid .dv-seat.len *,html[data-sm=phang] .dv-grid .dv-seat.len .dp,html[data-sm=phang] .dv-grid .dv-seat.len .dp em,html[data-sm=phang] .dv-grid .dv-seat.len .tel,html[data-sm=phang] .dv-grid .dv-seat.len .by{color:#064e3b!important}
+html[data-sm=phang] .dv-grid .dv-seat.len .tel svg{stroke:#064e3b}html[data-sm=phang] .dv-grid .dv-seat.len .tag{color:#fff!important}
+html[data-sm=phang] .dv-grid .dv-seat .qk-b{background:#f2f4f7;border-color:#e4e7ec;color:#475467!important}
+html[data-sm=phang] .dv-grid .dv-seat .qk-b.on{background:var(--smc,#22c55e);border-color:var(--smc,#22c55e);color:#fff!important}
+html[data-sm=phang] .dv-grid .dv-seat.gcw{border:2px solid #ef4444;border-left:6px solid #ef4444}
+html[data-sm=phang] .lg-h{background:#fff!important;border-left:5px solid #f59e0b!important}html[data-sm=phang] .lg-c{background:#fff!important;border-left:5px solid #3b82f6!important}
+html[data-sm=phang] .lg-p{background:#fff!important;border-left:5px solid #22c55e!important}html[data-sm=phang] .lg-b{background:#ecfdf5!important;border-left:5px solid #047857!important}
+
+/* ===== 2. Cam năng động ===== */
+html[data-sm=cam] .dv-body:has(.dv-grid){background:#fff7ed}
+html[data-sm=cam] .dv-grid .dv-seat{border-radius:14px;border:1.5px solid #fed7aa;box-shadow:0 2px 6px rgba(234,88,12,.08)}
+html[data-sm=cam] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt){background:#fff!important;border:1.5px dashed #fdba74;box-shadow:none}
+html[data-sm=cam] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt) .plus{color:#f97316}
+html[data-sm=cam] .dv-grid .dv-seat:not(.lk):hover{--ty:-3px;border-color:#f97316;box-shadow:0 10px 20px -10px rgba(234,88,12,.55)}
+html[data-sm=cam] .dv-grid .dv-seat .no{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:#f97316;color:#fff!important;font-size:13px;align-self:flex-start}
+html[data-sm=cam] .dv-grid .dv-seat.bk{background:#fff1e0!important;border-color:#fb923c;color:#7c2d12}
+html[data-sm=cam] .dv-grid .dv-seat.bk.xn{background:#e0f2fe!important;border-color:#38bdf8;color:#0c4a6e}html[data-sm=cam] .dv-grid .dv-seat.bk.xn .no{background:#0284c7}
+html[data-sm=cam] .dv-grid .dv-seat.pd{background:#dcfce7!important;border-color:#4ade80;color:#14532d}html[data-sm=cam] .dv-grid .dv-seat.pd .no{background:#16a34a}
+html[data-sm=cam] .dv-grid .dv-seat.len.bk,html[data-sm=cam] .dv-grid .dv-seat.len.pd{background:linear-gradient(135deg,#f97316,#ea580c)!important;border-color:#c2410c;color:#fff}
+html[data-sm=cam] .dv-grid .dv-seat.len .no{background:#fff;color:#ea580c!important}
+html[data-sm=cam] .dv-grid .dv-seat.len .qk-b.on{color:#ea580c!important}
+html[data-sm=cam] .lg-h{background:#fff1e0!important;border-color:#fb923c!important}html[data-sm=cam] .lg-c{background:#e0f2fe!important;border-color:#38bdf8!important}
+html[data-sm=cam] .lg-p{background:#dcfce7!important;border-color:#4ade80!important}html[data-sm=cam] .lg-b{background:linear-gradient(135deg,#f97316,#ea580c)!important;border-color:#c2410c!important}
+
+/* ===== 3. Hình ghế xe (tựa lưng phía trên) ===== */
+html[data-sm=ghe] .dv-grid{gap:12px}
+html[data-sm=ghe] .dv-grid .dv-seat{border-radius:16px 16px 10px 10px;border:2px solid #cbd5e1;border-top-width:10px;padding-top:8px;box-shadow:0 4px 0 #cbd5e1,0 8px 14px -8px rgba(15,23,42,.3)}
+html[data-sm=ghe] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt){background:linear-gradient(180deg,#f8fafc,#eef2f7)!important;border-color:#cbd5e1;border-style:solid;box-shadow:0 4px 0 #cbd5e1}
+html[data-sm=ghe] .dv-grid .dv-seat:not(.lk):hover{--ty:-3px}
+html[data-sm=ghe] .dv-grid .dv-seat:active{--ty:2px;box-shadow:0 1px 0 #cbd5e1}
+html[data-sm=ghe] .dv-grid .dv-seat.bk{background:#fef3c7!important;border-color:#f59e0b;box-shadow:0 4px 0 #d97706,0 8px 14px -8px rgba(217,119,6,.5);color:#78350f}
+html[data-sm=ghe] .dv-grid .dv-seat.bk.xn{background:#dbeafe!important;border-color:#3b82f6;box-shadow:0 4px 0 #2563eb,0 8px 14px -8px rgba(37,99,235,.5);color:#1e3a8a}
+html[data-sm=ghe] .dv-grid .dv-seat.pd{background:#dcfce7!important;border-color:#22c55e;box-shadow:0 4px 0 #16a34a,0 8px 14px -8px rgba(22,163,74,.5);color:#14532d}
+html[data-sm=ghe] .dv-grid .dv-seat.len.bk,html[data-sm=ghe] .dv-grid .dv-seat.len.pd{background:linear-gradient(180deg,#10b981,#047857)!important;border-color:#065f46;box-shadow:0 4px 0 #064e3b,0 8px 14px -8px rgba(6,78,59,.6);color:#fff}
+html[data-sm=ghe] .dv-grid .dv-seat.gcw{border-color:#ef4444;box-shadow:0 4px 0 #dc2626}
+html[data-sm=ghe] .lg-h{background:#fef3c7!important;border-color:#f59e0b!important;border-top-width:4px!important}html[data-sm=ghe] .lg-c{background:#dbeafe!important;border-color:#3b82f6!important;border-top-width:4px!important}
+html[data-sm=ghe] .lg-p{background:#dcfce7!important;border-color:#22c55e!important;border-top-width:4px!important}html[data-sm=ghe] .lg-b{background:#047857!important;border-color:#065f46!important;border-top-width:4px!important}
+
+/* ===== 4. Nền tối sang trọng ===== */
+html[data-sm=dem] .dv-body:has(.dv-grid){background:linear-gradient(180deg,#0b1220,#111a2e)}
+html[data-sm=dem] .dv-body:has(.dv-grid) .dv-lbl{color:#e2e8f0}
+html[data-sm=dem] .dv-body:has(.dv-grid) .dv-lg,html[data-sm=dem] .dv-body:has(.dv-grid) .dv-lg span,html[data-sm=dem] .dv-body:has(.dv-grid) .lg-tip{color:#cbd5e1}
+html[data-sm=dem] .dv-body:has(.dv-grid) .lg-tip kbd{background:#1e293b;color:#e2e8f0;border-color:#334155}
+html[data-sm=dem] .dv-grid .dv-seat{border-radius:12px;background:#1a2438!important;border:1px solid #2b3a55;color:#e2e8f0;box-shadow:0 6px 16px -10px rgba(0,0,0,.8)}
+html[data-sm=dem] .dv-grid .dv-seat *{color:#e2e8f0}
+html[data-sm=dem] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt){background:#131c2e!important;border:1px dashed #334155;box-shadow:none}
+html[data-sm=dem] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt) .plus{color:#475569}
+html[data-sm=dem] .dv-grid .dv-seat:not(.lk):hover{--ty:-3px;border-color:#64748b}
+html[data-sm=dem] .dv-grid .dv-seat.bk{border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,.35),0 8px 22px -10px rgba(245,158,11,.6)}
+html[data-sm=dem] .dv-grid .dv-seat.bk .no{color:#fbbf24!important}
+html[data-sm=dem] .dv-grid .dv-seat.bk.xn{border-color:#38bdf8;box-shadow:0 0 0 1px rgba(56,189,248,.35),0 8px 22px -10px rgba(56,189,248,.6)}html[data-sm=dem] .dv-grid .dv-seat.bk.xn .no{color:#7dd3fc!important}
+html[data-sm=dem] .dv-grid .dv-seat.pd{border-color:#34d399;box-shadow:0 0 0 1px rgba(52,211,153,.35),0 8px 22px -10px rgba(52,211,153,.6)}html[data-sm=dem] .dv-grid .dv-seat.pd .no{color:#6ee7b7!important}
+html[data-sm=dem] .dv-grid .dv-seat.len.bk,html[data-sm=dem] .dv-grid .dv-seat.len.pd{background:linear-gradient(135deg,#059669,#065f46)!important;border-color:#10b981}
+html[data-sm=dem] .dv-grid .dv-seat .tel,html[data-sm=dem] .dv-grid .dv-seat .by,html[data-sm=dem] .dv-grid .dv-seat .dp em{color:#94a3b8!important}
+html[data-sm=dem] .dv-grid .dv-seat.len .tel,html[data-sm=dem] .dv-grid .dv-seat.len .by,html[data-sm=dem] .dv-grid .dv-seat.len .dp em{color:#d1fae5!important}
+html[data-sm=dem] .dv-grid .dv-seat .qk-b{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
+html[data-sm=dem] .dv-grid .dv-seat .qk-b.on{background:#10b981;border-color:#10b981;color:#fff!important}
+html[data-sm=dem] .dv-grid .dv-seat.lk{background:repeating-linear-gradient(45deg,#1e293b,#1e293b 8px,#273449 8px,#273449 16px)!important;border-color:#64748b!important}
+html[data-sm=dem] .lg-e{background:#131c2e!important;border-color:#475569!important}html[data-sm=dem] .lg-h{background:#1a2438!important;border-color:#f59e0b!important}
+html[data-sm=dem] .lg-c{background:#1a2438!important;border-color:#38bdf8!important}html[data-sm=dem] .lg-p{background:#1a2438!important;border-color:#34d399!important}html[data-sm=dem] .lg-b{background:#059669!important;border-color:#10b981!important}
+
+/* ===== 5. Pastel nhẹ nhàng ===== */
+html[data-sm=pastel] .dv-body:has(.dv-grid){background:#faf7ff}
+html[data-sm=pastel] .dv-grid{gap:12px}
+html[data-sm=pastel] .dv-grid .dv-seat{border-radius:18px;border:0;box-shadow:0 6px 18px -12px rgba(76,29,149,.35)}
+html[data-sm=pastel] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt){background:#fff!important;box-shadow:inset 0 0 0 1.5px #ede9fe}
+html[data-sm=pastel] .dv-grid .dv-seat:not(.bk):not(.pd):not(.lk):not(.mvt) .plus{color:#c4b5fd}
+html[data-sm=pastel] .dv-grid .dv-seat:not(.lk):hover{--ty:-3px;box-shadow:0 14px 24px -14px rgba(76,29,149,.45)}
+html[data-sm=pastel] .dv-grid .dv-seat.bk{background:#ffedd5!important;color:#7c2d12}
+html[data-sm=pastel] .dv-grid .dv-seat.bk.xn{background:#dbeafe!important;color:#1e3a8a}
+html[data-sm=pastel] .dv-grid .dv-seat.pd{background:#d1fae5!important;color:#064e3b}
+html[data-sm=pastel] .dv-grid .dv-seat.len.bk,html[data-sm=pastel] .dv-grid .dv-seat.len.pd{background:#6ee7b7!important;color:#064e3b}
+html[data-sm=pastel] .dv-grid .dv-seat.len *,html[data-sm=pastel] .dv-grid .dv-seat.len .tel,html[data-sm=pastel] .dv-grid .dv-seat.len .by,html[data-sm=pastel] .dv-grid .dv-seat.len .dp,html[data-sm=pastel] .dv-grid .dv-seat.len .dp em{color:#064e3b!important}
+html[data-sm=pastel] .dv-grid .dv-seat .tag{color:#fff!important}html[data-sm=pastel] .dv-grid .dv-seat.len .tel svg{stroke:#064e3b}
+html[data-sm=pastel] .dv-grid .dv-seat .qk-b{background:rgba(255,255,255,.7);border-color:transparent}
+html[data-sm=pastel] .dv-grid .dv-seat .qk-b.on{background:#059669;color:#fff!important}
+html[data-sm=pastel] .dv-grid .dv-seat.gcw{box-shadow:inset 0 0 0 2px #f87171}
+html[data-sm=pastel] .lg-h{background:#ffedd5!important;border-color:#ffedd5!important}html[data-sm=pastel] .lg-c{background:#dbeafe!important;border-color:#dbeafe!important}
+html[data-sm=pastel] .lg-p{background:#d1fae5!important;border-color:#d1fae5!important}html[data-sm=pastel] .lg-b{background:#6ee7b7!important;border-color:#6ee7b7!important}
+`);
+
 /* ===== DỮ LIỆU CÁ NHÂN: mỗi người chỉ xem thông tin của chính mình =====
    Màn hình Nhân viên, Chấm công, Bảng lương, Thuế & bảo hiểm, Hợp đồng lao động: tài khoản không phải Admin chỉ thấy hồ sơ của mình.
    Admin xem tất cả. Vai trò cần xem của mọi người (kế toán, quản lý...) thì Admin tích cột "Xem tất cả" trong bảng phân quyền.
