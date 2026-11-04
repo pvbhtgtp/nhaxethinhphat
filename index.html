@@ -4196,12 +4196,16 @@ const lcCols = [
   { key: 'tienCong', label: 'Tiền công', fmt: 'money', sum: true },
   { key: 'nguoiCham', label: 'Người chấm công' }
 ];
+/* Ghi nhớ chuyến đã xóa tay để chức năng tự tạo lịch từ Giờ chạy không tạo lại (lưu trong cài đặt, tự dọn ngày cũ) */
+const lcBo = () => { const s = S() || {}; s.autoLich = s.autoLich || {}; const b = s.autoLich.bo = s.autoLich.bo || {}; const td = D.today(); Object.keys(b).forEach(k => { if (k < td) delete b[k]; }); return b; };
+const lcMarkDel = l => { try { if (!l || !l.ngay || !l.tuyen || !l.gio || l.ngay < D.today()) return; const b = lcBo(), k = l.tuyen + '|' + l.gio; (b[l.ngay] = b[l.ngay] || []).includes(k) || b[l.ngay].push(k); } catch (e) { } };
+const lcIsBo = (ngay, tuyen, gio) => { try { const b = ((S() || {}).autoLich || {}).bo || {}; return (b[ngay] || []).includes(tuyen + '|' + gio); } catch (e) { return false; } };
 function lcQuick(l, withDel) {
   if (!l) return;
   if (!Auth.guard('lichchay', 'edit')) return;
   if (!lcCan(l)) return lcLockMsg();
   Form.open({ title: 'Sửa nhanh · ' + l.gio + ' ' + l.tuyen, width: 480, cols: 1, saveText: 'Lưu', value: { xeId: l.xeId, laiXe: l.laiXe },
-    onDelete: withDel && Auth.can('lichchay', 'del') ? () => { if (!lcCan(l)) return lcLockMsg(); DB.datve = DB.datve.filter(x => x.chuyen !== l.id); DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); toast('Đã hủy chuyến ' + l.gio + ' ' + l.tuyen, 'ok'); } : null,
+    onDelete: withDel && Auth.can('lichchay', 'del') ? () => { if (!lcCan(l)) return lcLockMsg(); DB.datve = DB.datve.filter(x => x.chuyen !== l.id); lcMarkDel(l); DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); toast('Đã hủy chuyến ' + l.gio + ' ' + l.tuyen, 'ok'); } : null,
     fields: [
       { key: 'xeId', label: 'Số xe', type: 'select', blank: '(Chưa gán xe)', options: () => DB.vehicles.filter(v => !v.ngung || v.id === l.xeId).map(v => ({ value: v.id, label: v.bks })) },
       { key: 'laiXe', label: 'Tên lái xe', type: 'select', blank: '(Chưa gán lái xe)', options: () => vcDrivers().map(e => ({ value: e.id, label: e.ten })) }
@@ -4240,7 +4244,7 @@ function lcForm(l, pre) {
       if (isNew) DB.lichchay.push({ id: uid(), ...d }); else Object.assign(l, d);
       LC.ngay = d.ngay; App.changed(); toast('Đã lưu chuyến chạy', 'ok');
     },
-    onDelete: isNew || !canDel ? null : () => { DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); }
+    onDelete: isNew || !canDel ? null : () => { lcMarkDel(l); DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); }
   });
   if (!canEdit) {
     m.el.querySelectorAll('.modal-b input,.modal-b select,.modal-b textarea').forEach(i => i.disabled = true);
@@ -4265,7 +4269,7 @@ function lcAutoRun(silent) {
     for (let k = 0; k <= (+a.days || 7); k++) {
       const ngay = D.add(D.today(), k);
       open.forEach(g => {
-        if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
+        if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(ngay, g.tuyen, g.gio)) return;
         const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < ngay).sort((p, q) => q.ngay.localeCompare(p.ngay))[0];
         DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
       });
@@ -4310,7 +4314,7 @@ Object.assign(ACT, {
   lcAdd: () => lcForm(), lcEdit: d => lcForm(lcById(d.id)),
   lcNav: d => { LC.ngay = +d.n === 0 ? D.today() : D.add(lcDay(), +d.n); App.render(); },
   lcQuick: d => lcQuick(lcById(d.id)),
-  lcDel: async d => { const l = lcById(d.id); if (l && !lcCan(l)) return lcLockMsg(); if (l && await Modal.confirm(`Xóa chuyến <b>${esc(l.gio)}</b> tuyến <b>${esc(l.tuyen)}</b> ngày ${F.date(l.ngay)}?`, { ok: 'Xóa', danger: true })) { DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); } },
+  lcDel: async d => { const l = lcById(d.id); if (l && !lcCan(l)) return lcLockMsg(); if (l && await Modal.confirm(`Xóa chuyến <b>${esc(l.gio)}</b> tuyến <b>${esc(l.tuyen)}</b> ngày ${F.date(l.ngay)}?`, { ok: 'Xóa', danger: true })) { lcMarkDel(l); DB.lichchay = DB.lichchay.filter(x => x !== l); App.changed(); } },
   lcNow: () => {
     if (!Auth.guard('lichchay', 'add')) return;
     const open = DB.giochay.filter(g => g.tt !== 'ĐÓNG'); if (!open.length) return toast('Chưa có giờ chạy đang mở', 'err');
@@ -5824,7 +5828,7 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         const busy = l => { try { return (typeof dvBook === 'function' ? dvBook(l.id).length : DB.datve.filter(x => x.chuyen === l.id).length) || (typeof GH !== 'undefined' && GH.list ? GH.list(l.id).length : 0); } catch (e) { return 1; } };
         const del = DB.lichchay.filter(l => l.ngay === day && rs.has(l.tuyen) && !l.xeId && !l.laiXe && (!lcGone(l) || lcAdmin()));
         const gone = new Set(del.filter(l => { if (busy(l)) { kp++; return false; } return true; }));
-        dl = gone.size; if (dl) DB.lichchay = DB.lichchay.filter(l => !gone.has(l));
+        dl = gone.size; if (dl) { gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); }
       }
       App.changed(); m.close(); toast(`Đã điền từ ảnh: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${dl ? `, xóa ${dl} chuyến không có thông tin` : ''}${kp ? ` (giữ ${kp} chuyến còn vé / hàng)` : ''}`);
     };
@@ -11193,7 +11197,7 @@ const LCX = {
       const open = (DB.giochay || []).filter(g => g.tt !== 'ĐÓNG'); if (!open.length) return 0;
       const tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5); let n = 0;
       open.forEach(g => {
-        if (DB.lichchay.some(x => x.ngay === day && x.tuyen === g.tuyen && x.gio === g.gio)) return;
+        if (DB.lichchay.some(x => x.ngay === day && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(day, g.tuyen, g.gio)) return;
         const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < day).sort((p, q) => q.ngay.localeCompare(p.ngay))[0];
         DB.lichchay.push({ id: uid(), ngay: day, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: 'Tự động', tgCham: tg }); n++;
       });
