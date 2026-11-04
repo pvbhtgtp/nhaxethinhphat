@@ -1,0 +1,37 @@
+{
+  "updatedAt": "2026-11-04T01:05:16.223Z",
+  "source": "https://webgia.com/gia-xang-dau/petrolimex/",
+  "unit": "dong/lit",
+  "items": [
+    {
+      "name": "Xăng E10 RON 95 mức 5",
+      "vung1": 24230,
+      "vung2": 24710
+    },
+    {
+      "name": "Xăng E10 RON 95 mức 3",
+      "vung1": 23230,
+      "vung2": 23690
+    },
+    {
+      "name": "Xăng E5 RON 92 mức 2",
+      "vung1": 23200,
+      "vung2": 23660
+    },
+    {
+      "name": "Dầu DO 0,001S mức 5",
+      "vung1": 30270,
+      "vung2": 30870
+    },
+    {
+      "name": "Dầu DO 0,05S mức 2",
+      "vung1": 28870,
+      "vung2": 29440
+    },
+    {
+      "name": "Dầu hỏa 2-K",
+      "vung1": 29010,
+      "vung2": 29590
+    }
+  ]
+}
