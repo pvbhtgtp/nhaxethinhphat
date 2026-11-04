@@ -9707,7 +9707,7 @@ const PD = {
     const colAll = a => Auth.MODS.filter(m => m.acts.includes(a)).every(m => has(m, a));
     const head = `<tr><th>Màn hình / chức năng</th>${PD.ACTS.map(a => `<th class="c">${Auth.ACTS[a]}<br><input type="checkbox" data-pd="col" data-a="${a}" ${colAll(a) ? 'checked' : ''} ${lock} title="Tích cả cột"></th>`).join('')}<th class="c">Tất cả<br><span class="muted small">dòng</span></th></tr>`;
     const body = Auth.MODS.map(m => `<tr><td>${esc(m.label)}</td>${PD.ACTS.map(a => m.acts.includes(a) ? `<td class="c"><input type="checkbox" data-pd="tick" data-m="${m.id}" data-a="${a}" ${has(m, a) ? 'checked' : ''} ${lock}></td>` : '<td class="c muted">—</td>').join('')}<td class="c"><input type="checkbox" data-pd="row" data-m="${m.id}" ${m.acts.every(a => has(m, a)) ? 'checked' : ''} ${lock}></td></tr>`).join('')
-      + `<tr><td>Tài khoản người dùng & phân quyền</td><td colspan="5" class="c small ${adm ? '' : 'muted'}">${adm ? '<b>Admin: toàn quyền</b>' : 'Chỉ Admin'}</td></tr>`;
+      + `<tr><td>Tài khoản người dùng & phân quyền</td><td colspan="${PD.ACTS.length + 1}" class="c small ${adm ? '' : 'muted'}">${adm ? '<b>Admin: toàn quyền</b>' : 'Chỉ Admin'}</td></tr>`;
     const others = L.filter(x => x.k !== PD.sel);
     const tools = adm ? `<p class="small muted" style="margin:10px 0 0">${ic('shield')} <b>Admin là quyền cao nhất:</b> toàn quyền Xem · Thêm · Sửa · Xóa mọi màn hình, kể cả Tài khoản và Dữ liệu & sao lưu. Quyền Admin cố định, không chỉnh được. Chỉ Admin mới thấy mục phân quyền này.</p>`
       : `<div class="row pd-tools"><button type="button" class="btn sm" data-pd="preset" data-v="all">${ic('check')} Tích tất cả</button><button type="button" class="btn sm" data-pd="preset" data-v="view">Chỉ xem</button><button type="button" class="btn sm" data-pd="preset" data-v="none">Bỏ hết</button><span class="grow"></span>
@@ -12139,6 +12139,55 @@ addCSS(`.au-rm{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-siz
    Google Drive (Kho hồ sơ, thư mục "_Anh he thong") và trong Firestore chỉ còn mã tham chiếu "nxdrv:<id>".
    Khi tải từ Firebase: mã tham chiếu được đổi lại thành ảnh (lấy từ bộ nhớ đệm IndexedDB của máy, thiếu thì tải từ Drive),
    nên toàn bộ màn hình, bản in trong app vẫn dùng ảnh như cũ. Chưa kết nối Google Drive thì giữ nguyên cách lưu cũ. */
+/* ===== DỮ LIỆU CÁ NHÂN: mỗi người chỉ xem thông tin của chính mình =====
+   Màn hình Nhân viên, Chấm công, Bảng lương, Thuế & bảo hiểm, Hợp đồng lao động: tài khoản không phải Admin chỉ thấy hồ sơ của mình.
+   Admin xem tất cả. Vai trò cần xem của mọi người (kế toán, quản lý...) thì Admin tích cột "Xem tất cả" trong bảng phân quyền.
+   Dữ liệu dùng chung (xe, giờ chạy, giá vé, đặt vé...) vẫn theo quyền Xem/Thêm/Sửa/Xóa như cũ.
+   Chuyến chạy của lái xe/phụ xe: giữ cơ chế "chỉ chuyến của mình" (vai trò Lái xe – Phụ xe) đang có. */
+const SELF = {
+  MODS: ['nhanvien', 'chamcong', 'bangluong', 'thue', 'hopdong'],
+  depth: 0, act: null,
+  mod: () => Auth.VIEWMOD[App.cur] || App.cur,
+  need() { const u = Auth.user, m = SELF.mod(); if (!u || u.role === 'admin' || !SELF.MODS.includes(m)) return false; return !Auth.can(m, 'all'); },
+  begin() {
+    if (SELF.depth++ > 0) return;
+    try { if (!SELF.need()) return; const me = PQ.emp(Auth.user), E0 = DB.employees || [], E = me ? [me] : []; SELF.act = { E0, E, n: E.length }; DB.employees = E; } catch (e) { SELF.act = null; }
+  },
+  end() {
+    if (SELF.depth <= 0 || --SELF.depth > 0) return;
+    const a = SELF.act; SELF.act = null; if (!a) return;
+    const cur = DB.employees, E0 = a.E0;
+    if (cur === a.E) { a.E.slice(a.n).forEach(x => { if (!E0.includes(x)) E0.push(x); }); DB.employees = E0; return; }   // có thêm nhân viên mới
+    const keep = new Set(cur || []); a.E.forEach(x => { if (!keep.has(x)) { const i = E0.indexOf(x); if (i >= 0) E0.splice(i, 1); } });   // có xóa
+    (cur || []).forEach(x => { if (!E0.includes(x)) E0.push(x); });
+    DB.employees = E0;
+  },
+  run(f, self, args) { SELF.begin(); try { return f.apply(self, args); } finally { SELF.end(); } }
+};
+Auth.ACTS.all = 'Xem tất cả';
+Auth.MODS.forEach(m => { if (SELF.MODS.includes(m.id) && !m.acts.includes('all')) m.acts.push('all'); });
+if (typeof PD !== 'undefined' && !PD.ACTS.includes('all')) PD.ACTS.push('all');
+{
+  const r0 = App.render; App.render = function () { return SELF.run(r0, this, arguments); };
+  /* bấm nút, chọn trong các màn hình này (in, xuất Excel, lưu...) cũng chỉ thấy dữ liệu của mình */
+  ['click', 'change', 'input'].forEach(t => {
+    window.addEventListener(t, () => { if (!SELF.need()) return; SELF.begin(); let done = false; const fin = () => { if (!done) { done = true; SELF.end(); } }; window.addEventListener(t, fin, { once: true }); setTimeout(fin, 0); }, true);
+  });
+  /* chạy 1 lần: vai trò đang quản lý dữ liệu nhân sự (có quyền Thêm/Sửa ở các màn hình này) được giữ "Xem tất cả" để không gián đoạn công việc */
+  const mig = () => {
+    try {
+      const s = DB && DB.settings; if (!s || s.selfMig || !DB.roles) return; let ch = false;
+      Object.entries(DB.roles).forEach(([id, r]) => {
+        if (id === 'admin' || !r || !r.perms || r.selfOnly) return;
+        if (!SELF.MODS.some(m => (r.perms[m] || []).some(a => a !== 'view' && a !== 'all'))) return;
+        SELF.MODS.forEach(m => { const p = r.perms[m] || []; if (p.includes('view') && !p.includes('all')) { r.perms[m] = [...p, 'all']; ch = true; } });
+      });
+      s.selfMig = 1; Store.changed();
+    } catch (e) { console.warn('SELF.mig', e); }
+  };
+  const rn = App.render; App.render = function () { if (Auth.user) mig(); return rn.apply(this, arguments); };
+}
+
 const IMGX = {
   PRE: 'nxdrv:', MIN: 2048, DIR: ['_Anh he thong'],
   map: new Map(),        // chuỗi ảnh -> id Drive
