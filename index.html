@@ -4608,7 +4608,7 @@ function dvTicket80(x, t, i, n) {
   const ln = '<div class="t8-ln"></div>', row = (k, v) => v ? `<div class="t8-r"><span>${k}</span><b>${v}</b></div>` : '';
   const route = S2.length ? `<div class="t8-rt">${S2.map((p, j) => { const on = j === LT.find(t.tuyen, x.diemDon) || j === LT.find(t.tuyen, x.diemTra); return `<span class="${on ? 'on' : ''}">${esc(dvAbbr(p.ten))} ${LT.time(t, p.phut)}</span>`; }).join(' › ')}</div>` : '';
   return `<div class="t8" data-vid="${esc(x.id)}">
-  <div class="t8-hd ve8-hd"><div class="ve8-top">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="ve8-tx"><div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div></div></div>${co.diaChi ? `<div class="t8-s">${esc(co.diaChi)}</div>` : ''}${co.sdt || co.mst ? `<div class="t8-s">${co.sdt ? 'Hotline: <b>' + esc(co.sdt) + '</b>' : ''}${co.sdt && co.mst ? ' · ' : ''}${co.mst ? 'MST: ' + esc(co.mst) : ''}</div>` : ''}</div>
+  <div class="t8-hd ve8-hd"><div class="ve8-top">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="ve8-tx"><div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div></div></div>${co.diaChi ? `<div class="t8-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}${co.sdt || co.mst ? `<div class="t8-s">${co.sdt ? 'Hotline: <b>' + esc(co.sdt) + '</b>' : ''}${co.sdt && co.mst ? ' · ' : ''}${co.mst ? 'MST: ' + esc(co.mst) : ''}</div>` : ''}</div>
   <div class="t8-tt">VÉ XE KHÁCH${n > 1 ? ` <small>(${i + 1}/${n})</small>` : ''}</div>
   ${x.ma ? `<div class="t8-ma">Mã vé <b>${esc(x.ma)}</b></div>` : ''}
   ${ln}
@@ -8800,7 +8800,7 @@ const GH = {
     const dow = D.dowName ? D.dowName[D.parse(T.ngay).getDay()] : '', ln = '<div class="t8-ln"></div>', row = (k, v) => v ? `<div class="t8-r"><span>${k}</span><b>${v}</b></div>` : '';
     const tt = GH.tien(x), paid = x.nguoiThu !== 'nhan';
     return `<div class="t8">
-  <div class="t8-hd gh8-hd"><div class="gh8-top">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="gh8-tx"><div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div></div></div>${co.diaChi ? `<div class="t8-s">${esc(co.diaChi)}</div>` : ''}${co.sdt || co.mst ? `<div class="t8-s">${co.sdt ? 'Hotline: <b>' + esc(co.sdt) + '</b>' : ''}${co.sdt && co.mst ? ' · ' : ''}${co.mst ? 'MST: ' + esc(co.mst) : ''}</div>` : ''}</div>
+  <div class="t8-hd gh8-hd"><div class="gh8-top">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="gh8-tx"><div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div></div></div>${co.diaChi ? `<div class="t8-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}${co.sdt || co.mst ? `<div class="t8-s">${co.sdt ? 'Hotline: <b>' + esc(co.sdt) + '</b>' : ''}${co.sdt && co.mst ? ' · ' : ''}${co.mst ? 'MST: ' + esc(co.mst) : ''}</div>` : ''}</div>
   <div class="t8-tt">PHIẾU GỬI HÀNG${n > 1 ? ` <small>(${i + 1}/${n})</small>` : ''}</div>
   <div class="t8-ma">Số phiếu <b>${esc(x.so)}</b></div>
   ${ln}
@@ -12156,7 +12156,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-04T11:10';
+const APP_BUILD = '2026-11-04T11:25';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
