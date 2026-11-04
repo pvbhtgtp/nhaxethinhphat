@@ -5873,10 +5873,13 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
   const rn = App.render;
   App.render = function () {
     try {
-      if (App.cur === 'hoso' && !dhScan._seeded && typeof HS !== 'undefined' && Auth.can('hoso', 'add')) {
-        dhScan._seeded = true;
+      if (App.cur === 'hoso' && !dhScan._seeded && typeof HS !== 'undefined' && Auth.user && Auth.can('hoso', 'add')) {
+        // danh mục thư mục tải về sau (đồng bộ trực tiếp) nên chỉ đánh dấu xong khi đã thấy thư mục năm; chưa có thì lần vẽ sau thử lại
         const y = String(new Date().getFullYear()), yf = HS.kids('').find(f => String(f.ten).trim() === y);
-        if (yf && HS.kids(yf.id).length && !HS.kids(yf.id).some(f => HS.norm(f.ten) === HS.norm('Điều hành xe'))) { const n0 = HS.F().length; HS.ensure([y, '08. Điều hành xe', 'Bảng phân công lịch tài & xe']); if (HS.F().length > n0) Store.changed(); }
+        if (yf && HS.kids(yf.id).length) {
+          dhScan._seeded = true;
+          if (!HS.kids(yf.id).some(f => HS.norm(f.ten) === HS.norm('Điều hành xe'))) { const n0 = HS.F().length; HS.ensure([y, '08. Điều hành xe', 'Bảng phân công lịch tài & xe']); if (HS.F().length > n0) Store.changed(); }
+        }
       }
     } catch (e) { console.warn('dh folder', e); }
     return rn.apply(this, arguments);
@@ -12882,7 +12885,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-04T13:45';
+const APP_BUILD = '2026-11-04T13:55';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
