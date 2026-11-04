@@ -11809,6 +11809,278 @@ const vMG = {
 Auth.VIEWMOD.management = 'management';
 { const c0 = Auth.can; Auth.can = function (mod) { if (mod === 'management') return MG.admin(); return c0.apply(this, arguments); }; }
 CFG.views.management = vMG;
+/* ---------- Management · Thẻ "API kết nối" (đợt 1: chỉ đọc · xem lịch, giá vé, báo cáo) ----------
+   Trang ngoài gọi vào cổng Apps Script riêng (do Admin triển khai bằng tài khoản Google chủ dự án Firebase).
+   Cổng đọc dữ liệu Firestore bằng quyền của tài khoản đó nên không phải sửa Rules Firebase.
+   Khóa API chỉ lưu dạng băm SHA-256 trong cài đặt (settings.api.keys), nhật ký gọi API ở tài liệu nhaxe/x_apilog. */
+const APIK = {
+  QUYEN: [['xem', 'Xem lịch chạy, giờ, giá vé, ghế trống', true], ['baocao', 'Lấy báo cáo (doanh thu vé, số chuyến, nhiên liệu)', true], ['datve', 'Đặt vé từ trang ngoài (đợt 2)', false], ['ghi', 'Gửi dữ liệu vào app (đợt 2)', false]],
+  log: null, logErr: '',
+  cfg() { const s = S(); s.api = Object.assign({ url: '', keys: [] }, s.api || {}); if (!Array.isArray(s.api.keys)) s.api.keys = []; return s.api; },
+  pid() { try { return ((S().gsync || {}).fb || {}).projectId || ''; } catch (e) { return ''; } },
+  async sha(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); },
+  newKey() { const a = new Uint8Array(20); crypto.getRandomValues(a); return 'tp_' + [...a].map(x => x.toString(16).padStart(2, '0')).join(''); },
+  copy(t) { try { navigator.clipboard.writeText(t).then(() => toast('Đã sao chép', 'ok'), () => prompt('Chép nội dung:', t)); } catch (e) { prompt('Chép nội dung:', t); } },
+  qName: q => (APIK.QUYEN.find(x => x[0] === q) || [q, q])[1].replace(/\s*\(.*$/, ''),
+  card() {
+    const c = APIK.cfg(), K = c.keys, pid = APIK.pid();
+    const rows = K.map(k => `<tr><td><b>${esc(k.ten)}</b>${k.ghiChu ? `<div class="small muted">${esc(k.ghiChu)}</div>` : ''}</td><td><code>${esc(k.prefix || '')}…</code></td><td class="small">${(k.quyen || []).map(q => `<span class="badge b-gray" style="margin:1px">${esc(APIK.qName(q))}</span>`).join('')}</td><td class="small">${(k.tuyen || []).length ? esc(k.tuyen.join(', ')) : '<span class="muted">Tất cả</span>'}</td><td class="small">${esc(k.tao || '')}</td><td>${k.on ? '<span class="badge b-green">Đang bật</span>' : '<span class="badge b-red">Đã tắt</span>'}</td><td style="white-space:nowrap"><button class="btn sm" data-apik="toggle" data-id="${k.id}">${k.on ? 'Tắt' : 'Bật'}</button> <button class="btn sm danger" data-apik="del" data-id="${k.id}">${ic('trash')}</button></td></tr>`).join('');
+    const lg = APIK.log ? (APIK.log.length ? `<div style="max-height:260px;overflow:auto"><table class="tbl api-tb"><thead><tr><th>Thời gian</th><th>Khóa</th><th>Yêu cầu</th><th>Kết quả</th></tr></thead><tbody>${APIK.log.slice(0, 80).map(x => `<tr><td class="small">${esc(new Date(x.t).toLocaleString('vi-VN'))}</td><td class="small">${esc(x.ten || '')}</td><td class="small"><code>${esc(x.a || '')}</code></td><td class="small">${x.ok ? '<span style="color:#15803d">Thành công</span>' : `<span style="color:#b91c1c">${esc(x.e || 'Lỗi')}</span>`}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted small">Chưa có lượt gọi API nào.</div>') : `<div class="muted small">${APIK.logErr ? esc(APIK.logErr) : 'Bấm “Tải nhật ký” để xem các lượt gọi gần nhất.'}</div>`;
+    return `<div class="card mg-api" id="mgApi"><div class="card-h"><h3>${ic('link')} API kết nối</h3><span class="sub">Cho phép website, phần mềm khác đọc lịch chạy, giá vé, báo cáo của app (đợt 1: chỉ đọc)</span></div><div class="card-b">
+      <ol class="small muted mg-st">
+        <li>Đăng nhập <b>script.google.com</b> bằng <b>tài khoản Google chủ dự án Firebase</b>${pid ? ` (<code>${esc(pid)}</code>)` : ''} → <b>Dự án mới</b>.</li>
+        <li>Bấm <b>Xem mã Apps Script</b> bên dưới: dán phần <b>Code.gs</b> thay mã mặc định. Vào <b>Cài đặt dự án</b> → tích <b>Hiển thị tệp kê khai "appsscript.json"</b>, mở tệp đó và dán phần <b>appsscript.json</b>.</li>
+        <li>Chọn hàm <b>kiemTra</b> → bấm <b>Chạy</b> → cho phép quyền truy cập (lần đầu Google sẽ hỏi).</li>
+        <li><b>Triển khai → Tùy chọn triển khai mới → Ứng dụng web</b>, Thực thi bằng: <b>Tôi</b>, Người có quyền truy cập: <b>Bất kỳ ai</b>. Chép địa chỉ <code>…/exec</code> dán vào ô dưới, bấm <b>Kiểm tra</b> rồi <b>Lưu</b>.</li>
+        <li>Bấm <b>Tạo khóa API</b> cho từng trang / đối tác. Khóa chỉ hiện <b>một lần</b> lúc tạo, hãy chép gửi cho bên kết nối.</li>
+      </ol>
+      <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end"><label class="field grow" style="min-width:260px"><span>Địa chỉ cổng API (Apps Script Web app)</span><input class="inp" id="apiUrl" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url || '')}"></label></div>
+      <div id="apiMsg" class="small" style="min-height:22px;margin:4px 0"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" data-apik="test">${ic('check')} Kiểm tra</button><button class="btn pri" data-apik="save">${ic('check')} Lưu địa chỉ</button><button class="btn" data-apik="script">${ic('sheet')} Xem mã Apps Script</button><button class="btn" data-apik="doc">${ic('file')} Hướng dẫn gọi API</button></div>
+      <h4 class="mg-h" style="margin-top:16px">Khóa API (${K.length})</h4>
+      ${K.length ? `<div style="overflow:auto"><table class="tbl api-tb"><thead><tr><th>Tên trang / đối tác</th><th>Khóa</th><th>Quyền</th><th>Tuyến</th><th>Ngày tạo</th><th>Trạng thái</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="muted small">Chưa có khóa API nào.</div>'}
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn pri" data-apik="add">${ic('plus')} Tạo khóa API</button></div>
+      <h4 class="mg-h" style="margin-top:16px">Nhật ký gọi API</h4>${lg}
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm" data-apik="log">${ic('refresh')} Tải nhật ký</button></div>
+    </div></div>`;
+  },
+  paint() { const h = $('#mgApiHost'); if (h) h.innerHTML = APIK.card(); },
+  msg(t, ok) { const m = $('#apiMsg'); if (m) m.innerHTML = t ? `<span style="color:${ok ? '#047857' : '#B91C1C'};font-weight:600">${t}</span>` : ''; },
+  okUrl: u => /^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(u || ''),
+  async call(url, q) {
+    const r = await fetch(url + (url.includes('?') ? '&' : '?') + new URLSearchParams(q).toString(), { redirect: 'follow' });
+    const t = await r.text(); try { return JSON.parse(t); } catch (e) { throw new Error(/<html/i.test(t) ? 'Cổng trả về trang HTML: kiểm tra lại quyền truy cập “Bất kỳ ai” khi triển khai' : 'Phản hồi không hợp lệ'); }
+  },
+  async act(a, b) {
+    if (!MG.admin()) return toast('Chỉ Admin được thao tác phần API', 'err');
+    const c = APIK.cfg(), url = (($('#apiUrl') || {}).value || '').trim();
+    if (a === 'test' || a === 'save') {
+      if (!APIK.okUrl(url)) return APIK.msg('Địa chỉ phải có dạng https://script.google.com/macros/s/…/exec', 0);
+      APIK.msg('Đang kiểm tra cổng API…', 1);
+      try {
+        const j = await APIK.call(url, { action: 'ping' });
+        if (!j || !j.ok || j.app !== 'nhaxe-api') throw new Error((j && j.error) || 'Đây không phải cổng API của app');
+        APIK.msg(`✔ Cổng hoạt động, đọc được dữ liệu Firebase (phiên bản dữ liệu ${esc(j.dataVer)}).`, 1);
+        if (a === 'save') { c.url = url; App.changed(); toast('Đã lưu địa chỉ cổng API', 'ok'); }
+      } catch (e) { APIK.msg('✘ ' + esc(e.message || e), 0); if (a === 'save' && await Modal.confirm('Cổng chưa kiểm tra được. Vẫn lưu địa chỉ này?', { ok: 'Vẫn lưu' })) { c.url = url; App.changed(); APIK.paint(); } }
+      return;
+    }
+    if (a === 'toggle') { const k = c.keys.find(x => x.id === b.dataset.id); if (!k) return; k.on = !k.on; App.changed(); APIK.paint(); return toast(k.on ? 'Đã bật khóa ' + k.ten : 'Đã tắt khóa ' + k.ten, 'ok'); }
+    if (a === 'del') { const k = c.keys.find(x => x.id === b.dataset.id); if (!k) return; if (!await Modal.confirm(`Xóa khóa API <b>${esc(k.ten)}</b>? Trang dùng khóa này sẽ không kết nối được nữa.`, { ok: 'Xóa', danger: true })) return; c.keys = c.keys.filter(x => x !== k); App.changed(); APIK.paint(); return toast('Đã xóa khóa API', 'ok'); }
+    if (a === 'add') return APIK.addForm();
+    if (a === 'script') return APIK.showScript();
+    if (a === 'doc') return APIK.showDoc();
+    if (a === 'log') {
+      APIK.logErr = '';
+      try { if (!FB.db) throw new Error('Chưa kết nối Firebase'); const s = await FB.col().doc('x_apilog').get(); APIK.log = s.exists ? JSON.parse(s.data().d || '[]') : []; }
+      catch (e) { APIK.log = null; APIK.logErr = 'Không tải được nhật ký: ' + (e.message || e); }
+      APIK.paint();
+    }
+  },
+  addForm() {
+    const routes = [...new Set((DB.giochay || []).map(g => g.tuyen).filter(Boolean))].sort((x, y) => String(x).localeCompare(String(y), 'vi'));
+    const m = Modal.open({ title: 'Tạo khóa API', width: 560,
+      body: `<label class="field"><span>Tên trang / đối tác <b style="color:#dc2626">*</b></span><input class="inp" data-k="ten" placeholder="Ví dụ: Website nhà xe"></label>
+        <label class="field" style="margin-top:8px"><span>Ghi chú</span><input class="inp" data-k="ghiChu" placeholder="Người phụ trách, mục đích…"></label>
+        <div style="margin-top:10px"><b class="small">Quyền</b>${APIK.QUYEN.map(q => `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:13px;${q[2] ? '' : 'opacity:.5'}"><input type="checkbox" data-q="${q[0]}" ${q[0] === 'xem' ? 'checked' : ''} ${q[2] ? '' : 'disabled'}> ${esc(q[1])}</label>`).join('')}</div>
+        ${routes.length ? `<div style="margin-top:10px"><b class="small">Giới hạn tuyến</b> <span class="small muted">(không tích tuyến nào = được xem tất cả)</span><div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;max-height:160px;overflow:auto">${routes.map(r => `<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" data-t="${esc(r)}"> ${esc(r)}</label>`).join('')}</div></div>` : ''}
+        <div class="small muted" style="margin-top:10px">Khóa có quyền <b>Lấy báo cáo</b> chỉ nên dùng ở máy chủ / phần mềm nội bộ, không gắn vào website công khai.</div>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-ok>${ic('check')} Tạo khóa</button>` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const v = s => (m.el.querySelector(`[data-k="${s}"]`).value || '').trim(), ten = v('ten');
+      const quyen = [...m.el.querySelectorAll('[data-q]:checked')].map(x => x.dataset.q), tuyen = [...m.el.querySelectorAll('[data-t]:checked')].map(x => x.dataset.t);
+      if (!ten) return toast('Nhập tên trang / đối tác', 'err'); if (!quyen.length) return toast('Chọn ít nhất một quyền', 'err');
+      const key = APIK.newKey(), hash = await APIK.sha(key), c = APIK.cfg();
+      c.keys.push({ id: uid(), ten, ghiChu: v('ghiChu'), hash, prefix: key.slice(0, 9), quyen, tuyen, on: true, tao: D.today(), nguoiTao: (Auth.user && (Auth.user.ten || Auth.user.user)) || '' });
+      App.changed(); m.close(); APIK.paint();
+      const k2 = Modal.open({ title: 'Khóa API mới · ' + esc(ten), width: 560, body: `<p style="margin-top:0">Chép và gửi khóa này cho bên kết nối. <b>Khóa chỉ hiện một lần</b>, đóng hộp thoại là không xem lại được (mất thì tạo khóa mới).</p><div style="display:flex;gap:8px"><input class="inp" readonly value="${esc(key)}" style="flex:1;font-family:monospace"><button class="btn pri" data-cp>${ic('check')} Sao chép</button></div>${c.url ? '' : '<p class="small" style="color:#b45309">Chưa lưu địa chỉ cổng API. Khóa chỉ dùng được sau khi cổng Apps Script được triển khai và lưu địa chỉ.</p>'}`, foot: `<button class="btn" data-no>Đóng</button>` });
+      k2.el.querySelector('[data-cp]').onclick = () => APIK.copy(key); k2.el.querySelector('[data-no]').onclick = () => k2.close();
+    };
+  },
+  showDoc() {
+    const u = APIK.cfg().url || 'https://script.google.com/macros/s/…/exec', d = D.add(D.today(), 1);
+    const ex = (t, q, note) => `<div style="margin:10px 0 4px"><b>${t}</b>${note ? ` <span class="small muted">${note}</span>` : ''}</div><pre class="api-pre">${esc(u + '?' + q + '&key=KHOA_API')}</pre>`;
+    const body = `<p class="small" style="margin-top:0">Mọi yêu cầu là <b>GET</b> (hoặc POST JSON) tới địa chỉ cổng, kèm <code>action</code> và <code>key</code>. Kết quả dạng JSON: <code>{"ok":true,"data":…}</code> hoặc <code>{"ok":false,"code":401,"error":"…"}</code>.</p>
+      ${ex('Kiểm tra khóa', 'action=ping', '→ tên khóa, quyền')}
+      ${ex('Danh sách tuyến, giờ chạy, giá toàn tuyến', 'action=tuyen', 'quyền Xem')}
+      ${ex('Lịch chạy một ngày, ghế trống', 'action=lich&ngay=' + d + '&tuyen=', 'quyền Xem · tuyen bỏ trống = tất cả')}
+      ${ex('Bảng giá vé theo chặng', 'action=giave&tuyen=TÊN_TUYẾN&ngay=' + d, 'quyền Xem')}
+      ${ex('Báo cáo theo khoảng ngày (tối đa 62 ngày)', 'action=baocao&tu=' + D.add(D.today(), -6) + '&den=' + D.today(), 'quyền Báo cáo')}
+      <div style="margin:12px 0 4px"><b>Ví dụ JavaScript trên website</b></div><pre class="api-pre">${esc(`fetch('${u}?action=lich&ngay=${d}&key=KHOA_API')
+  .then(r => r.json())
+  .then(j => { if (!j.ok) throw new Error(j.error);
+    j.data.chuyen.forEach(c => console.log(c.tuyen, c.gio, 'còn', c.conTrong, 'ghế', c.gia + 'đ'));
+  });`)}</pre>
+      <div class="small muted">Mỗi chuyến trả về: <code>id, tuyen, gio, bks, tongGhe, daDat, conTrong, gheDaDat[], gia, daXuatBen</code>. Chuyến đang khóa không được trả về. Dữ liệu là dữ liệu thật trên Firebase tại thời điểm gọi (mỗi lần gọi mất khoảng 1–3 giây).</div>`;
+    const m = Modal.open({ title: 'Hướng dẫn gọi API', width: 760, body, foot: `<button class="btn" data-cp>Sao chép địa chỉ cổng</button><button class="btn pri" data-no>Đóng</button>` });
+    m.el.querySelector('[data-no]').onclick = () => m.close(); m.el.querySelector('[data-cp]').onclick = () => APIK.copy(u);
+  },
+  manifest() { return JSON.stringify({ timeZone: 'Asia/Ho_Chi_Minh', runtimeVersion: 'V8', exceptionLogging: 'STACKDRIVER', oauthScopes: ['https://www.googleapis.com/auth/datastore', 'https://www.googleapis.com/auth/script.external_request'], webapp: { executeAs: 'USER_DEPLOYING', access: 'ANYONE_ANONYMOUS' } }, null, 2); },
+  script() {
+    const fn = n => { try { const f = (0, eval)(n); return 'var ' + n + ' = ' + f.toString() + ';'; } catch (e) { return '// thiếu hàm ' + n; } };
+    const shared = ['sdSpecial', 'sdRenum', 'sdTemplate29', 'sdTemplate16', 'sdTemplate15', 'dvLayout', 'sdDefault', 'sdNorm', 'sdSeats', 'dvSO', 'dvCap', 'bgNorm', 'bgFind', 'bgPrice'].map(fn).join('\n');
+    return `/* ===== CỔNG API · NHÀ XE THỊNH PHÁT (đợt 1: chỉ đọc) =====
+   Tạo tự động từ app (module Management → API kết nối). Không cần sửa gì trong tệp này.
+   Chạy bằng tài khoản Google chủ dự án Firebase; dữ liệu đọc trực tiếp từ Firestore. */
+var PROJECT_ID = ${JSON.stringify(APIK.pid())};
+var ROOT = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
+var BASE = ROOT + '/nhaxe';
+var DB = null;
+
+function kiemTra() { Logger.log('Kết nối Firestore OK, phiên bản dữ liệu: ' + meta_().ver); }
+function doGet(e) { return handle_((e && e.parameter) || {}); }
+function doPost(e) {
+  var p = {}; try { p = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { }
+  var q = (e && e.parameter) || {}; for (var k in q) if (!(k in p)) p[k] = q[k];
+  return handle_(p);
+}
+function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function err_(code, msg) { var e = new Error(msg); e.code = code; return e; }
+
+function handle_(p) {
+  var a = String(p.action || 'ping'), K = null;
+  try {
+    if (a === 'ping' && !p.key) { var m = meta_(); return out_({ ok: true, app: 'nhaxe-api', apiVer: 1, dataVer: m.ver || 0 }); }
+    load_();
+    K = auth_(String(p.key || ''));
+    var need = { ping: '', tuyen: 'xem', lich: 'xem', giave: 'xem', baocao: 'baocao' }[a];
+    if (need === undefined) throw err_(400, 'Không có action "' + a + '"');
+    if (need && (K.quyen || []).indexOf(need) < 0) throw err_(403, 'Khóa API không có quyền cho yêu cầu này');
+    var r = API_[a](p, K);
+    log_(K, a, true, '');
+    return out_({ ok: true, data: r });
+  } catch (e) {
+    try { if (K) log_(K, a, false, String(e.message || e)); } catch (x) { }
+    return out_({ ok: false, code: e.code || 500, error: String(e.message || e) });
+  }
+}
+
+/* ---------- Firestore REST ---------- */
+function H_() { return { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }; }
+function chk_(r) { var c = r.getResponseCode(); if (c >= 300) throw err_(500, 'Firestore ' + c + ': ' + r.getContentText().slice(0, 200)); return JSON.parse(r.getContentText() || '{}'); }
+function fget_(name) { var r = UrlFetchApp.fetch(BASE + '/' + name, { headers: H_(), muteHttpExceptions: true }); if (r.getResponseCode() === 404) return null; return chk_(r); }
+function val_(v) {
+  if (!v) return null; if ('stringValue' in v) return v.stringValue; if ('integerValue' in v) return +v.integerValue; if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue; if ('timestampValue' in v) return v.timestampValue; if ('nullValue' in v) return null;
+  if ('mapValue' in v) { var o = {}, f = v.mapValue.fields || {}; for (var k in f) o[k] = val_(f[k]); return o; }
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(val_); return null;
+}
+function fields_(doc) { var o = {}, f = (doc && doc.fields) || {}; for (var k in f) o[k] = val_(f[k]); return o; }
+function meta_() { var d = fget_('meta'); return d ? fields_(d) : { ver: 0, n: 0 }; }
+function load_() {
+  var m = meta_(); if (!m.n) throw err_(503, 'Chưa có dữ liệu trên Firebase');
+  var names = []; for (var i = 0; i < m.n; i++) names.push('projects/' + PROJECT_ID + '/databases/(default)/documents/nhaxe/c' + i);
+  var arr = chk_(UrlFetchApp.fetch(ROOT + ':batchGet', { method: 'post', contentType: 'application/json', headers: H_(), payload: JSON.stringify({ documents: names }), muteHttpExceptions: true }));
+  var parts = {}; (arr || []).forEach(function (x) { if (x.found) parts[x.found.name.split('/').pop()] = fields_(x.found).d || ''; });
+  var txt = ''; for (i = 0; i < m.n; i++) txt += parts['c' + i] || '';
+  DB = JSON.parse(txt);
+  ['giochay', 'lichchay', 'banggia', 'vehicles', 'datve', 'nhienlieu'].forEach(function (k) { if (!Array.isArray(DB[k])) DB[k] = []; });
+}
+function tickets_(ids) {
+  if (!ids.length) return [];
+  if (!fget_('m_tk')) return DB.datve.filter(function (b) { return ids.indexOf(b.chuyen) >= 0; });
+  var reqs = [];
+  for (var i = 0; i < ids.length; i += 30) reqs.push({ url: ROOT + ':runQuery', method: 'post', contentType: 'application/json', headers: H_(), muteHttpExceptions: true,
+    payload: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'nhaxe' }], where: { fieldFilter: { field: { fieldPath: 'c' }, op: 'IN', value: { arrayValue: { values: ids.slice(i, i + 30).map(function (x) { return { stringValue: String(x) }; }) } } } } } }) });
+  var out = [];
+  UrlFetchApp.fetchAll(reqs).forEach(function (r) { (chk_(r) || []).forEach(function (x) { if (!x.document) return; var f = fields_(x.document); if (f.t !== 'v' || !f.d) return; try { out.push(JSON.parse(f.d)); } catch (e) { } }); });
+  return out;
+}
+
+/* ---------- Khóa API & nhật ký ---------- */
+function sha_(t) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, t, Utilities.Charset.UTF_8).map(function (b) { return ((b + 256) % 256).toString(16); }).map(function (h) { return h.length < 2 ? '0' + h : h; }).join(''); }
+function auth_(key) {
+  if (!key) throw err_(401, 'Thiếu khóa API (tham số key)');
+  var h = sha_(key), keys = ((DB.settings || {}).api || {}).keys || [];
+  var k = keys.filter(function (x) { return x.hash === h; })[0];
+  if (!k) throw err_(401, 'Khóa API không đúng');
+  if (!k.on) throw err_(403, 'Khóa API đã bị tắt');
+  return k;
+}
+function log_(K, a, ok, e) {
+  var d = fget_('x_apilog'), arr = []; try { arr = JSON.parse((d && fields_(d).d) || '[]'); } catch (x) { }
+  arr.unshift({ t: new Date().toISOString(), id: K.id, ten: K.ten, a: a, ok: ok, e: e || '' }); arr = arr.slice(0, 300);
+  UrlFetchApp.fetch(BASE + '/x_apilog', { method: 'patch', contentType: 'application/json', headers: H_(), muteHttpExceptions: true, payload: JSON.stringify({ fields: { d: { stringValue: JSON.stringify(arr) } } }) });
+}
+
+/* ---------- Hàm dùng chung lấy từ app (sơ đồ ghế, bảng giá) ---------- */
+${shared}
+
+/* ---------- Các yêu cầu ---------- */
+function today_() { return Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd'); }
+function addDay_(d, n) { var x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+function okDate_(d) { return /^\\d{4}-\\d{2}-\\d{2}$/.test(String(d || '')); }
+function allowT_(K, t) { return !(K.tuyen || []).length || K.tuyen.indexOf(t) >= 0; }
+function gone_(l) { var t = new Date(l.ngay + 'T' + (l.gio || '00:00') + ':00+07:00').getTime(); return !isNaN(t) && Date.now() > t + 20 * 60000; }
+function price_(t, ngay) { try { var p = bgPrice(t, ngay, '', ''); return p ? p.gia : null; } catch (e) { return null; } }
+var API_ = {
+  ping: function (p, K) { return { ten: K.ten, quyen: K.quyen, tuyen: K.tuyen || [] }; },
+  tuyen: function (p, K) {
+    var day = today_(), m = {};
+    DB.giochay.forEach(function (g) { if (!g.tuyen || !g.gio || g.tt === 'ĐÓNG' || !allowT_(K, g.tuyen)) return; (m[g.tuyen] = m[g.tuyen] || []).push(g.gio); });
+    return Object.keys(m).sort().map(function (t) { return { tuyen: t, gio: m[t].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), giaToanTuyen: price_(t, day) }; });
+  },
+  lich: function (p, K) {
+    var ngay = okDate_(p.ngay) ? p.ngay : today_(), tf = String(p.tuyen || '');
+    var T = DB.lichchay.filter(function (l) { return l.ngay === ngay && !l.khoa && allowT_(K, l.tuyen) && (!tf || l.tuyen === tf); });
+    var tk = tickets_(T.map(function (l) { return l.id; })).filter(function (b) { return !b.huy; });
+    var chuyen = T.sort(function (a, b) { return String(a.tuyen).localeCompare(String(b.tuyen)) || String(a.gio).localeCompare(String(b.gio)); }).map(function (l) {
+      var v = DB.vehicles.filter(function (x) { return x.id === l.xeId; })[0] || {}, cap = 0; try { cap = dvCap(l); } catch (e) { }
+      var gh = tk.filter(function (b) { return b.chuyen === l.id; }).map(function (b) { return String(b.ghe == null ? '' : b.ghe); }).filter(String);
+      return { id: l.id, tuyen: l.tuyen, gio: l.gio, bks: v.bks || '', tongGhe: cap, daDat: gh.length, conTrong: Math.max(0, cap - gh.length), gheDaDat: gh, gia: price_(l.tuyen, ngay), daXuatBen: gone_(l) };
+    });
+    return { ngay: ngay, chuyen: chuyen };
+  },
+  giave: function (p, K) {
+    var t = String(p.tuyen || ''), ngay = okDate_(p.ngay) ? p.ngay : today_();
+    if (!t) throw err_(400, 'Thiếu tham số tuyen'); if (!allowT_(K, t)) throw err_(403, 'Khóa API không được xem tuyến này');
+    var b = bgFind(t, ngay); if (!b) return { tuyen: t, ngay: ngay, chang: [] };
+    return { tuyen: t, ngay: ngay, tuNgay: b.tuNgay || '', denNgay: b.denNgay || '', chang: (b.chang || []).map(function (c) { return { don: c.don || '', tra: c.tra || '', gia: +c.gia || 0 }; }) };
+  },
+  baocao: function (p, K) {
+    var den = okDate_(p.den) ? p.den : today_(), tu = okDate_(p.tu) ? p.tu : addDay_(den, -6);
+    if (tu > den) throw err_(400, 'Khoảng ngày không hợp lệ'); if (addDay_(tu, 62) < den) throw err_(400, 'Tối đa 62 ngày mỗi lần');
+    var T = DB.lichchay.filter(function (l) { return l.ngay >= tu && l.ngay <= den && allowT_(K, l.tuyen); });
+    var byId = {}; T.forEach(function (l) { byId[l.id] = l; });
+    var tk = tickets_(T.map(function (l) { return l.id; })).filter(function (b) { return !b.huy && byId[b.chuyen]; });
+    var R = {}, row = function (ngay, tuyen) { var k = ngay + '|' + tuyen; return R[k] = R[k] || { ngay: ngay, tuyen: tuyen, soChuyen: 0, soVe: 0, doanhThu: 0, daThanhToan: 0 }; };
+    T.forEach(function (l) { if (l.xeId || l.laiXe) row(l.ngay, l.tuyen).soChuyen++; });
+    tk.forEach(function (b) { var l = byId[b.chuyen], r = row(l.ngay, l.tuyen), tien = (+b.gia || 0) + (+b.phuThu || 0); r.soVe++; r.doanhThu += tien; if (b.tt === 'tra') r.daThanhToan += tien; });
+    var rows = Object.keys(R).sort().map(function (k) { return R[k]; });
+    var nl = { litNhap: 0, tienNhap: 0, litCapTuBon: 0, litDoNgoai: 0, tienDoNgoai: 0 };
+    if (!(K.tuyen || []).length) DB.nhienlieu.forEach(function (r) {
+      if (!r.ngay || r.ngay < tu || r.ngay > den) return; var lit = +r.lit || 0, tien = lit * (+r.gia || 0);
+      if (r.loai === 'nhap') { nl.litNhap += lit; nl.tienNhap += tien; } else if (r.nguon === 'ngoai' || r.loai === 'ngoai') { nl.litDoNgoai += lit; nl.tienDoNgoai += tien; } else nl.litCapTuBon += lit;
+    });
+    var sum = function (k) { return rows.reduce(function (s, r) { return s + r[k]; }, 0); };
+    return { tu: tu, den: den, tong: { soChuyen: sum('soChuyen'), soVe: sum('soVe'), doanhThu: sum('doanhThu'), daThanhToan: sum('daThanhToan') }, theoNgayTuyen: rows, nhienLieu: (K.tuyen || []).length ? null : nl };
+  }
+};
+`;
+  },
+  showScript() {
+    if (!APIK.pid()) return toast('Chưa có cấu hình Firebase (projectId) nên chưa tạo được mã cổng API', 'err', 6000);
+    const code = APIK.script(), man = APIK.manifest();
+    const m = Modal.open({ title: 'Mã Apps Script · Cổng API', width: 820, body: `<p class="small muted" style="margin-top:0">Tạo dự án Apps Script mới bằng tài khoản Google chủ dự án Firebase <code>${esc(APIK.pid())}</code>. Dán 2 phần dưới đây, chạy hàm <b>kiemTra</b> một lần để cấp quyền, rồi triển khai Ứng dụng web.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>1. Code.gs</b><button class="btn sm" data-cp="code">Sao chép Code.gs</button></div><textarea class="inp api-code" readonly rows="12">${esc(code)}</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><b>2. appsscript.json</b> <span class="small muted">(Cài đặt dự án → tích “Hiển thị tệp kê khai”)</span><button class="btn sm" data-cp="man">Sao chép appsscript.json</button></div><textarea class="inp api-code" readonly rows="8">${esc(man)}</textarea>
+      <p class="small muted">Khi app có cập nhật phần API, mở lại hộp thoại này, dán mã mới và vào <b>Triển khai → Quản lý triển khai → Sửa → Phiên bản mới</b> để giữ nguyên địa chỉ cổng.</p>`, foot: `<button class="btn pri" data-no>Đóng</button>` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    m.el.querySelector('[data-cp="code"]').onclick = () => APIK.copy(code); m.el.querySelector('[data-cp="man"]').onclick = () => APIK.copy(man);
+  }
+};
+addCSS(`.mg-api{margin-bottom:14px}.api-tb{width:100%;border-collapse:collapse;font-size:13px}.api-tb th,.api-tb td{border-bottom:1px solid #eef0f4;padding:6px 8px;text-align:left;vertical-align:top}.api-tb th{background:#f8fafc;font-size:12px;color:#475569}
+.api-pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:12px;white-space:pre-wrap;word-break:break-all;margin:0}.api-code{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;margin-top:4px}`);
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-apik]'); if (b) { e.preventDefault(); APIK.act(b.dataset.apik, b); } });
+{
+  const r0 = vMG.render;
+  vMG.render = function (el) {
+    const r = r0.apply(this, arguments);
+    try { if (MG.admin()) { const gs = el.querySelector('.mg-gs'), h = document.createElement('div'); h.id = 'mgApiHost'; h.innerHTML = APIK.card(); if (gs) gs.before(h); else (el.querySelector('#mgRoot') || el).appendChild(h); } } catch (e) { console.warn('APIK', e); }
+    return r;
+  };
+}
 if (!CFG.nav.some(g => g.items.includes('management'))) CFG.nav.splice(Math.max(0, CFG.nav.findIndex(g => g.group === 'Thiết lập')), 0, { group: 'Quản lý', items: ['management'] });
 {
   const st0 = HUB.setTab;                // tab "Lưu trữ Google" của bảng Điều hành đã chuyển thành module Management
