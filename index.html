@@ -12131,6 +12131,91 @@ const RM = {
 }
 addCSS(`.au-rm{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-size:12.5px;color:#475569;cursor:pointer}.au-rm input{width:16px;height:16px;margin:0;flex:none}`);
 
+/* ---------- Tối ưu Firebase: ảnh không lưu trong Firestore, chỉ lưu dữ liệu dạng chữ ----------
+   Khi lưu lên Firebase: mọi ảnh/tệp dạng "data:..." (logo, avatar, chữ ký, con dấu, CCCD, ảnh xe...) được tải lên
+   Google Drive (Kho hồ sơ, thư mục "_Anh he thong") và trong Firestore chỉ còn mã tham chiếu "nxdrv:<id>".
+   Khi tải từ Firebase: mã tham chiếu được đổi lại thành ảnh (lấy từ bộ nhớ đệm IndexedDB của máy, thiếu thì tải từ Drive),
+   nên toàn bộ màn hình, bản in trong app vẫn dùng ảnh như cũ. Chưa kết nối Google Drive thì giữ nguyên cách lưu cũ. */
+const IMGX = {
+  PRE: 'nxdrv:', MIN: 2048, DIR: ['_Anh he thong'],
+  map: new Map(),        // chuỗi ảnh -> id Drive
+  img: new Map(),        // id Drive -> chuỗi ảnh
+  idb: null, ready: null, fail: new Set(),
+  big: v => typeof v === 'string' && v.length >= IMGX.MIN && v.startsWith('data:'),
+  open() {
+    if (IMGX.ready) return IMGX.ready;
+    IMGX.ready = new Promise(res => {
+      try {
+        const r = indexedDB.open('nhaxe-img', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('img');
+        r.onsuccess = () => {
+          IMGX.idb = r.result;
+          try { const q = IMGX.idb.transaction('img').objectStore('img').openCursor(); q.onsuccess = () => { const c = q.result; if (c) { IMGX.remember(c.key, c.value); c.continue(); } else res(); }; q.onerror = () => res(); } catch (e) { res(); }
+        };
+        r.onerror = () => res();
+      } catch (e) { res(); }
+    });
+    return IMGX.ready;
+  },
+  remember(id, s) { if (!id || typeof s !== 'string') return; IMGX.img.set(id, s); IMGX.map.set(s, id); },
+  save(id, s) { IMGX.remember(id, s); try { if (IMGX.idb) IMGX.idb.transaction('img', 'readwrite').objectStore('img').put(s, id); } catch (e) { } },
+  walk(o, fn) { const st = [o]; while (st.length) { const x = st.pop(); if (!x || typeof x !== 'object') continue; for (const k of Object.keys(x)) { const v = x[k]; if (typeof v === 'string') fn(v, x, k); else if (v && typeof v === 'object') st.push(v); } } },
+  async pool(items, n, f) { let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const it = items[i++]; try { await f(it); } catch (e) { console.warn('IMGX', e); } } })); },
+  on: () => { try { return HS.driveOk(); } catch (e) { return false; } },
+  async upload(s) {
+    const m = s.match(/^data:([^;,]*)(;base64)?,/); if (!m || !m[2]) return null;   // chỉ xử lý dạng base64
+    const mime = m[1] || 'application/octet-stream', ext = (mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 5);
+    const r = await HS.dcall({ action: 'hs_put', path: IMGX.DIR, name: 'anh_' + Date.now().toString(36) + '.' + ext, mime, data: s.slice(m[0].length) }, 120000);
+    if (!r || !r.id) throw new Error('Không tải được ảnh lên Drive'); IMGX.save(r.id, s); return r.id;
+  },
+  strip(data) {                     // trước khi ghi lên Firebase: ảnh đã có trên Drive thì thay bằng mã tham chiếu (không chờ tải lên)
+    if (!data || !IMGX.map.size) return data;
+    return JSON.parse(JSON.stringify(data, (k, v) => (typeof v === 'string' && v.length >= IMGX.MIN && IMGX.map.has(v)) ? IMGX.PRE + IMGX.map.get(v) : v));
+  },
+  fill(data) {                      // sau khi tải từ Firebase: đổi mã tham chiếu thành ảnh từ bộ nhớ đệm, thiếu thì tải nền từ Drive
+    const miss = new Set();
+    IMGX.walk(data, (v, o, k) => { if (v.startsWith(IMGX.PRE)) { const id = v.slice(IMGX.PRE.length), s = IMGX.img.get(id); if (s) o[k] = s; else miss.add(id); } });
+    if (miss.size) IMGX.fetch([...miss]);
+    return data;
+  },
+  busyF: false, busyU: false,
+  async fetch(ids) {
+    if (IMGX.busyF || !IMGX.on()) return; IMGX.busyF = true;
+    try {
+      await IMGX.pool(ids.filter(id => !IMGX.img.has(id)), 3, async id => { const r = await HS.dcall({ action: 'hs_get', id }, 120000); if (r && r.data) IMGX.save(id, 'data:' + (r.mime || 'application/octet-stream') + ';base64,' + r.data); });
+      let ch = false; IMGX.walk(DB, (v, o, k) => { if (v.startsWith(IMGX.PRE)) { const s = IMGX.img.get(v.slice(IMGX.PRE.length)); if (s) { o[k] = s; ch = true; } } });
+      if (ch && !document.querySelector('.modal-wrap')) { const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); }
+    } finally { IMGX.busyF = false; }
+  },
+  async up() {                      // chạy nền: đưa ảnh mới lên Drive, xong thì lưu lại để Firestore chỉ còn mã tham chiếu
+    if (IMGX.busyU || !IMGX.on() || typeof DB === 'undefined' || !DB) return; IMGX.busyU = true;
+    try {
+      await IMGX.open();
+      const core = Object.assign({}, DB); delete core.datve; delete core.phoiIn; try { TK.EX.forEach(k => delete core[k]); } catch (e) { }   // vé, hồ sơ, lệnh nằm ở tài liệu riêng: không đụng tới
+      const neu = new Set(); IMGX.walk(core, v => { if (IMGX.big(v) && !IMGX.map.has(v) && !IMGX.fail.has(v)) neu.add(v); });
+      if (!neu.size) return;
+      let n = 0; await IMGX.pool([...neu], 2, async s => { try { await IMGX.upload(s); n++; } catch (e) { IMGX.fail.add(s); setTimeout(() => IMGX.fail.delete(s), 10 * 60000); throw e; } });
+      if (n && GS.on) { GS._h = null; GS.queue(); }
+    } finally { IMGX.busyU = false; }
+  },
+  stat() { let n = 0, sz = 0; try { IMGX.walk(DB, v => { if (IMGX.big(v) && IMGX.map.has(v)) { n++; sz += v.length; } }); } catch (e) { } return { n, sz }; }
+};
+{
+  const call0 = FB.call;
+  FB.call = async function (body, c) {
+    if (body && body.action === 'put' && body.data) { try { await IMGX.open(); body = Object.assign({}, body, { data: IMGX.strip(body.data) }); } catch (e) { console.warn('IMGX.strip', e); } }
+    else if (body && body.action === 'get') { try { await IMGX.open(); } catch (e) { } }
+    const r = await call0.call(this, body, c);
+    if (body && body.action === 'get' && r && r.data) { try { IMGX.fill(r.data); } catch (e) { console.warn('IMGX.fill', e); } }
+    if (body && body.action === 'put' && r && r.ok) setTimeout(() => IMGX.up(), 3000);
+    return r;
+  };
+  const sz0 = SB.sizes;              // dung lượng Firestore ước tính: không tính ảnh đã chuyển sang Drive
+  SB.sizes = function () { const r = sz0.apply(this, arguments); try { const s = IMGX.stat(); r.core = Math.max(0, r.core - s.sz + s.n * 40); } catch (e) { } return r; };
+  IMGX.open().then(() => { try { if (typeof DB !== 'undefined' && DB) IMGX.fill(DB); } catch (e) { } });
+  setTimeout(() => IMGX.up(), 20000); setInterval(() => IMGX.up(), 10 * 60000);
+}
+
 App.cfg = CFG; Store.load();
 GS.boot(() => Auth.gate(() => {
   App.init(CFG); Auth.chip(); Shell.setup(); Lock.init(); BOT.mount(); HUB.mount(); LOGO.mount(); TB.mount(); NLMK.init(); setTimeout(() => { try { GDN.check(); } catch (e) { } }, 1500);
