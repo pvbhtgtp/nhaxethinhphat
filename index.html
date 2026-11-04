@@ -5701,8 +5701,9 @@ function dhPrintAssign() {
     exp(r.xe.hhDangKiem, 'đăng kiểm'); exp(r.xe.hhBHDS, 'BH dân sự'); [r.l1, r.l2].forEach(e => { if (e) { exp(e.bangHetHan, 'GPLX ' + e.ten); const sk = llLatest(e.id, 'sk'); if (sk) exp(llHan(sk), 'giấy khám SK ' + e.ten); } });
     return w.length ? `<b style="color:#b91c1c">Hết hạn: ${esc(w.join(', '))}</b>` : (r.xe.id ? 'Đủ điều kiện' : '');
   };
+  const sig = e => e && e.chuKy && /^(data:|https?:)/.test(e.chuKy) ? `<img src="${esc(e.chuKy)}" alt="" style="max-height:38px;max-width:120px;object-fit:contain;display:inline-block">` : '';   // chữ ký lái xe lấy từ hồ sơ nhân viên
   const td = 'border:1px solid #333;padding:6px 5px;font-size:12.5px;vertical-align:middle', th = 'border:1px solid #333;padding:6px 5px;font-size:12px;text-align:center;background:#e2e8f0;color:#0f172a;font-weight:700';
-  const rows = R.map((r, i) => `<tr style="height:46px"><td style="${td};text-align:center">${String(i + 1).padStart(2, '0')}</td><td style="${td}"><b>${esc(r.xe.bks || '')}</b></td><td style="${td}">${esc(String(r.xe.loai || ''))}${r.xe.soCho ? ' / ' + r.xe.soCho + ' chỗ' : ''}</td><td style="${td}">${r.l1 ? esc(r.l1.ten) : ''}</td><td style="${td}">${r.l1 ? gp(r.l1) : ''}</td><td style="${td}">${r.l2 ? esc(r.l2.ten) : '—'}</td><td style="${td}">${r.l2 ? gp(r.l2) : '—'}</td><td style="${td}">${esc(r.tuyen)}</td><td style="${td};text-align:center">${esc(r.gio)}</td><td style="${td}">${warn(r)}</td><td style="${td}"></td></tr>`);
+  const rows = R.map((r, i) => `<tr style="height:46px"><td style="${td};text-align:center">${String(i + 1).padStart(2, '0')}</td><td style="${td}"><b>${esc(r.xe.bks || '')}</b></td><td style="${td}">${esc(String(r.xe.loai || ''))}${r.xe.soCho ? ' / ' + r.xe.soCho + ' chỗ' : ''}</td><td style="${td}">${r.l1 ? esc(r.l1.ten) : ''}</td><td style="${td}">${r.l1 ? gp(r.l1) : ''}</td><td style="${td}">${r.l2 ? esc(r.l2.ten) : '—'}</td><td style="${td}">${r.l2 ? gp(r.l2) : '—'}</td><td style="${td}">${esc(r.tuyen)}</td><td style="${td};text-align:center">${esc(r.gio)}</td><td style="${td};text-align:center">${r.xe.id || r.l1 ? 'Đủ điều kiện' : ''}</td><td style="${td};text-align:center">${sig(r.l1)}${r.l2 && r.l2.chuKy ? '<br>' + sig(r.l2) : ''}</td></tr>`);
   for (let i = R.length; i < Math.max(8, R.length); i++) rows.push(`<tr style="height:46px">${'<td style="' + td + '"></td>'.repeat(11)}</tr>`);
   const H = ['STT', 'Biển kiểm soát xe', 'Loại xe / Số chỗ', 'Họ và tên lái xe chính', 'Số GPLX & Hạng', 'Họ và tên lái xe phụ (nếu có)', 'Số GPLX (xe phụ)', 'Tuyến đường / Hợp đồng vận chuyển', 'Giờ xuất bến', 'Trạng thái kỹ thuật & GPS', 'Chữ ký lái xe nhận xe'];
   Print.run(`<div class="pr">${Print.head()}<div style="font-weight:700;margin-top:6px">BỘ PHẬN ĐIỀU HÀNH VẬN TẢI</div><h2 style="margin:10px 0 2px">BẢNG PHÂN CÔNG LỊCH TÀI &amp; XE HÀNG NGÀY</h2><div class="pr-sub" style="margin-bottom:10px"><i>Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</i></div>
@@ -5859,9 +5860,21 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         const gone = new Set(del.filter(l => { if (busy(l)) { kp++; return false; } return true; }));
         dl = gone.size; if (dl) { gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); }
       }
+      dhScan.archive(self.file, day);
       App.changed(); m.close(); toast(`Đã điền từ ảnh: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${dl ? `, xóa ${dl} chuyến không có thông tin` : ''}${kp ? ` (giữ ${kp} chuyến còn vé / hàng)` : ''}`);
     };
   }
+};
+/* Ảnh bảng điều hành đã quét: tự lưu vào Lưu trữ hồ sơ (Google Drive) theo năm / tháng */
+dhScan.archive = async function (file, day) {
+  try {
+    if (!file || !HS.google()) { if (file) toast('Chưa kết nối Google Drive nên chưa lưu được ảnh quét vào hồ sơ (Management → Kho hồ sơ).', 'err', 6000); return; }
+    const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = no; r.readAsDataURL(file); });
+    const mime = file.type || 'image/jpeg', ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg'), y = day.slice(0, 4), ml = day.slice(5, 7) + '-' + y, hm = new Date().toTimeString().slice(0, 5);
+    const folder = HS.ensure([y, 'Điều hành xe', 'Bảng điều hành (ảnh quét)', ml]);
+    await HS.store(b64, { folder, ten: 'Bảng điều hành ngày ' + F.date(day) + ' (quét ' + hm + ')', tenFile: 'Bang dieu hanh ' + day + ' ' + hm.replace(':', 'h') + '.' + ext, mime, size: file.size || Math.round(b64.length * 0.75), ghiChu: 'Tự lưu sau khi quét ảnh điều hành · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() });
+    toast('Đã lưu ảnh bảng điều hành vào Lưu trữ hồ sơ', 'ok', 3500);
+  } catch (e) { toast('Chưa lưu được ảnh quét vào hồ sơ: ' + esc(e.message || e), 'err', 6000); }
 };
 /* ===== Nhập điều hành xe từ Excel =====
    Nhận 2 kiểu file:
