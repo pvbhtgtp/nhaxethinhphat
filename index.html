@@ -5868,6 +5868,20 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
 };
 /* Sau khi quét ảnh và áp dụng vào lịch: nếu mọi chuyến trong ngày đã đủ xe và lái xe thì tự lưu Bảng phân công (PDF ngang, có chữ ký lái xe)
    vào Lưu trữ hồ sơ; quét lại trong ngày thì thay bản cũ (giữ số lần lưu). */
+/* Thư mục "08. Điều hành xe › Bảng phân công lịch tài & xe" có sẵn trong cây hồ sơ của năm (tạo 1 lần khi mở Lưu trữ hồ sơ) */
+{
+  const rn = App.render;
+  App.render = function () {
+    try {
+      if (App.cur === 'hoso' && !dhScan._seeded && typeof HS !== 'undefined' && Auth.can('hoso', 'add')) {
+        dhScan._seeded = true;
+        const y = String(new Date().getFullYear()), yf = HS.kids('').find(f => String(f.ten).trim() === y);
+        if (yf && HS.kids(yf.id).length && !HS.kids(yf.id).some(f => HS.norm(f.ten) === HS.norm('Điều hành xe'))) { const n0 = HS.F().length; HS.ensure([y, '08. Điều hành xe', 'Bảng phân công lịch tài & xe']); if (HS.F().length > n0) Store.changed(); }
+      }
+    } catch (e) { console.warn('dh folder', e); }
+    return rn.apply(this, arguments);
+  };
+}
 dhScan.archive = async function (day) {
   try {
     const R = dhAssign(day);
@@ -10813,7 +10827,7 @@ const HS = {
   seed() {
     const T = [['01. Pháp lý công ty', ['Giấy đăng ký kinh doanh', 'Giấy phép kinh doanh vận tải', 'Con dấu, chữ ký số', 'Điều lệ, quyết định']], ['02. Nhân sự', ['Hợp đồng lao động', 'Hồ sơ lái xe, phụ xe', 'Bằng lái, giấy khám sức khỏe', 'Bảo hiểm xã hội']],
       ['03. Phương tiện', ['Đăng ký, đăng kiểm', 'Bảo hiểm xe', 'Phù hiệu, giấy phép lưu hành']], ['04. Tài chính - Kế toán', ['Hóa đơn đầu vào', 'Hóa đơn đầu ra', 'Thuế', 'Ngân hàng']],
-      ['05. Hợp đồng vận chuyển', ['Hợp đồng đang hiệu lực', 'Hợp đồng đã thanh lý']], ['06. Sửa chữa - Nhiên liệu', ['Phiếu sửa chữa', 'Chứng từ nhiên liệu']], ['07. Khác', []]];
+      ['05. Hợp đồng vận chuyển', ['Hợp đồng đang hiệu lực', 'Hợp đồng đã thanh lý']], ['06. Sửa chữa - Nhiên liệu', ['Phiếu sửa chữa', 'Chứng từ nhiên liệu']], ['07. Khác', []], ['08. Điều hành xe', ['Bảng phân công lịch tài & xe']]];
     const yr = HS.rootReal() || HS.ensure([])  /* tạo năm hiện tại nếu chưa có */;
     T.forEach(([n, ks]) => { const f = HS.newFolder(yr, n); ks.forEach(k => HS.newFolder(f.id, k)); }); HS.open.clear(); HS.yr = yr; HS.sel = yr; HS.commit(); toast('Đã tạo cây thư mục mẫu, bạn có thể đổi tên, thêm, bớt tùy ý', 'ok', 5000);
   },
