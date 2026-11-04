@@ -4504,7 +4504,7 @@ function dvForm(trip, b, seat) {
       if (isNew || d.sdt) { const ph = dvPhone(d.sdt); if (!ph) { toast('Số điện thoại không hợp lệ (VD: 0973460763)', 'err'); return false; } d.sdt = ph; }
       d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d);
       if (grp) { G.forEach(x => { const ch = dvLog.diff(x, d); if (ch.length) (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') + ' (sửa cả nhóm)' }); Object.assign(x, d); }); App.changed(); toast('Đã lưu ' + G.length + ' vé: ' + dvSeatsTxt(G), 'ok'); return; }
-      if (isNew) DB.datve.push({ id: uid(), chuyen: trip.id, nguoiBan: (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d }); else { const ch = dvLog.diff(b, d); if (ch.length) (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') }); Object.assign(b, d); }
+      if (isNew) { const nb = { id: uid(), chuyen: trip.id, nguoiBan: (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d }; DB.datve.push(nb); dvAutoGrp(trip.id, [nb]); } else { const ch = dvLog.diff(b, d); if (ch.length) (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') }); Object.assign(b, d); }
       App.changed(); toast('Đã lưu vé ghế ' + d.ghe, 'ok');
     },
     cancelText: 'Đóng', delText: 'Hủy vé', delOk: 'Hủy vé', delMsg: (grp ? 'Hủy cả <b>' + G.length + ' vé</b> (ghế ' + dvSeatsTxt(G) + ') đặt cùng nhau? ' : 'Hủy vé này? ') + 'Vé sẽ chuyển xuống mục <b>Vé hủy</b> bên dưới sơ đồ, ghế được trả lại. Chỉ Admin mới xóa hẳn được.',
@@ -4736,6 +4736,18 @@ function dvMove(b, kh) {
   };
 }
 const DV_HOLD = 120;
+/* Khách đã có vé trên chuyến (trùng số điện thoại) đặt thêm vé: tự gộp thành vé đoàn (chung nhóm, chung mã) */
+function dvAutoGrp(tripId, nw) {
+  try {
+    const ph = nw[0] && dvPhone(nw[0].sdt); if (!ph) return;
+    const old = DB.datve.find(x => x.chuyen === tripId && !x.huy && !nw.includes(x) && dvPhone(x.sdt) === ph); if (!old) return;
+    if (nw[0].nhom && nw[0].nhom === old.nhom) return;
+    const G = dvGrp(old), nh = old.nhom || nw[0].nhom || uid(), now = dvLog.now(), who = dvLog.who();
+    G.forEach(x => { if (x.nhom !== nh) { x.nhom = nh; (x.lichSu = x.lichSu || []).push({ tg: now, nguoi: who, nd: 'Gộp vé đoàn với ghế ' + dvSeatsTxt(nw) + ' (cùng số điện thoại)' }); } });
+    nw.forEach(x => { x.nhom = nh; (x.lichSu = x.lichSu || []).push({ tg: now, nguoi: who, nd: 'Tự gộp vé đoàn với ghế ' + dvSeatsTxt(G) + ' (khách đã có vé trên chuyến)' }); });
+    setTimeout(() => toast('Khách đã có vé ghế ' + dvSeatsTxt(G) + ' trên chuyến: đã tự gộp thành vé đoàn', 'ok', 4000), 50);
+  } catch (e) { console.warn('dvAutoGrp', e); }
+}
 function dvPhone(v) { let p = String(v || '').replace(/[\s.\-()]/g, ''); if (/^\+84/.test(p)) p = '0' + p.slice(3); else if (/^84\d{9}$/.test(p)) p = '0' + p.slice(2); return /^0(3|5|7|8|9)\d{8}$/.test(p) ? p : null; }
 function dvHold(m, onExpire) {
   const h = m.el.querySelector('.modal-h h3'); const t0 = Date.now(); let tag = null;
@@ -4771,7 +4783,7 @@ function dvFormMulti(trip, seats) {
       d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d);
       const nb = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
       const nhom = DV.clone && DV.clone.nhom && DV.clone.chuyen === trip.id ? DV.clone.nhom : seats.length > 1 ? uid() : undefined;
-      seats.forEach(g => DB.datve.push({ id: uid(), chuyen: trip.id, nguoiBan: nb, tg, ...d, ghe: g, ...(nhom ? { nhom } : {}) }));
+      const nw = seats.map(g => ({ id: uid(), chuyen: trip.id, nguoiBan: nb, tg, ...d, ghe: g, ...(nhom ? { nhom } : {}) })); DB.datve.push(...nw); dvAutoGrp(trip.id, nw);
       Lock.release(trip.id, seats); DV.sel = []; DV.selTT = 'giu'; DV.clone = null; App.changed(); toast('Đã đặt ' + seats.length + ' vé: ' + seats.join(', '), 'ok');
     }
   });
