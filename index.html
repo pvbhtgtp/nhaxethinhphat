@@ -5693,8 +5693,8 @@ function dhAssign(day) {
   (DB.hdvc || []).filter(h => h.ngayDon === day).forEach(h => R.push({ gio: h.gioDon || '', xe: xe(h.xeId), l1: emp(h.laiXe1), l2: emp(h.laiXe2), tuyen: 'Xe hợp đồng: ' + (h.hanhTrinh || ''), hd: 1 }));
   return R.sort((a, b) => String(a.gio || '99').localeCompare(String(b.gio || '99')) || String(a.xe.bks || '').localeCompare(String(b.xe.bks || '')));
 }
-function dhPrintAssign() {
-  const day = lcDay(), R = dhAssign(day), d = D.parse(day), today = D.today();
+function dhAssignHTML(day, pdf) {   // pdf: bản lưu hồ sơ (không dòng trống, khối ký dạng bảng)
+  const R = dhAssign(day), d = D.parse(day), today = D.today();
   const gp = e => e ? esc(e.bangSo || '—') + (e.bangHang ? ' (Hạng ' + esc(e.bangHang) + ')' : '') : '—';
   const warn = r => {
     const w = [], exp = (x, t) => { if (x && D.diff(x, today) < 0) w.push(t); };
@@ -5704,13 +5704,14 @@ function dhPrintAssign() {
   const sig = e => e && e.chuKy && /^(data:|https?:)/.test(e.chuKy) ? `<img src="${esc(e.chuKy)}" alt="" style="max-height:38px;max-width:120px;object-fit:contain;display:inline-block">` : '';   // chữ ký lái xe lấy từ hồ sơ nhân viên
   const td = 'border:1px solid #333;padding:6px 5px;font-size:12.5px;vertical-align:middle', th = 'border:1px solid #333;padding:6px 5px;font-size:12px;text-align:center;background:#e2e8f0;color:#0f172a;font-weight:700';
   const rows = R.map((r, i) => `<tr style="height:46px"><td style="${td};text-align:center">${String(i + 1).padStart(2, '0')}</td><td style="${td}"><b>${esc(r.xe.bks || '')}</b></td><td style="${td}">${esc(String(r.xe.loai || ''))}${r.xe.soCho ? ' / ' + r.xe.soCho + ' chỗ' : ''}</td><td style="${td}">${r.l1 ? esc(r.l1.ten) : ''}</td><td style="${td}">${r.l1 ? gp(r.l1) : ''}</td><td style="${td}">${r.l2 ? esc(r.l2.ten) : '—'}</td><td style="${td}">${r.l2 ? gp(r.l2) : '—'}</td><td style="${td}">${esc(r.tuyen)}</td><td style="${td};text-align:center">${esc(r.gio)}</td><td style="${td};text-align:center">${r.xe.id || r.l1 ? 'Đủ điều kiện' : ''}</td><td style="${td};text-align:center">${sig(r.l1)}${r.l2 && r.l2.chuKy ? '<br>' + sig(r.l2) : ''}</td></tr>`);
-  for (let i = R.length; i < Math.max(8, R.length); i++) rows.push(`<tr style="height:46px">${'<td style="' + td + '"></td>'.repeat(11)}</tr>`);
+  if (!pdf) for (let i = R.length; i < Math.max(8, R.length); i++) rows.push(`<tr style="height:46px">${'<td style="' + td + '"></td>'.repeat(11)}</tr>`);
   const H = ['STT', 'Biển kiểm soát xe', 'Loại xe / Số chỗ', 'Họ và tên lái xe chính', 'Số GPLX & Hạng', 'Họ và tên lái xe phụ (nếu có)', 'Số GPLX (xe phụ)', 'Tuyến đường / Hợp đồng vận chuyển', 'Giờ xuất bến', 'Trạng thái kỹ thuật & GPS', 'Chữ ký lái xe nhận xe'];
-  Print.run(`<div class="pr">${Print.head()}<div style="font-weight:700;margin-top:6px">BỘ PHẬN ĐIỀU HÀNH VẬN TẢI</div><h2 style="margin:10px 0 2px">BẢNG PHÂN CÔNG LỊCH TÀI &amp; XE HÀNG NGÀY</h2><div class="pr-sub" style="margin-bottom:10px"><i>Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</i></div>
+  return `<div class="pr">${Print.head()}<div style="font-weight:700;margin-top:6px">BỘ PHẬN ĐIỀU HÀNH VẬN TẢI</div><h2 style="margin:10px 0 2px">BẢNG PHÂN CÔNG LỊCH TÀI &amp; XE HÀNG NGÀY</h2><div class="pr-sub" style="margin-bottom:10px"><i>Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</i></div>
     <table style="width:100%;border-collapse:collapse"><tr>${H.map(h => `<th style="${th}">${h}</th>`).join('')}</tr>${rows.join('')}</table>
     <div style="margin-top:12px;font-size:13px;page-break-inside:avoid"><b>XÁC NHẬN CỦA BỘ PHẬN QUẢN LÝ AN TOÀN GIAO THÔNG:</b><div>• Đã kiểm tra các điều kiện an toàn đối với phương tiện; đồng thời kiểm tra tính hợp lệ của Giấy phép lái xe, thời gian làm việc (không quá giờ quy định) của lái xe trước khi ký lệnh xuất bến.</div></div>
-    <div style="page-break-inside:avoid">${Print.signs(['Người lập lịch tài', 'Đội trưởng điều hành', 'Bộ phận quản lý ATGT'], false)}</div></div>`, { landscape: true, title: 'Phan cong lich tai va xe ' + day });
+    <div style="page-break-inside:avoid">${pdf ? `<table style="width:100%;margin-top:14px;text-align:center;font-size:13px;border:0;border-collapse:collapse"><tr>${['Người lập lịch tài', 'Đội trưởng điều hành', 'Bộ phận quản lý ATGT'].map(t => `<td style="width:33%;vertical-align:top;border:0!important"><b>${t}</b><br><i style="font-size:12px">(Ký, ghi rõ họ tên)</i><div style="height:70px"></div></td>`).join('')}</tr></table>` : Print.signs(['Người lập lịch tài', 'Đội trưởng điều hành', 'Bộ phận quản lý ATGT'], false)}</div></div>`;
 }
+function dhPrintAssign() { const day = lcDay(); Print.run(dhAssignHTML(day), { landscape: true, title: 'Phan cong lich tai va xe ' + day }); }
 const vDH = {
   print: false,
   title: 'Điều hành xe', icon: 'kanban', desc: 'Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến',
@@ -5860,21 +5861,22 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         const gone = new Set(del.filter(l => { if (busy(l)) { kp++; return false; } return true; }));
         dl = gone.size; if (dl) { gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); }
       }
-      dhScan.archive(self.file, day);
+      setTimeout(() => dhScan.archive(day), 300);
       App.changed(); m.close(); toast(`Đã điền từ ảnh: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${dl ? `, xóa ${dl} chuyến không có thông tin` : ''}${kp ? ` (giữ ${kp} chuyến còn vé / hàng)` : ''}`);
     };
   }
 };
-/* Ảnh bảng điều hành đã quét: tự lưu vào Lưu trữ hồ sơ (Google Drive) theo năm / tháng */
-dhScan.archive = async function (file, day) {
+/* Sau khi quét ảnh và áp dụng vào lịch: nếu mọi chuyến trong ngày đã đủ xe và lái xe thì tự lưu Bảng phân công (PDF ngang, có chữ ký lái xe)
+   vào Lưu trữ hồ sơ; quét lại trong ngày thì thay bản cũ (giữ số lần lưu). */
+dhScan.archive = async function (day) {
   try {
-    if (!file || !HS.google()) { if (file) toast('Chưa kết nối Google Drive nên chưa lưu được ảnh quét vào hồ sơ (Management → Kho hồ sơ).', 'err', 6000); return; }
-    const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = no; r.readAsDataURL(file); });
-    const mime = file.type || 'image/jpeg', ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg'), y = day.slice(0, 4), ml = day.slice(5, 7) + '-' + y, hm = new Date().toTimeString().slice(0, 5);
-    const folder = HS.ensure([y, 'Điều hành xe', 'Bảng điều hành (ảnh quét)', ml]);
-    await HS.store(b64, { folder, ten: 'Bảng điều hành ngày ' + F.date(day) + ' (quét ' + hm + ')', tenFile: 'Bang dieu hanh ' + day + ' ' + hm.replace(':', 'h') + '.' + ext, mime, size: file.size || Math.round(b64.length * 0.75), ghiChu: 'Tự lưu sau khi quét ảnh điều hành · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() });
-    toast('Đã lưu ảnh bảng điều hành vào Lưu trữ hồ sơ', 'ok', 3500);
-  } catch (e) { toast('Chưa lưu được ảnh quét vào hồ sơ: ' + esc(e.message || e), 'err', 6000); }
+    const R = dhAssign(day);
+    if (!R.length) return;
+    const miss = R.filter(r => !r.xe || !r.xe.id || !r.l1).length;
+    if (miss) return toast(`Còn ${miss} chuyến chưa đủ xe / lái xe nên chưa lưu Bảng phân công vào hồ sơ. Bổ sung xong, bấm In phân công hoặc quét lại để lưu.`, 'err', 7000);
+    const y = day.slice(0, 4), ml = day.slice(5, 7) + '-' + y;
+    await HS.saveDoc({ path: [y, 'Điều hành xe', 'Bảng phân công lịch tài & xe', ml], ten: 'Bảng phân công lịch tài & xe ngày ' + F.date(day), tenFile: 'Bang phan cong ' + day + '.pdf', html: dhAssignHTML(day, true), ref: 'dhpc-' + day, landscape: true, ghiChu: 'Tự lưu sau khi quét ảnh điều hành (' + R.length + ' chuyến)' });
+  } catch (e) { toast('Chưa lưu được Bảng phân công vào hồ sơ: ' + esc(e.message || e), 'err', 6000); }
 };
 /* ===== Nhập điều hành xe từ Excel =====
    Nhận 2 kiểu file:
@@ -11087,8 +11089,8 @@ Object.assign(HS, {
   },
   b64u: s => btoa(unescape(encodeURIComponent(s))),
   /* ---------- tạo PDF không cần thư viện: chia trang A4 -> vẽ ra ảnh (SVG foreignObject) -> ghép vào PDF ---------- */
-  pageImg(pageHtml, S) {
-    const W = 794, H = 1123, pad = Math.round(15 / 25.4 * 96), box = document.createElement('div');
+  pageImg(pageHtml, S, land) {
+    const W = land ? 1123 : 794, H = land ? 794 : 1123, pad = Math.round(15 / 25.4 * 96), box = document.createElement('div');
     box.innerHTML = pageHtml;
     const wrap = document.createElement('div'); wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     wrap.style.cssText = `width:${W}px;height:${H}px;box-sizing:border-box;padding:${pad}px;background:#fff;overflow:hidden`;
@@ -11098,7 +11100,7 @@ Object.assign(HS, {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%">${xml}</foreignObject></svg>`;
     return new Promise((ok, no) => {
       const img = new Image();
-      img.onload = () => { try { const c = document.createElement('canvas'); c.width = Math.round(W * S); c.height = Math.round(H * S); const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); const u = c.toDataURL('image/jpeg', 0.8), bin = atob(u.split(',')[1]), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); ok({ w: c.width, h: c.height, d: a }); } catch (e) { no(e); } };
+      img.onload = () => { try { const c = document.createElement('canvas'); c.width = Math.round(W * S); c.height = Math.round(H * S); const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); const u = c.toDataURL('image/jpeg', 0.8), bin = atob(u.split(',')[1]), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); ok({ w: c.width, h: c.height, d: a, land: !!land }); } catch (e) { no(e); } };
       img.onerror = () => no(new Error('Không dựng được trang PDF'));
       img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     });
@@ -11111,8 +11113,8 @@ Object.assign(HS, {
     obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
     obj(2, `<< /Type /Pages /Count ${N} /Kids [${pages.map((_, i) => (3 + i * 3) + ' 0 R').join(' ')}] >>`);
     pages.forEach((p, i) => {
-      const pg = 3 + i * 3, ct = pg + 1, im = pg + 2, c = 'q 595.28 0 0 841.89 0 0 cm /Im0 Do Q';
-      obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`);
+      const pw = p.land ? 841.89 : 595.28, ph = p.land ? 595.28 : 841.89, pg = 3 + i * 3, ct = pg + 1, im = pg + 2, c = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+      obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`);
       obj(ct, `<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
       off[im] = len; put(`${im} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.d.length} >>\nstream\n`); put(p.d); put('\nendstream\nendobj\n');
     });
@@ -11549,9 +11551,9 @@ addCSS(`.vx-a.ok,.vx-l.dong{background:#DCFCE7!important;border-color:#16A34A!im
           Mẫu "Quyết định thành lập Ban An toàn giao thông" · Nút In (kiểu Google) cho hợp đồng vận chuyển
    ===================================================================================== */
 Object.assign(HS, {
-  async pdfHtml(html) {
+  async pdfHtml(html, land) {
     const st = (String(html).match(/^\s*<div class="(?:pr|hd)"[^>]*?style="([^"]*)"/) || [])[1] || '';
-    const pages = GP.pages(html).map(p => st ? p.replace('<div class="hd">', `<div class="hd" style="${st}">`) : p), imgs = []; for (const p of pages) imgs.push(await HS.pageImg(p, 1.75)); return HS.makePdf(imgs);
+    const pages = (land ? GP.pages(html, GP.vh, GP.vw) : GP.pages(html)).map(p => st ? p.replace('<div class="hd">', `<div class="hd" style="${st}">`) : p), imgs = []; for (const p of pages) imgs.push(await HS.pageImg(p, 1.75, land)); return HS.makePdf(imgs);
   },
   async saveDoc(o) {                     // o: { path[], ten, tenFile, html, ref, ghiChu }
     if (!Auth.can('hoso', 'add')) { toast('Bạn chưa được cấp quyền thêm hồ sơ vào Lưu trữ hồ sơ, nên chưa lưu được. Liên hệ quản lý để được cấp.', 'err', 6000); return false; }
@@ -11559,7 +11561,7 @@ Object.assign(HS, {
     if (!HS.google()) { toast('Cần kết nối Google Drive để lưu hồ sơ (module Management → Kho hồ sơ). Lưu trữ hồ sơ chỉ lưu trên Google Drive.', 'err', 7000); return false; }
     try {
       toast('Đang tạo PDF…', '', 1800);
-      const bytes = await HS.pdfHtml(o.html), b64 = HS.b64bytes(bytes);
+      const bytes = await HS.pdfHtml(o.html, !!o.landscape), b64 = HS.b64bytes(bytes);
       if (b64.length > HS.MAX * 1.34) throw new Error('PDF quá lớn (' + HS.size(bytes.length) + ')');
       const folder = HS.ensure(o.path), old = o.ref && HS.H().find(h => h.ref === o.ref), lan = old ? (old.lan || 1) + 1 : 1;
       await HS.store(b64, { folder, ten: o.ten, tenFile: o.tenFile, mime: 'application/pdf', size: bytes.length, ref: o.ref || '', ghiChu: `${o.ghiChu || 'Lưu từ module'} · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
