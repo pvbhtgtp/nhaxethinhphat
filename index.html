@@ -5869,9 +5869,17 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
 /* Sau khi quét ảnh và áp dụng vào lịch: nếu mọi chuyến trong ngày đã đủ xe và lái xe thì tự lưu Bảng phân công (PDF ngang, có chữ ký lái xe)
    vào Lưu trữ hồ sơ; quét lại trong ngày thì thay bản cũ (giữ số lần lưu). */
 /* Lưu Bảng phân công nhiều ngày vào Lưu trữ hồ sơ (ngày nào mọi chuyến đủ xe + lái xe mới lưu; lưu lại thì thay bản cũ của ngày đó) */
+dhScan.pcPath = day => [day.slice(0, 4), '08. Điều hành xe', 'Bảng phân công lịch tài & xe', 'Tháng ' + day.slice(5, 7) + '-' + day.slice(0, 4)];   // "Tháng MM-YYYY": tên tháng không trùng nhau khi so khớp
+/* sửa 1 lần: bảng phân công đã lưu nhầm thư mục tháng (vd ngày 01/11 nằm trong 10-2026) → chuyển về đúng "Tháng MM-YYYY", dọn thư mục tháng cũ đã trống */
+dhScan.fixMonths = function () {
+  let ch = 0;
+  HS.H().forEach(h => { const m = /^dhpc-(\d{4}-\d{2}-\d{2})$/.exec(h.ref || ''); if (!m) return; const t = HS.ensure(dhScan.pcPath(m[1])); if (h.folder !== t) { h.folder = t; ch++; } });
+  HS.F().filter(f => /^\d{2}-\d{4}$/.test(String(f.ten).trim())).forEach(f => { const p = HS.by(f.cha); if (!p || HS.norm(p.ten) !== HS.norm('Bảng phân công lịch tài & xe')) return; if (!HS.kids(f.id).length && !HS.H().some(h => h.folder === f.id)) { HS.F().splice(HS.F().indexOf(f), 1); ch++; } });
+  return ch;
+};
 dhScan.saveDay = async function (day) {
   const R = dhAssign(day); if (!R.length) return 'empty'; if (R.some(r => !r.xe || !r.xe.id || !r.l1)) return 'miss';
-  const y = day.slice(0, 4), folder = HS.ensure([y, '08. Điều hành xe', 'Bảng phân công lịch tài & xe', day.slice(5, 7) + '-' + y]), ref = 'dhpc-' + day, old = HS.H().find(h => h.ref === ref), lan = old ? (old.lan || 1) + 1 : 1;
+  const y = day.slice(0, 4), folder = HS.ensure(dhScan.pcPath(day)), ref = 'dhpc-' + day, old = HS.H().find(h => h.ref === ref), lan = old ? (old.lan || 1) + 1 : 1;
   const bytes = await HS.pdfHtml(dhAssignHTML(day, true), true);
   await HS.store(HS.b64bytes(bytes), { folder, ten: 'Bảng phân công lịch tài & xe ngày ' + F.date(day), tenFile: 'Bang phan cong ' + day + '.pdf', mime: 'application/pdf', size: bytes.length, ref, ghiChu: `Lưu từ Điều hành xe (${R.length} chuyến) · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
   return 'ok';
@@ -5879,7 +5887,7 @@ dhScan.saveDay = async function (day) {
 ACT.dhSaveRange = async () => {
   if (!Auth.can('hoso', 'add')) return toast('Bạn chưa có quyền thêm hồ sơ vào Lưu trữ hồ sơ', 'err');
   if (!HS.google()) return toast('Cần kết nối Google Drive (Management → Kho hồ sơ) để lưu hồ sơ', 'err', 6000);
-  const today = D.today(), m = Modal.open({ title: 'Lưu Bảng phân công vào hồ sơ', width: 460, body: `<div class="row" style="gap:10px"><label class="field grow"><span>Từ ngày</span><input class="inp" type="date" data-f value="${today.slice(0, 4)}-10-01"></label><label class="field grow"><span>Đến ngày</span><input class="inp" type="date" data-t value="${today}"></label></div><div class="small muted" style="margin-top:8px">Mỗi ngày lưu 1 tệp PDF vào <b>08. Điều hành xe › Bảng phân công lịch tài &amp; xe › tháng</b>. Ngày còn chuyến thiếu xe hoặc lái xe sẽ bỏ qua và liệt kê lại. Ngày đã lưu trước đó sẽ được thay bằng bản mới.</div><div data-p class="small" style="margin-top:10px"></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('check')} Lưu</button>` });
+  const today = D.today(), m = Modal.open({ title: 'Lưu Bảng phân công vào hồ sơ', width: 460, body: `<div class="row" style="gap:10px"><label class="field grow"><span>Từ ngày</span><input class="inp" type="date" data-f value="${today.slice(0, 4)}-10-01"></label><label class="field grow"><span>Đến ngày</span><input class="inp" type="date" data-t value="${today}"></label></div><div class="small muted" style="margin-top:8px">Mỗi ngày lưu 1 tệp PDF vào <b>08. Điều hành xe › Bảng phân công lịch tài &amp; xe › Tháng MM-YYYY</b>. Ngày còn chuyến thiếu xe hoặc lái xe sẽ bỏ qua và liệt kê lại. Ngày đã lưu trước đó sẽ được thay bằng bản mới.</div><div data-p class="small" style="margin-top:10px"></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('check')} Lưu</button>` });
   const q = x => m.el.querySelector(x); q('[data-no]').onclick = () => m.close();
   q('[data-go]').onclick = async () => {
     const f = q('[data-f]').value, t = q('[data-t]').value; if (!f || !t || f > t) return toast('Khoảng ngày không hợp lệ', 'err');
@@ -5906,6 +5914,7 @@ ACT.dhSaveRange = async () => {
         if (yf && HS.kids(yf.id).length) {
           dhScan._seeded = true;
           if (!HS.kids(yf.id).some(f => HS.norm(f.ten) === HS.norm('Điều hành xe'))) { const n0 = HS.F().length; HS.ensure([y, '08. Điều hành xe', 'Bảng phân công lịch tài & xe']); if (HS.F().length > n0) Store.changed(); }
+          if (dhScan.fixMonths()) Store.changed();
         }
       }
     } catch (e) { console.warn('dh folder', e); }
@@ -10832,7 +10841,7 @@ const HS = {
     if (a === 'drv') { const h = H(); return h && h.link && window.open(h.link, '_blank', 'noopener'); }
     if (a === 'editH') { const h = H(); return h && (h.loai === 'link' ? HS.linkForm(h) : Form.open({ title: 'Sửa hồ sơ', width: 520, cols: 1, fields: [{ key: 'ten', label: 'Tên hồ sơ', required: true, full: true }, { key: 'hetHan', label: 'Ngày hết hạn (nếu có)', type: 'date', full: true }, { key: 'ghiChu', label: 'Ghi chú', type: 'textarea', full: true }], value: { ten: h.ten, hetHan: h.hetHan || '', ghiChu: h.ghiChu || '' }, onSave: v => { Object.assign(h, { ten: v.ten.trim(), hetHan: v.hetHan || '', ghiChu: v.ghiChu || '' }); HS.commit(); } })); }
     if (a === 'moveH') { const h = H(); return h && Form.open({ title: 'Chuyển hồ sơ “' + esc(h.ten) + '”', width: 480, cols: 1, fields: [{ key: 'folder', label: 'Chuyển vào thư mục', type: 'select', options: HS.folderOpts(), full: true }], value: { folder: h.folder || '' }, onSave: v => { h.folder = v.folder || ''; HS.commit(); } }); }
-    if (a === 'delH') { const h = H(); return h && Modal.confirm(`Xóa hồ sơ <b>${esc(h.ten)}</b>? Thao tác không hoàn tác được.`, { ok: 'Xóa', danger: true }).then(async ok => { if (!ok) return; await HS.dropData(h); HS.H().splice(HS.H().indexOf(h), 1); HS.commit(); toast('Đã xóa hồ sơ', 'ok'); }); }
+    if (a === 'delH') { const h = H(); return h && Modal.confirm(`Xóa hồ sơ <b>${esc(h.ten)}</b>? Thao tác không hoàn tác được.`, { ok: 'Xóa', danger: true }).then(async ok => { if (!ok) return; const i = HS.H().indexOf(h); if (i >= 0) HS.H().splice(i, 1); HS.commit(); toast('Đã xóa hồ sơ', 'ok'); HS.dropData(h).catch(e => console.warn('dropData', e)); }); }   // xóa khỏi danh mục ngay, tệp trên Drive xóa chạy nền
   },
   linkForm(h) {
     Form.open({ title: h ? 'Sửa liên kết' : 'Thêm liên kết hồ sơ', width: 520, cols: 1, fields: [{ key: 'ten', label: 'Tên hồ sơ', required: true, full: true }, { key: 'url', label: 'Địa chỉ liên kết (Google Drive, website…)', required: true, full: true }, { key: 'hetHan', label: 'Ngày hết hạn (nếu có)', type: 'date', full: true }, { key: 'ghiChu', label: 'Ghi chú', type: 'textarea', full: true }],
@@ -12910,7 +12919,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-04T14:00';
+const APP_BUILD = '2026-11-04T14:10';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
