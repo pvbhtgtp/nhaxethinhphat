@@ -11382,7 +11382,7 @@ const SB = {
   sizes() {
     const j = o => { try { return JSON.stringify(o).length; } catch (e) { return 0; } };
     const core = (() => { const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); return j(c); })();
-    const files = (DB.hosoH || []).reduce((a, h) => a + (h.loai === 'file' ? Math.round((h.size || 0) * 1.34) : 0), 0);
+    const files = (DB.hosoH || []).reduce((a, h) => a + (h.loai === 'file' && !h.drive ? Math.round((h.size || 0) * 1.34) : 0), 0);   // chỉ tính tệp cũ còn nằm trong Firestore; tệp đã ở Google Drive không chiếm Firestore
     return { core, ve: j(DB.datve) + j(DB.phoiIn), hs: j(DB.hosoF) + j(DB.hosoH) + files, other: j(DB.lenhVC) + j(DB.antoan) };
   },
   async paint() {
@@ -12920,7 +12920,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-04T14:20';
+const APP_BUILD = '2026-11-04T15:15';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
