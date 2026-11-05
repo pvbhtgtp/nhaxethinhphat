@@ -11529,17 +11529,17 @@ const LVC = {
     const gn = (gio, ngay) => `${ln(gio, 36)} giờ &nbsp;ngày ${ln(ngay ? F.date(ngay) : '', 84)}`;
     const img = (u, h) => u && /^(data:|https?:)/.test(u) ? `<img src="${esc(u)}" alt="" style="max-height:${h}px;max-width:150px;object-fit:contain">` : '';
     const d = String(o.ngay || '').split('-'), co = String(c.ten || '').toUpperCase(), k = co.indexOf(' MTV '), co1 = k > 0 ? co.slice(0, k + 4) : co, co2 = k > 0 ? co.slice(k + 5) : '';
-    const L = 'border:1px solid #000;padding:6px 8px;vertical-align:middle', C = L + ';text-align:center', H = 'height:21mm';
+    const L = 'border:1px solid #000;padding:6px 8px;vertical-align:middle', C = L + ';text-align:center', H = 'height:24mm';
     const r = (lb, v) => `<div style="padding:3px 0;text-align:left;white-space:nowrap">${lb}${v}</div>`;
-    const sg = (t2, e) => `<td style="${C};width:33.3%;height:34mm;vertical-align:top"><b>${t2}</b><br><i style="font-size:12px">(Ký và ghi rõ họ tên)</i><div style="height:15mm;display:flex;align-items:center;justify-content:center">${e ? img(e.chuKy, 50) : ''}</div><b>${e ? esc(e.ten || '') : ''}</b></td>`;
+    const sg = (t2, e) => `<td style="${C};width:33.3%;height:40mm;vertical-align:top"><b>${t2}</b><br><i style="font-size:12px">(Ký và ghi rõ họ tên)</i><div style="height:22mm;display:flex;align-items:center;justify-content:center">${e ? img(e.chuKy, 60) : ''}</div></td>`;
     const leg = (nm, a, b, gA, gB) => `<tr><td rowspan="2" style="${C}"><b>${nm}</b></td><td style="${C};${H}">Bến xe đi:<br><b>${esc(a)}</b></td><td style="${C};white-space:nowrap"><b>Xuất bến:</b><div style="margin-top:6px">${gA}</div></td><td style="${C}"></td><td style="${L}"></td></tr>
         <tr><td style="${C};${H}">Bến xe đến:<br><b>${esc(b)}</b></td><td style="${C};white-space:nowrap"><b>đến bến:</b><div style="margin-top:6px">${gB}</div></td><td style="${C}"></td><td style="${L}"></td></tr>`;
     return `<div class="hd lvc-a4" style="font-family:'Times New Roman',Times,serif;font-size:14px;line-height:1.35;color:#000">
-      <table style="width:100%;border:0;border-collapse:collapse"><tr><td style="width:45%;text-align:center;vertical-align:top;border:0"><b>${esc(co1)}${co2 ? '<br>' + esc(co2) : ''}</b></td><td style="text-align:center;vertical-align:top;border:0"><b>CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br>Độc Lập - Tự Do - Hạnh Phúc<br>---oOo---</td></tr></table>
-      <table style="width:100%;border:0;border-collapse:collapse;margin-top:10px"><tr><td style="border:0;width:45%"><b>Số:</b> &nbsp; ${esc(String(o.so || '').replace(/^LVC-/, ''))}/LVC-CT</td><td style="border:0;text-align:right"><b>Ngày</b> ${ln(d[2], 34)} <b>Tháng</b> ${ln(d[1], 34)} <b>Năm</b> ${ln(d[0], 50)}</td></tr></table>
+      <table style="width:100%;border:0;border-collapse:collapse"><tr><td style="width:45%;text-align:center;vertical-align:top;border:0"><b>${esc(co1)}${co2 ? '<br>' + esc(co2) : ''}</b><div style="margin-top:4px"><b>Số:</b> ${esc(String(o.so || '').replace(/^LVC-/, ''))}/LVC-CT</div></td><td style="text-align:center;vertical-align:top;border:0"><b>CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br>Độc Lập - Tự Do - Hạnh Phúc<br>---oOo---</td></tr></table>
+      <table style="width:100%;border:0;border-collapse:collapse;margin-top:6px"><tr><td style="border:0;width:45%"></td><td style="border:0;text-align:right"><b>Ngày</b> ${ln(d[2], 34)} <b>Tháng</b> ${ln(d[1], 34)} <b>Năm</b> ${ln(d[0], 50)}</td></tr></table>
       <div style="text-align:center;margin:10px 0 0;font-size:22px;letter-spacing:.5px"><b>LỆNH VẬN CHUYỂN</b></div>
       <div style="text-align:center;font-size:15px"><b>Dùng cho xe otô vận chuyển hành khách tuyến cố định</b></div>
-      <div style="text-align:center;margin:4px 0 10px">Có giá trị từ ngày ${ln(F.date(o.ngay), 120)} đến ngày ${ln(F.date(ret ? ret.ngay : o.ngay), 120)}</div>
+      <div style="text-align:center;margin:4px 0 10px">Có giá trị từ ngày ${ln(F.date(o.ngay), 120)} đến ngày ${ln(F.date(ret && ret.ngay > D.add(o.ngay, 1) ? ret.ngay : D.add(o.ngay, 1)), 120)}</div>
       <table style="width:100%;border-collapse:collapse;border:1.5px solid #000;table-layout:fixed;text-align:left"><colgroup><col style="width:12%"><col style="width:24%"><col style="width:28%"><col style="width:10%"><col style="width:26%"></colgroup>
         <tr><td colspan="4" style="${L};vertical-align:top;padding:8px 10px">
           ${r('Cấp cho Lái xe 1: ', ln(l1.ten, 190) + ' hạng GPLX: ' + ln(l1.bangHang, 50))}
@@ -11548,14 +11548,14 @@ const LVC = {
           ${r('Biển số đăng ký: ', ln(xe.bks, 140) + ' Số ghế: ' + ln(xe.soCho, 44) + ' Loại xe: khách')}
           <div style="padding:3px 0;text-align:left"><b>Tuyến: ${esc(ti.ten || o.tuyen || '')} - Cự Ly: ${ti.cuLy ? esc(ti.cuLy) + 'km' : '……km'}</b> &nbsp; &nbsp; Mã Số Tuyến: ${ti.maTuyen ? esc(ti.maTuyen) : '…………………'}</div>
           <div style="padding:3px 0;text-align:left">Hành trình chạy xe: ${esc(ti.hanhTrinh || '')} và Ngược Lại</div>
-        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i><div style="position:relative;height:30mm;margin-top:4px">${img(c.conDau, 110) ? `<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.85">${img(c.conDau, 110)}</div>` : ''}${img(c.chuKyGD, 56) ? `<div style="position:absolute;left:8px;top:22px">${img(c.chuKyGD, 56)}</div>` : ''}</div><b><i>${esc(gd)}</i></b></td></tr>
+        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i><div style="position:relative;height:34mm;margin-top:4px">${img(c.conDau, 120) ? `<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.85">${img(c.conDau, 120)}</div>` : ''}${img(c.chuKyGD, 70) ? `<div style="position:absolute;left:50%;top:24px;transform:translateX(-60%)">${img(c.chuKyGD, 70)}</div>` : ''}</div><b><i>${esc(gd)}</i></b></td></tr>
         <tr><td style="${C}"><b>Lượt xe thực hiện</b></td><td style="${C}"><b>Bến xe đi, đến</b></td><td style="${C}"><b>Giờ xe chạy</b></td><td style="${C}"><b>Số Khách</b></td><td style="${C}"><b>Bến xe</b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i></td></tr>
         ${leg('Lượt đi', benDi, benDen, gn(o.gio, o.ngay), gn('', ''))}
         ${leg('Lượt về', benDen, benDi, ret ? gn(ret.gio, ret.ngay) : gn('', ''), gn('', ''))}
         <tr><td colspan="5" style="padding:0;border:0"><table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>${sg('LÁI XE 1', l1.id ? l1 : null)}${sg('LÁI XE 2', l2)}${sg('CÁN BỘ ĐIỀU HÀNH', dh)}</tr></table></td></tr>
       </table>
       <div style="font-size:13px;margin-top:6px"><b>Lưu ý:</b> Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, đúng tốc độ cho phép.<br><span style="padding-left:44px">Nộp trả lệnh vận chuyển có đủ xác nhận của bến đi và bến đến.</span></div>
-      <div style="font-size:10px;color:#666;margin-top:4px">Lệnh tạo trên hệ thống · mã xác thực ${esc(ma)}${o.ktKhoang ? ' · đã kiểm tra khoang hành khách ' + esc(dvLog.fmt(o.ktKhoang)) : ''}${dong ? ` · đóng lệnh ${esc(dvLog.fmt(o.tgDong))} tại ${esc(o.diemDong || '')} (lệnh về ${esc(o.soVe || '')})` : ''}</div></div>`;
+      </div>`;
   },
   print(o) { GP.show(LVC.html(o), 'Lenh van chuyen ' + o.so); },
   async archive(o) {
@@ -13459,7 +13459,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T11:30';
+const APP_BUILD = '2026-11-05T12:00';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
