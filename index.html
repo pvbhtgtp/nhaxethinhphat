@@ -6652,7 +6652,7 @@ const FB = {
           if (!body.force && s.exists && +body.baseVer !== cur) { const er = new Error('Dữ liệu trên Firebase đã có bản mới hơn'); er.conflict = true; er.ver = cur; throw er; }
           for (let i = 0; i < n; i++) t.set(FB.col().doc('c' + i), { d: txt.slice(i * FB.CH, (i + 1) * FB.CH) });
           for (let i = n; i < (+m.n || 0); i++) t.delete(FB.col().doc('c' + i));
-          const nv = cur + 1; t.set(meta, { ver: nv, n, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length });
+          const nv = cur + 1; t.set(meta, { ver: nv, n, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length, base: (body.baseVer == null || isNaN(+body.baseVer)) ? cur : +body.baseVer, app: (typeof APP_BUILD !== 'undefined' ? APP_BUILD : '') });
           return { ok: true, ver: nv };
         });
       }
@@ -8888,7 +8888,7 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
           const nv = cur + 1, H = (m.hist || []).slice(), KEEP = 5;
           if (s.exists && +m.n) H.unshift({ ver: cur, p: m.p || 'c', n: +m.n, at: m.at || '', who: m.who || '', size: +m.size || 0 });
           const drop = H.slice(KEEP).filter(x => x.p !== p);
-          t.set(meta, { ver: nv, n, p, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length, hist: H.slice(0, KEEP) });
+          t.set(meta, { ver: nv, n, p, at: new Date().toISOString(), who: String(body.who || ''), size: txt.length, hist: H.slice(0, KEEP), base: (body.baseVer == null || isNaN(+body.baseVer)) ? cur : +body.baseVer, app: (typeof APP_BUILD !== 'undefined' ? APP_BUILD : '') });
           return { ok: true, ver: nv, drop };
         });
       } catch (e) { delParts(p, n); throw e; }
@@ -12210,7 +12210,7 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T22:35';
+const APP_BUILD = '2026-11-05T22:50';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
