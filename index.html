@@ -12645,6 +12645,121 @@ addCSS(`.scn-top{padding:14px;margin-bottom:14px}.scn-in{position:relative;overf
 .scn-h{font-weight:700;margin-bottom:8px}.scn-h small{font-weight:400;color:#667085;margin-left:6px}.scn-stage{position:relative;display:inline-block;max-width:100%;touch-action:none;background:#0f172a;border-radius:8px;overflow:hidden;width:100%}.scn-stage canvas{display:block;max-width:100%}.scn-stage svg{position:absolute;left:0;top:0;max-width:100%}.scn-stage circle{cursor:grab}
 .scn-res{background:#e5e7eb;border-radius:8px;padding:8px;text-align:center}.scn-res img{max-width:100%;max-height:70vh;box-shadow:0 4px 14px rgba(0,0,0,.2);background:#fff}.scn-tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.scn-ex{padding:14px}`);
 
+/* ===== Scan tài liệu · Máy quét trong app (giống CamScanner): Đơn / Hàng loạt, tự động / thủ công, bộ nhớ đệm =====
+   - Camera toàn màn hình, khung xanh tự bám mép giấy theo thời gian thực, đèn flash (nếu máy hỗ trợ).
+   - Đơn: chụp 1 tấm rồi vào chỉnh ngay. Hàng loạt: chụp liên tục, ảnh vào hàng đợi, bấm "Xong" để xử lý.
+   - Tự động: AI tự nhận khung + làm rõ chữ cho mọi trang. Thủ công: lần lượt duyệt từng trang, kéo góc rồi bấm "Xong trang này".
+   - Bộ nhớ đệm: các trang đang scan lưu tạm trong máy (IndexedDB), tải lại trang không mất; xóa khi bấm "Xóa hết". */
+Object.assign(SCN, {
+  mode: (() => { try { return localStorage.getItem('scn.mode') || 'don'; } catch (e) { return 'don'; } })(),
+  ai: (() => { try { return localStorage.getItem('scn.ai') || 'auto'; } catch (e) { return 'auto'; } })(),
+  review: -1, Q: [], qBusy: false,
+  setPref(k, v) { SCN[k] = v; try { localStorage.setItem('scn.' + k, v); } catch (e) { } },
+  /* ---------- bộ nhớ đệm (IndexedDB) ---------- */
+  db: null,
+  idb() { if (SCN.db) return SCN.db; SCN.db = new Promise(ok => { try { const r = indexedDB.open('nhaxe-scan', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => ok(r.result); r.onerror = () => ok(null); } catch (e) { ok(null); } }); return SCN.db; },
+  async persist() {
+    const db = await SCN.idb(); if (!db) return;
+    const rows = await Promise.all(SCN.P.map(async p => ({ q: p.q, f: p.f, img: p.blob || (p.blob = await SCN.blob(p.src, 'image/jpeg', .92)) })));
+    try { const t = db.transaction('p', 'readwrite'); t.objectStore('p').put(rows, 'pages'); } catch (e) { }
+  },
+  async restore() {
+    if (SCN._restored) return; SCN._restored = true; const db = await SCN.idb(); if (!db || SCN.P.length) return;
+    const rows = await new Promise(ok => { try { const r = db.transaction('p').objectStore('p').get('pages'); r.onsuccess = () => ok(r.result || []); r.onerror = () => ok([]); } catch (e) { ok([]); } });
+    for (const r of rows) { try { const src = await SCN.load(r.img); SCN.P.push({ src, q: r.q, f: r.f, blob: r.img }); } catch (e) { } }
+    if (SCN.P.length) { SCN.cur = 0; SCN.paint(); toast(`Đã khôi phục ${SCN.P.length} trang đang scan dở`, 'ok', 3000); }
+  },
+  /* ---------- hàng đợi xử lý (AI nhận khung) ---------- */
+  enqueue(src) { const pg = { src, q: SCN.full(src), f: SCN.ai === 'auto' ? 'magic' : 'magic', pending: true }; SCN.P.push(pg); SCN.Q.push(pg); SCN.runQ(); return pg; },
+  runQ() {
+    if (SCN.qBusy) return; const pg = SCN.Q.shift(); if (!pg) { SCN.persist(); return; } SCN.qBusy = true;
+    setTimeout(() => { try { pg.q = SCN.detect(pg.src); } catch (e) { } pg.pending = false; pg.thumb = null; SCN.qBusy = false; SCN.camCount(); if (App.cur === 'scan' && !SCN.cam) SCN.paint(); SCN.runQ(); }, 30);
+  },
+  /* ---------- camera ---------- */
+  cam: null,
+  async camOpen() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { const i = document.querySelector('[data-sc-in][capture]'); if (i) i.click(); return; }
+    let st; try { st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false }); }
+    catch (e) { toast('Không mở được camera: ' + (e && e.name === 'NotAllowedError' ? 'bạn chưa cho phép dùng camera' : esc(e.message || e)) + '. Dùng nút Chọn ảnh có sẵn thay thế.', 'err', 7000); return; }
+    const w = document.createElement('div'); w.className = 'scc'; w.dataset.runtime = '1';
+    w.innerHTML = `<div class="scc-top"><button type="button" data-cc="close" title="Đóng">✕</button><span class="grow"></span><button type="button" data-cc="ai" class="scc-pill"></button><button type="button" data-cc="torch" title="Đèn flash">⚡</button></div>
+      <div class="scc-view"><video playsinline muted autoplay></video><canvas class="scc-ov"></canvas><div class="scc-flash"></div></div>
+      <div class="scc-modes"><button type="button" data-cc="m" data-m="don">Đơn</button><button type="button" data-cc="m" data-m="loat">Hàng loạt</button></div>
+      <div class="scc-bot"><label class="scc-side"><input type="file" accept="image/*" multiple data-cc-in hidden>${ic('upload')}<small>Nhập ảnh</small></label><button type="button" class="scc-shut" data-cc="shot" aria-label="Chụp"></button><button type="button" class="scc-side scc-done" data-cc="done"><span class="scc-th"></span><small>Xong</small></button></div>`;
+    document.body.appendChild(w); document.body.style.overflow = 'hidden';
+    const v = w.querySelector('video'); v.srcObject = st; try { await v.play(); } catch (e) { }
+    SCN.cam = { w, st, v, track: st.getVideoTracks()[0], torch: false, n0: SCN.P.length, timer: null };
+    SCN.camUI(); SCN.camLoop();
+    w.onclick = e => { const b = e.target.closest('[data-cc]'); if (b) SCN.camAct(b.dataset.cc, b); };
+    w.querySelector('[data-cc-in]').onchange = async e => { const fs = [...e.target.files]; e.target.value = ''; for (const f of fs) { try { SCN.enqueue(await SCN.load(f)); } catch (x) { } } SCN.camCount(); if (SCN.mode === 'don' && fs.length) SCN.camClose(true); };
+  },
+  camUI() { const c = SCN.cam; if (!c) return; c.w.querySelectorAll('[data-m]').forEach(b => b.classList.toggle('on', b.dataset.m === SCN.mode)); c.w.querySelector('[data-cc="ai"]').textContent = SCN.ai === 'auto' ? '🤖 Tự động' : '✋ Thủ công'; c.w.querySelector('[data-cc="torch"]').classList.toggle('on', c.torch); SCN.camCount(); },
+  camCount() { const c = SCN.cam; if (!c) return; const n = SCN.P.length - c.n0, th = c.w.querySelector('.scc-th'), last = SCN.P[SCN.P.length - 1]; c.w.querySelector('.scc-done').style.visibility = n ? 'visible' : 'hidden'; if (th) th.innerHTML = n && last ? `<img src="${SCN.fit(last.src, 120).toDataURL('image/jpeg', .7)}"><b>${n}</b>` : ''; },
+  camLoop() {   // khung xanh bám mép giấy khi đang ngắm
+    const c = SCN.cam; if (!c) return; const v = c.v, ov = c.w.querySelector('.scc-ov');
+    if (v.videoWidth) { const r = v.getBoundingClientRect(); ov.width = r.width; ov.height = r.height; const g = ov.getContext('2d'); g.clearRect(0, 0, ov.width, ov.height);
+      try { const f = SCN.cv(v.videoWidth, v.videoHeight); f.getContext('2d').drawImage(v, 0, 0); const q = SCN.detect(SCN.fit(f, 480)), k0 = 480 / Math.max(v.videoWidth, v.videoHeight), sc = Math.min(r.width / v.videoWidth, r.height / v.videoHeight), ox = (r.width - v.videoWidth * sc) / 2, oy = (r.height - v.videoHeight * sc) / 2;
+        const P = q.map(([x, y]) => [ox + x / k0 * sc, oy + y / k0 * sc]); g.beginPath(); P.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.closePath(); g.fillStyle = 'rgba(20,184,166,.18)'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#14b8a6'; g.stroke(); } catch (e) { } }
+    c.timer = setTimeout(SCN.camLoop, 450);
+  },
+  camShot() {
+    const c = SCN.cam; if (!c || !c.v.videoWidth) return; const v = c.v, f = SCN.cv(v.videoWidth, v.videoHeight); f.getContext('2d').drawImage(v, 0, 0);
+    const fl = c.w.querySelector('.scc-flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go'); try { navigator.vibrate && navigator.vibrate(30); } catch (e) { }
+    SCN.enqueue(SCN.fit(f, SCN.MAX)); SCN.camCount(); if (SCN.mode === 'don') SCN.camClose(true);
+  },
+  async camAct(a, b) {
+    const c = SCN.cam; if (!c) return;
+    if (a === 'close') return SCN.camClose(SCN.P.length > c.n0);
+    if (a === 'shot') return SCN.camShot();
+    if (a === 'done') return SCN.camClose(true);
+    if (a === 'm') { SCN.setPref('mode', b.dataset.m); return SCN.camUI(); }
+    if (a === 'ai') { SCN.setPref('ai', SCN.ai === 'auto' ? 'tay' : 'auto'); toast(SCN.ai === 'auto' ? 'Tự động: AI tự nhận khung và làm rõ chữ' : 'Thủ công: xong sẽ duyệt và chỉnh từng trang', 'ok', 2500); return SCN.camUI(); }
+    if (a === 'torch') { try { c.torch = !c.torch; await c.track.applyConstraints({ advanced: [{ torch: c.torch }] }); } catch (e) { c.torch = false; toast('Máy này không bật được đèn flash từ trình duyệt', 'err', 3000); } return SCN.camUI(); }
+  },
+  camClose(go) {
+    const c = SCN.cam; if (!c) return; clearTimeout(c.timer); try { c.st.getTracks().forEach(t => t.stop()); } catch (e) { } c.w.remove(); document.body.style.overflow = ''; SCN.cam = null;
+    if (go && SCN.P.length > c.n0) { SCN.cur = c.n0; SCN.review = SCN.ai === 'tay' ? c.n0 : -1; }
+    SCN.paint(); SCN.persist();
+  }
+});
+/* giao diện: thêm nút máy quét, công tắc Đơn/Hàng loạt + Tự động/Thủ công, thanh duyệt thủ công */
+{
+  const h0 = SCN.html;
+  SCN.html = function () {
+    let s = h0.apply(this, arguments);
+    const sw = `<div class="scn-sw"><span>Chế độ:</span><button type="button" class="btn sm ${SCN.mode === 'don' ? 'pri' : ''}" data-sc="mode" data-v="don">Đơn</button><button type="button" class="btn sm ${SCN.mode === 'loat' ? 'pri' : ''}" data-sc="mode" data-v="loat">Hàng loạt</button><span style="margin-left:8px">Xử lý:</span><button type="button" class="btn sm ${SCN.ai === 'auto' ? 'pri' : ''}" data-sc="ai" data-v="auto">🤖 Tự động</button><button type="button" class="btn sm ${SCN.ai === 'tay' ? 'pri' : ''}" data-sc="ai" data-v="tay">✋ Thủ công</button></div>`;
+    s = s.replace('<label class="btn pri scn-in">', `<button type="button" class="btn pri" data-sc="cam">${ic('camera')} Mở máy quét</button><label class="btn scn-in">`).replace('</div>', '</div>' + sw);
+    const n = SCN.P.length, pend = SCN.P.filter(p => p.pending).length;
+    if (pend) s = s.replace('<div class="scn-pages">', `<div class="small" style="margin-top:8px;color:#0f766e">⏳ AI đang xử lý ${pend} trang trong hàng đợi…</div><div class="scn-pages">`);
+    if (SCN.review >= 0 && SCN.review < n) s = s.replace('<div class="scn-ed">', `<div class="scn-rv"><span>✋ Duyệt thủ công: trang <b>${SCN.cur + 1}/${n}</b>. Kéo 4 góc cho khớp, chọn kiểu làm rõ rồi bấm</span><button type="button" class="btn pri sm" data-sc="next">${SCN.cur + 1 < n ? 'Xong trang này → trang ' + (SCN.cur + 2) : '✓ Xong tất cả'}</button></div><div class="scn-ed">`);
+    return s;
+  };
+  const a0 = SCN.act;
+  SCN.act = async function (a, b) {
+    if (a === 'cam') return SCN.camOpen();
+    if (a === 'mode') { SCN.setPref('mode', b.dataset.v); return SCN.paint(); }
+    if (a === 'ai') { SCN.setPref('ai', b.dataset.v); return SCN.paint(); }
+    if (a === 'next') { if (SCN.cur + 1 < SCN.P.length) { SCN.cur++; SCN.review = SCN.cur; } else { SCN.review = -1; toast('Đã duyệt xong, chọn định dạng rồi lưu', 'ok'); } SCN.persist(); return SCN.paint(); }
+    const r = await a0.apply(this, arguments);
+    if (['del', 'left', 'auto', 'full', 'rot', 'flt'].includes(a)) { const pg = SCN.P[SCN.cur]; if (pg && a !== 'del' && a !== 'left') pg.blob = a === 'rot' ? null : pg.blob; SCN.persist(); }
+    if (a === 'clear' && !SCN.P.length) { SCN.review = -1; SCN.persist(); }
+    return r;
+  };
+  const ad0 = SCN.add;   // chọn ảnh có sẵn cũng đi qua hàng đợi AI
+  SCN.add = async function (files) { files = [...(files || [])]; const n0 = SCN.P.length; for (const f of files) { try { SCN.enqueue(await SCN.load(f)); } catch (e) { toast('Không đọc được ảnh ' + esc(f.name || ''), 'err'); } } if (SCN.P.length > n0) { SCN.cur = n0; SCN.review = SCN.ai === 'tay' ? n0 : -1; } SCN.paint(); };
+  const bd0 = SCN.bindEd; SCN.bindEd = function () { const r = bd0.apply(this, arguments); const pg = SCN.P[SCN.cur]; const svg = $('#scnSvg'); if (svg && pg) { const up = svg.onpointerup; svg.onpointerup = svg.onpointercancel = e => { up && up(e); SCN.persist(); }; } return r; };
+  const r0 = vSCN.render; vSCN.render = function (el) { r0.apply(this, arguments); SCN.restore(); };
+}
+addCSS(`.scn-sw{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13px;color:#475467}.scn-rv{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:10px 14px;margin-bottom:12px;color:#065f46;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.scc{position:fixed;inset:0;z-index:600;background:#000;display:flex;flex-direction:column;color:#fff;user-select:none}.scc button{font:inherit;color:#fff;background:none;border:0;cursor:pointer}
+.scc-top{display:flex;align-items:center;gap:14px;padding:12px 16px}.scc-top>button{font-size:22px;width:40px;height:40px;border-radius:50%}.scc-top>button.on{background:#facc15;color:#000}.scc-top .scc-pill{font-size:13px;width:auto;padding:0 12px;height:32px;border-radius:16px;background:rgba(255,255,255,.15)}
+.scc-view{position:relative;flex:1;min-height:0;overflow:hidden}.scc-view video{width:100%;height:100%;object-fit:contain;display:block;background:#000}.scc-ov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.scc-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}.scc-flash.go{animation:sccf .35s ease-out}@keyframes sccf{0%{opacity:.85}100%{opacity:0}}
+.scc-modes{display:flex;justify-content:center;gap:6px;padding:10px 0 4px}.scc-modes button{padding:6px 16px;border-radius:18px;font-size:15px;color:#cbd5e1}.scc-modes button.on{color:#2dd4bf;background:rgba(45,212,191,.12);font-weight:700}
+.scc-bot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 24px 22px}.scc-side{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;justify-self:center;color:#fff}.scc-side svg{width:26px;height:26px;stroke:#fff}.scc-side small{font-size:12px}
+.scc-shut{width:76px;height:76px;border-radius:50%;border:5px solid #14b8a6!important;background:#fff!important;box-shadow:0 0 0 4px #000 inset}.scc-shut:active{transform:scale(.94)}
+.scc-th{position:relative;width:46px;height:46px;border-radius:8px;overflow:hidden;border:2px solid #fff;display:block}.scc-th img{width:100%;height:100%;object-fit:cover}.scc-th b{position:absolute;right:2px;bottom:2px;background:#14b8a6;color:#fff;border-radius:9px;font-size:11px;padding:0 5px}`);
+
 /* ===== DỮ LIỆU CÁ NHÂN: mỗi người chỉ xem thông tin của chính mình =====
    Màn hình Nhân viên, Chấm công, Bảng lương, Thuế & bảo hiểm, Hợp đồng lao động: tài khoản không phải Admin chỉ thấy hồ sơ của mình.
    Admin xem tất cả. Vai trò cần xem của mọi người (kế toán, quản lý...) thì Admin tích cột "Xem tất cả" trong bảng phân quyền.
@@ -13206,7 +13321,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T00:50';
+const APP_BUILD = '2026-11-05T01:10';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
