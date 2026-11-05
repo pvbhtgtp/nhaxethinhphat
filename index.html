@@ -13459,7 +13459,56 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T12:00';
+
+/* ===== ẢNH CCCD / BẰNG LÁI: tự cắt thẳng về đúng khổ thẻ (85,6 × 54 mm), AI đọc lại và đối chiếu với các trường đã nhập ===== */
+const IDC = {
+  K: { cccdTruoc: 'cccd1', cccdSau: 'cccd2', bangTruoc: 'gplx1', bangSau: 'gplx2' },
+  async card(file) {               // phát hiện 4 góc thẻ → nắn phẳng → xoay ngang → đúng tỉ lệ thẻ
+    const src = await SCN.load(file); let c = src;
+    try { const Q = SCN.detect(src); if (Q) c = SCN.warp(src, Q, 1600); } catch (e) { console.warn('IDC.detect', e); }
+    if (c.height > c.width) { const r = SCN.cv(c.height, c.width), x = r.getContext('2d'); x.translate(r.width, 0); x.rotate(Math.PI / 2); x.drawImage(c, 0, 0); c = r; }
+    const W = 1000, H = Math.round(W * 54 / 85.6), o = SCN.cv(W, H), g = o.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W, H);
+    return o;
+  },
+  P: {
+    cccd1: 'Ảnh mặt trước Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số","hoTen":"","ngaySinh":"YYYY-MM-DD","gioiTinh":"Nam|Nữ","noiThuongTru":"","ngayCap":"YYYY-MM-DD nếu có trên mặt này","noiCap":""}. Trường không thấy để chuỗi rỗng.',
+    cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số nếu có (dòng mã MRZ IDVNM...)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
+    gplx1: 'Ảnh mặt trước Giấy phép lái xe Việt Nam. Trả JSON: {"so":"số GPLX","hoTen":"","ngaySinh":"YYYY-MM-DD","hang":"hạng cao nhất, ví dụ B2, C, D, E","ngayCap":"YYYY-MM-DD","hetHan":"YYYY-MM-DD hoặc rỗng nếu không thời hạn","noiCap":"ví dụ SỞ GTVT ĐỒNG NAI"}. Trường không thấy để chuỗi rỗng.',
+    gplx2: 'Ảnh mặt sau Giấy phép lái xe Việt Nam (bảng các hạng xe và ngày hết hạn). Trả JSON: {"so":"số GPLX nếu có","hang":"hạng cao nhất còn hạn","hetHan":"YYYY-MM-DD của hạng đó","ngayCap":"YYYY-MM-DD nếu có"}. Trường không thấy để chuỗi rỗng.'
+  },
+  MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', noiThuongTru: 'diaChiTT', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT' },
+    gplx1: { so: 'bangSo', hoTen: 'ten', ngaySinh: 'ngaySinh', hang: 'bangHang', ngayCap: 'bangNgayCap', hetHan: 'bangHetHan', noiCap: 'bangNoiCap' }, gplx2: { so: 'bangSo', hang: 'bangHang', hetHan: 'bangHetHan', ngayCap: 'bangNgayCap' } },
+  LB: { cccd: 'Số CCCD', ten: 'Họ và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', diaChiTT: 'Địa chỉ thường trú', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
+  n: v => String(v || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/Đ/g, 'D').replace(/[^0-9A-Z]/g, ''),
+  async read(kind, canvas, root) {
+    if (!AIX.ok()) return toast('Đã cắt thẳng ảnh thẻ. Chưa cài khóa AI nên chưa đọc đối chiếu thông tin', 'ok', 5000);
+    toast('Đang đọc thông tin trên thẻ để đối chiếu…', 'ok', 3000);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9)); let d;
+    try { d = await AIX.json(IDC.P[kind], { images: [blob] }); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
+    if (!root.isConnected) return;
+    const ch = [], M = IDC.MAP[kind];
+    Object.keys(M).forEach(k => {
+      let v = String((d && d[k]) || '').trim(); if (!v) return; const key = M[k], el = root.querySelector(`[name="${key}"]`); if (!el) return;
+      if (/^(cccd|bangSo)$/.test(key)) v = v.replace(/\s+/g, ''); if (key === 'bangHang') v = v.toUpperCase();
+      if (el.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+      if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === v)) return;
+      const old = el.value; if (IDC.n(old) === IDC.n(v)) return;
+      el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.style.background = '#fef9c3'; ch.push(`<li><b>${esc(IDC.LB[key] || key)}</b>: ${old ? `<s>${esc(el.type === 'date' ? F.date(old) : old)}</s> → ` : ''}<b>${esc(el.type === 'date' ? F.date(v) : v)}</b></li>`);
+    });
+    if (!ch.length) return toast('Thông tin trên thẻ khớp với dữ liệu đã nhập', 'ok', 4000);
+    Modal.open({ title: 'Đã cập nhật theo ảnh thẻ', width: 520, body: `<div class="small muted" style="margin-bottom:6px">Các trường không khớp đã được sửa theo thông tin đọc từ thẻ (tô vàng trong form). Kiểm tra lại rồi bấm <b>Lưu</b>.</div><ul style="margin:0;padding-left:18px;line-height:1.7">${ch.join('')}</ul>` });
+  }
+};
+document.addEventListener('change', e => {
+  const el = e.target; if (!el.matches || !el.matches('[data-img]') || !el.files[0]) return; const kind = IDC.K[el.dataset.img]; if (!kind) return;
+  e.stopImmediatePropagation(); const file = el.files[0], box = el.closest('.img-pick'), root = el.closest('.modal-wrap') || document;
+  IDC.card(file).then(c => {
+    const url = c.toDataURL('image/jpeg', 0.85); box.querySelector('[data-image]').value = url; box.querySelector('[data-ph]').innerHTML = `<img src="${url}">`;
+    toast('Đã tự cắt thẳng ảnh thẻ về đúng khổ', 'ok'); return IDC.read(kind, c, root);
+  }).catch(err => { console.warn('IDC', err); resizeImage(file, +el.dataset.max || 1000).then(u => { box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; }).catch(() => toast('Không đọc được ảnh', 'err')); });
+}, true);
+const APP_BUILD = '2026-11-05T12:20';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
