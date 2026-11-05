@@ -13464,13 +13464,21 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
 /* ===== ẢNH CCCD / BẰNG LÁI: tự cắt thẳng về đúng khổ thẻ (85,6 × 54 mm), AI đọc lại và đối chiếu với các trường đã nhập ===== */
 const IDC = {
   K: { cccdTruoc: 'cccd1', cccdSau: 'cccd2', bangTruoc: 'gplx1', bangSau: 'gplx2' },
-  async card(file) {               // phát hiện 4 góc thẻ → nắn phẳng → xoay ngang → đúng tỉ lệ thẻ
-    const src = await SCN.load(file); let c = src;
-    try { const Q = SCN.detect(src); if (Q) c = SCN.warp(src, Q, 1600); } catch (e) { console.warn('IDC.detect', e); }
-    if (c.height > c.width) { const r = SCN.cv(c.height, c.width), x = r.getContext('2d'); x.translate(r.width, 0); x.rotate(Math.PI / 2); x.drawImage(c, 0, 0); c = r; }
-    const W = 1000, H = Math.round(W * 54 / 85.6), o = SCN.cv(W, H), g = o.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W, H);
-    return o;
+  /* 4 góc hợp lệ khi tạo thành hình gần với tỉ lệ thẻ (≈1,59) và không phải gần cả khung ảnh */
+  okQ(Q, w, h) {
+    if (!Q || Q.length !== 4) return false; const dd = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const W = (dd(Q[0], Q[1]) + dd(Q[3], Q[2])) / 2, H = (dd(Q[0], Q[3]) + dd(Q[1], Q[2])) / 2, r = Math.max(W, H) / Math.max(1, Math.min(W, H));
+    let A = 0; for (let i = 0; i < 4; i++) { const p = Q[i], q = Q[(i + 1) % 4]; A += p[0] * q[1] - q[0] * p[1]; } A = Math.abs(A) / 2 / (w * h);
+    return r > 1.38 && r < 1.85 && A > 0.06 && A < 0.9;
   },
+  flat(src, Q) {                  // nắn phẳng → xoay ngang → đúng khổ thẻ 85,6 × 54 mm
+    let c = SCN.warp(src, Q, 1600);
+    if (c.height > c.width) { const r = SCN.cv(c.height, c.width), x = r.getContext('2d'); x.translate(r.width, 0); x.rotate(Math.PI / 2); x.drawImage(c, 0, 0); c = r; }
+    const W = 1000, H = Math.round(W * 54 / 85.6), o = SCN.cv(W, H), g = o.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W, H); return o;
+  },
+  plain(src) { const k = Math.min(1, 1000 / Math.max(src.width, src.height)), o = SCN.cv(src.width * k, src.height * k); o.getContext('2d').drawImage(src, 0, 0, o.width, o.height); return o; },
+  local(src) { try { const Q = SCN.detect(src); if (IDC.okQ(Q, src.width, src.height)) return IDC.flat(src, Q); } catch (e) { console.warn('IDC.detect', e); } return null; },
+  GOC: ' Thêm khóa "goc": tọa độ 4 góc của tấm thẻ trong ảnh theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái (theo chiều chữ trên thẻ), dạng [[x,y],[x,y],[x,y],[x,y]] với x,y là số nguyên 0-1000 tính theo chiều rộng và chiều cao ảnh.',
   P: {
     cccd1: 'Ảnh mặt trước Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số","hoTen":"","ngaySinh":"YYYY-MM-DD","gioiTinh":"Nam|Nữ","noiThuongTru":"","ngayCap":"YYYY-MM-DD nếu có trên mặt này","noiCap":""}. Trường không thấy để chuỗi rỗng.',
     cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số nếu có (dòng mã MRZ IDVNM...)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
@@ -13481,12 +13489,13 @@ const IDC = {
     gplx1: { so: 'bangSo', hoTen: 'ten', ngaySinh: 'ngaySinh', hang: 'bangHang', ngayCap: 'bangNgayCap', hetHan: 'bangHetHan', noiCap: 'bangNoiCap' }, gplx2: { so: 'bangSo', hang: 'bangHang', hetHan: 'bangHetHan', ngayCap: 'bangNgayCap' } },
   LB: { cccd: 'Số CCCD', ten: 'Họ và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', diaChiTT: 'Địa chỉ thường trú', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
   n: v => String(v || '').normalize('NFC').toUpperCase().replace(/[^\p{L}\p{N}]/gu, ''),
-  async read(kind, canvas, root) {
-    if (!AIX.ok()) return toast('Đã cắt thẳng ảnh thẻ. Chưa cài khóa AI nên chưa đọc đối chiếu thông tin', 'ok', 5000);
-    toast('Đang đọc thông tin trên thẻ để đối chiếu…', 'ok', 3000);
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9)); let d;
-    try { d = await AIX.json(IDC.P[kind], { images: [blob] }); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
+  async read(kind, src, root, set) {
+    if (!AIX.ok()) return toast('Chưa cài khóa AI nên chưa đọc đối chiếu thông tin trên thẻ', 'ok', 5000);
+    toast('Đang đọc thẻ để cắt thẳng và đối chiếu thông tin…', 'ok', 3000);
+    const sm = SCN.fit(src, 1280), blob = await new Promise(r => sm.toBlob(r, 'image/jpeg', 0.9)); let d;
+    try { d = await AIX.json(IDC.P[kind] + IDC.GOC, { images: [blob] }); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
     if (!root.isConnected) return;
+    try { const g = d && d.goc; if (Array.isArray(g) && g.length === 4 && !set.done) { const Q = g.map(p => [(+p[0] || 0) / 1000 * src.width, (+p[1] || 0) / 1000 * src.height]); if (IDC.okQ(Q, src.width, src.height)) { set(IDC.flat(src, Q)); toast('Đã cắt thẳng ảnh thẻ về đúng khổ', 'ok'); } } } catch (e) { console.warn('IDC.goc', e); }
     const ch = [], M = IDC.MAP[kind];
     Object.keys(M).forEach(k => {
       let v = String((d && d[k]) || '').trim(); if (!v) return; const key = M[k], el = root.querySelector(`[name="${key}"]`); if (!el) return;
@@ -13498,15 +13507,17 @@ const IDC = {
       el.style.background = '#fef9c3'; ch.push(`<li><b>${esc(IDC.LB[key] || key)}</b>: ${old ? `<s>${esc(el.type === 'date' ? F.date(old) : old)}</s> → ` : ''}<b>${esc(el.type === 'date' ? F.date(v) : v)}</b></li>`);
     });
     if (!ch.length) return toast('Thông tin trên thẻ khớp với dữ liệu đã nhập', 'ok', 4000);
-    Modal.open({ title: 'Đã cập nhật theo ảnh thẻ', width: 520, body: `<div class="small muted" style="margin-bottom:6px">Các trường không khớp đã được sửa theo thông tin đọc từ thẻ (tô vàng trong form). Kiểm tra lại rồi bấm <b>Lưu</b>.</div><ul style="margin:0;padding-left:18px;line-height:1.7">${ch.join('')}</ul>` });
+    toast('Đã sửa ' + ch.length + ' trường theo thẻ (tô vàng). Kiểm tra rồi bấm Lưu', 'ok', 7000);
   }
 };
 document.addEventListener('change', e => {
   const el = e.target; if (!el.matches || !el.matches('[data-img]') || !el.files[0]) return; const kind = IDC.K[el.dataset.img]; if (!kind) return;
   e.stopImmediatePropagation(); const file = el.files[0], box = el.closest('.img-pick'), root = el.closest('.modal-wrap') || document;
-  IDC.card(file).then(c => {
-    const url = c.toDataURL('image/jpeg', 0.85); box.querySelector('[data-image]').value = url; box.querySelector('[data-ph]').innerHTML = `<img src="${url}">`;
-    toast('Đã tự cắt thẳng ảnh thẻ về đúng khổ', 'ok'); return IDC.read(kind, c, root);
+  const put = (c, done) => { const url = c.toDataURL('image/jpeg', 0.85); box.querySelector('[data-image]').value = url; box.querySelector('[data-ph]').innerHTML = `<img src="${url}">`; if (done) set.done = true; };
+  const set = c => put(c, true);
+  SCN.load(file).then(src => {
+    const c = IDC.local(src); if (c) { put(c, true); toast('Đã cắt thẳng ảnh thẻ về đúng khổ', 'ok'); } else put(IDC.plain(src), false);
+    return IDC.read(kind, src, root, set);
   }).catch(err => { console.warn('IDC', err); resizeImage(file, +el.dataset.max || 1000).then(u => { box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; }).catch(() => toast('Không đọc được ảnh', 'err')); });
 }, true);
 
@@ -13529,7 +13540,7 @@ ZB.autoLink = async function (quiet) {
 };
 setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 5 * 60000);
 { const zd0 = HUB.zDraw; HUB.zDraw = function () { const r = zd0.apply(this, arguments); ZB.autoLink(true).then(n => { if (n && HUB.el && HUB.tab === 'zalo') try { zd0.apply(HUB, []); } catch (e) { } }); return r; }; }
-const APP_BUILD = '2026-11-05T12:45';
+const APP_BUILD = '2026-11-05T13:00';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
