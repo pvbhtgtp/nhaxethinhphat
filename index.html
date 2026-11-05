@@ -11562,7 +11562,7 @@ const IMGX = {
     try {
       await IMGX.pool(ids.filter(id => !IMGX.img.has(id)), 3, async id => { const r = await HS.dcall({ action: 'hs_get', id }, 120000); if (r && r.data) IMGX.save(id, 'data:' + (r.mime || 'application/octet-stream') + ';base64,' + r.data); });
       let ch = false; IMGX.walk(DB, (v, o, k) => { if (v.startsWith(IMGX.PRE)) { const s = IMGX.img.get(v.slice(IMGX.PRE.length)); if (s) { o[k] = s; ch = true; } } });
-      if (ch && !document.querySelector('.modal-wrap')) { const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); }
+      if (ch) { if (typeof UX !== 'undefined' && UX.busy()) UX.pend.render = true; else { const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); } }
     } finally { IMGX.busyF = false; if (IMGX.pend.size) { const q = [...IMGX.pend]; IMGX.pend.clear(); setTimeout(() => IMGX.fetch(q), 500); } }
   },
   paint() {                         // ảnh còn là mã tham chiếu trên màn hình: thay bằng ảnh đệm, thiếu thì tải về (không hiện hình vỡ)
@@ -12220,7 +12220,7 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T22:55';
+const APP_BUILD = '2026-11-05T23:05';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
@@ -12282,6 +12282,7 @@ const UX = {
   tick() {
     if (UX.pend.paint && !document.querySelector('.modal-wrap') && !UX.typing()) { UX.pend.paint = false; try { TK.paint(); } catch (e) { } }
     if (UX.busy()) return;
+    if (UX.pend.render) { UX.pend.render = false; const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); }
     if (UX.pend.upd && !Store.dirty && !(GS && GS.busy)) { const b = UX.pend.upd; UX.pend.upd = ''; return UPD.reload(b); }
     if (UX.pend.pull || (GS && GS.on && TK.latest > GS.ver)) { UX.pend.pull = false; try { TK.pullSoon(); } catch (e) { } }
     if (UX.pend.paint && !document.querySelector('.modal-wrap') && !UX.typing()) { UX.pend.paint = false; try { TK.paint(); } catch (e) { } }
@@ -12296,7 +12297,6 @@ setInterval(() => UX.tick(), 2000);
   const gp = GS.pull; GS.pull = function (quiet) { return gp.call(this, false); };   // không hiện thông báo "đã cập nhật"
   UPD.banner = function (b) { UX.pend.upd = b; };                                        // không hiện thanh "có bản mới": chờ rảnh tự cập nhật
   const ck = UPD.check; UPD.check = async function (force) { if (UX.busy() && !document.querySelector('.au-wrap')) { try { const b = await UPD.remote(); if (b && b > APP_BUILD) UX.pend.upd = b; } catch (e) { } return; } return ck.apply(this, arguments); };
-  try { const f0 = IMGX.fetch; IMGX.fetch = async function () { const r0 = App.render, self = this, a = arguments; let want = false; App.render = function () { if (UX.busy()) { want = true; return; } return r0.apply(this, arguments); }; try { return await f0.apply(self, a); } finally { App.render = r0; if (want) UX.pend.paint = true; } }; } catch (e) { }
 }
 addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
 window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
