@@ -5365,7 +5365,7 @@ const vDV = {
         };
         const so = dvSO(cur);
         const gone = lcGone(cur), dI = Math.max(0, so.rows.findIndex(r => r.includes('D'))), band = gone ? `<div class="dv-gone" style="grid-column:1/-1"><b>XE ĐÃ XUẤT BẾN</b><small>${lcAdmin() ? 'Admin vẫn sửa được' : 'Đã khóa mọi thao tác sửa, xóa · chỉ Admin được chỉnh'}</small></div>` : '';
-        body = `<div class="dv-grid${gone ? ' is-gone' : ''}" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr));max-width:${Math.max(760, so.cols * 190)}px">${so.rows.map((r, i) => r.map(cell).join('') + (i === dI ? band : '')).join('')}</div>` + dvLegend() + dvHuyHTML(cur) + (dvPkBar(cur) || dvActBar(cur)) + (DV.clone && !DV.sel.length && !DV.selB ? `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>${DV.clone.nhom ? 'Thêm vé cho:' : 'Sao chép vé:'}</span> <b>${esc(DV.clone.ten)}</b>${DV.clone.nhom && DV.clone.chuyen === cur.id ? ' <span class="muted small">· vé thêm vào cùng nhóm, chung mã vé</span>' : ''}</div></div><div class="ab-ph"><span class="mv-hint">Chạm các ghế trống để đặt thêm vé với thông tin này</span></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>` : '') + (DV.sel.length ? `<div class="dv-selbar"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${DV.sel.length} vé:</span> <b>${DV.sel.map(esc).join(', ')}</b></div><button class="sb-st ${DV.selTT === 'tra' ? 'pd' : ''}" data-act="dvTT">${DV.selTT === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ'}</button><button class="sb-go" data-act="dvBookSel" aria-label="Tiếp tục">${ic('arrow')}</button></div><div class="dv-selpad"></div>` : '');
+        body = `<div class="dv-grid${gone ? ' is-gone' : ''}" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr))">${so.rows.map((r, i) => r.map(cell).join('') + (i === dI ? band : '')).join('')}</div>` + dvLegend() + dvHuyHTML(cur) + (dvPkBar(cur) || dvActBar(cur)) + (DV.clone && !DV.sel.length && !DV.selB ? `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>${DV.clone.nhom ? 'Thêm vé cho:' : 'Sao chép vé:'}</span> <b>${esc(DV.clone.ten)}</b>${DV.clone.nhom && DV.clone.chuyen === cur.id ? ' <span class="muted small">· vé thêm vào cùng nhóm, chung mã vé</span>' : ''}</div></div><div class="ab-ph"><span class="mv-hint">Chạm các ghế trống để đặt thêm vé với thông tin này</span></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>` : '') + (DV.sel.length ? `<div class="dv-selbar"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${DV.sel.length} vé:</span> <b>${DV.sel.map(esc).join(', ')}</b></div><button class="sb-st ${DV.selTT === 'tra' ? 'pd' : ''}" data-act="dvTT">${DV.selTT === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ'}</button><button class="sb-go" data-act="dvBookSel" aria-label="Tiếp tục">${ic('arrow')}</button></div><div class="dv-selpad"></div>` : '');
       } else if (DV.tab === 'hk') {
         const R = B.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
         body = R.length ? `<table class="dv-tbl"><tr><th>Ghế</th><th>Mã vé</th><th>Tên khách</th><th>SĐT</th><th>Điểm đón</th><th>Điểm trả</th><th class="r">Tiền vé</th><th>Tình trạng</th><th>Ghi chú</th></tr>${R.map(b => `<tr><td><b>${esc(b.ghe)}</b></td><td>${esc(b.ma || '')}</td><td>${esc(b.ten)}</td><td>${b.sdt ? `<a class="tel${callTelCls(b)}" href="tel:${esc(String(b.sdt).replace(/[^0-9+]/g, ''))}">${esc(b.sdt)}</a>` : ''}</td><td>${esc(b.diemDon || '')}</td><td>${esc(b.diemTra || '')}</td><td class="r">${F.money(dvTot(b))}</td><td>${b.tt === 'tra' ? 'Đã thanh toán' + (b.httt ? ' · ' + dvHT(b.httt) : '') : +b.coc ? 'Đã cọc ' + F.money(b.coc) : 'Giữ chỗ'}</td><td>${b.xuatCT ? '<b>[Xuất CT]</b> ' : ''}${callTag(b)} ${esc(b.ghiChu || '')}</td></tr>`).join('')}<tr><th colspan="6">Tổng ${R.length} khách</th><th class="r">${F.money(sum(R, b => dvTot(b)))}</th><th colspan="2"></th></tr></table>` : '<div class="muted">Chưa có hành khách.</div>';
@@ -13433,7 +13433,22 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T10:40';
+const APP_BUILD = '2026-11-05T11:00';
+addCSS(`
+/* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
+@media(min-width:901px){
+.dv{grid-template-columns:360px minmax(0,1fr);gap:14px}
+.dv-side{position:sticky;top:8px}
+.dv-grid{max-width:none!important;width:100%}
+.dv-body:has(.dv-grid){padding:14px 16px}
+.dv-seat{min-height:104px}
+.dv-rcards{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;margin:0 0 10px}.dv-rc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-rc{flex-direction:row;align-items:center;justify-content:space-between;min-height:0;padding:9px 14px;border-left-width:5px}
+.dv-rc b{font-size:15px;line-height:20px}.dv-rc span{font-size:12.5px;white-space:nowrap}
+.dv-trips{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+}
+@media(min-width:1600px){.dv{grid-template-columns:400px minmax(0,1fr)}.dv-seat{min-height:112px}}
+`);
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
