@@ -12828,7 +12828,7 @@ const BCVT = {
   act(a, b) {
     const ym = BCVT.ym || D.ymNow();
     if (a === 'xe') return BCVT.xe(b.dataset.id, ym);
-    if (a === 'go') { LC.ngay = b.dataset.d; const g = dhGrp(b.dataset.t); if (g) dhSel = [g]; BCVT._m && BCVT._m.close(); return App.go('dieuhanh'); }
+    if (a === 'go') { const g = dhGrp(b.dataset.t); BCVT._m && BCVT._m.close(); App.go('dieuhanh'); LC.ngay = b.dataset.d; if (g) dhSel = [g]; return App.render(); }
     if (a === 'close') return BCVT._m && BCVT._m.close();
     if (a === 'print') return Print.report({ title: 'BÁO CÁO THỰC HIỆN VẬN TẢI HÀNH KHÁCH TUYẾN CỐ ĐỊNH', sub: F.month(ym), cols: BCVT.cols, rows: BCVT.rows(ym), landscape: true, signs: ['Người lập biểu', 'Người điều hành vận tải', 'Giám đốc'] });
     if (a === 'xls') return XLSX.save('Bao cao van tai ' + ym, [xSheet('Theo tuyến', 'BÁO CÁO THỰC HIỆN VẬN TẢI TUYẾN CỐ ĐỊNH · ' + F.month(ym), BCVT.cols, BCVT.rows(ym)), xSheet('Theo xe', 'SẢN LƯỢNG THEO XE · ' + F.month(ym), [{ key: 'bks', label: 'Biển số' }, { key: 'tuyenTxt', label: 'Tuyến' }, { key: 'ch', label: 'Số chuyến' }, { key: 'hk', label: 'Hành khách' }], BCVT.data(ym).V.map(v => ({ ...v, tuyenTxt: [...v.tuyen].join(', ') })))]);
@@ -13415,7 +13415,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T09:45';
+const APP_BUILD = '2026-11-05T09:55';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
