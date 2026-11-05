@@ -13508,7 +13508,27 @@ document.addEventListener('change', e => {
     toast('Đã tự cắt thẳng ảnh thẻ về đúng khổ', 'ok'); return IDC.read(kind, c, root);
   }).catch(err => { console.warn('IDC', err); resizeImage(file, +el.dataset.max || 1000).then(u => { box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; }).catch(() => toast('Không đọc được ảnh', 'err')); });
 }, true);
-const APP_BUILD = '2026-11-05T12:25';
+
+/* ===== Zalo Bot: nhân viên nhắn tin cho bot (mã NV, SĐT hoặc họ tên) → tự điền Zalo Chat ID vào hồ sơ; ID đã có thì bỏ qua ===== */
+ZB.autoLink = async function (quiet) {
+  if (ZB._al || !ZB.ready(ZB.cfg())) return 0; ZB._al = true;
+  try {
+    const list = (await ZB.call({ action: 'list' })).list || [], dg = x => String(x || '').replace(/\D/g, ''), nm = x => String(x || '').normalize('NFC').toUpperCase().replace(/\s+/g, ' ').trim();
+    const emps = DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'); let n = 0, names = [];
+    list.forEach(u => {
+      const id = String(u.chat_id || ''); if (!id || DB.employees.some(e => e.zaloId === id)) return;   // ID đã có trong hồ sơ: bỏ qua
+      const t = String(u.text || '').toUpperCase(), d = dg(u.text), free = emps.filter(e => !e.zaloId);
+      let e = free.find(x => x.ma && new RegExp('(^|[^A-Z0-9])' + String(x.ma).toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^A-Z0-9])').test(t)) || (d.length >= 9 && free.find(x => dg(x.sdt).length >= 9 && dg(x.sdt).slice(-9) === d.slice(-9)));
+      if (!e) { const q = [nm(u.text), nm(u.name)].filter(Boolean), m = free.filter(x => x.ten && q.includes(nm(x.ten))); if (m.length === 1) e = m[0]; }
+      if (e) { e.zaloId = id; n++; names.push(e.ten); }
+    });
+    if (n) { App.changed(); if (!quiet || Auth.user) toast(`Zalo Bot: đã tự lấy Chat ID cho ${n} nhân viên (${names.slice(0, 3).join(', ')}${n > 3 ? '…' : ''})`, 'ok', 6000); }
+    return n;
+  } catch (e) { if (!quiet) toast(esc(e.message), 'err', 6000); return 0; } finally { ZB._al = false; }
+};
+setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 5 * 60000);
+{ const zd0 = HUB.zDraw; HUB.zDraw = function () { const r = zd0.apply(this, arguments); ZB.autoLink(true).then(n => { if (n && HUB.el && HUB.tab === 'zalo') try { zd0.apply(HUB, []); } catch (e) { } }); return r; }; }
+const APP_BUILD = '2026-11-05T12:35';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
