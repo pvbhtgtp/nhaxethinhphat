@@ -2366,77 +2366,6 @@ Object.assign(ACT, {
   ccClear: async () => { if (await Modal.confirm(`Xóa toàn bộ chấm công ${F.month(UI.m)}${vCham.sel().length ? ' của ' + esc(vCham.sel().join(', ')) : ''}?`, { ok: 'Xóa', danger: true })) { vCham.emps().forEach(e => { if (DB.cham[UI.m]) delete DB.cham[UI.m][e.id]; }); App.changed(); } }
 });
 
-/* ---------- Bảng lương ---------- */
-const PCOLS = [
-  { k: 'ma', l: 'Mã NV', t: 'text' }, { k: 'ten', l: 'Họ và tên', t: 'text', w: 24 },
-  { k: 'luongCB', l: 'Lương cơ bản', t: 'money', g: 'Thu nhập' }, { k: 'cong', l: 'Công hưởng lương', t: 'num', g: 'Thu nhập' }, { k: 'luongCong', l: 'Lương theo công', t: 'money', g: 'Thu nhập' },
-  { k: 'pcCT', l: 'PC chịu thuế', t: 'money', g: 'Thu nhập' }, { k: 'pcKT', l: 'PC không thuế', t: 'money', g: 'Thu nhập' }, { k: 'ot', l: 'Giờ OT', t: 'num', g: 'Thu nhập' }, { k: 'tienOT', l: 'Tiền OT', t: 'money', g: 'Thu nhập' },
-  { k: 'thuong', l: 'Thưởng', t: 'money', g: 'Thu nhập', input: 1 }, { k: 'gross', l: 'Tổng thu nhập', t: 'money', g: 'Thu nhập', b: 1 },
-  { k: 'luongBH', l: 'Lương đóng BH', t: 'money', g: 'Bảo hiểm NLĐ' }, { k: 'bhxh', l: 'BHXH', t: 'money', g: 'Bảo hiểm NLĐ' }, { k: 'bhyt', l: 'BHYT', t: 'money', g: 'Bảo hiểm NLĐ' }, { k: 'bhtn', l: 'BHTN', t: 'money', g: 'Bảo hiểm NLĐ' },
-  { k: 'tnChiuThue', l: 'TN chịu thuế', t: 'money', g: 'Thuế TNCN' }, { k: 'soNPT', l: 'Số NPT', t: 'int', g: 'Thuế TNCN' }, { k: 'giamTru', l: 'Giảm trừ gia cảnh', t: 'money', g: 'Thuế TNCN' }, { k: 'tnTinhThue', l: 'TN tính thuế', t: 'money', g: 'Thuế TNCN' }, { k: 'thue', l: 'Thuế TNCN', t: 'money', g: 'Thuế TNCN', b: 1 },
-  { k: 'tamUng', l: 'Tạm ứng', t: 'money', g: 'Khấu trừ', input: 1 }, { k: 'khauTru', l: 'Khấu trừ khác', t: 'money', g: 'Khấu trừ', input: 1 },
-  { k: 'thucLinh', l: 'THỰC LĨNH', t: 'money', b: 1 }
-];
-const vLuong = {
-  title: 'Bảng lương', icon: 'wallet', desc: 'Tự tính lương theo công, OT, BHXH, thuế TNCN. Ô màu vàng nhập trực tiếp.',
-  tools: () => monthTool() + `<button class="btn" data-act="slipAll">${ic('receipt')} In phiếu lương</button>` + (ZB.admin() ? `<button class="btn" data-act="zbOpen">${ic('send')} Gửi Zalo</button>` : ''), after: bindMonth,
-  render(el) {
-    App.subtitle = F.month(UI.m);
-    el.innerHTML = `<div class="tbl-card"><div class="tbl-tools"><div class="search">${ic('search')}<input class="inp" id="plQ" placeholder="Tìm nhân viên..." value="${esc(UI.plq || '')}"></div>${selectHTML('pbF', [{ value: '', label: 'Tất cả phòng ban' }, ...S().phongBan], UI.pb)}${(() => { const T = allTuyen(UI.m), L = payroll(UI.m, UI.pb), n = t => L.filter(x => x.tuyenChinh === t).length; return selectHTML('tuF', [{ value: '', label: 'Tất cả nhóm tuyến' }, ...[...new Set([...T, ...L.map(x => x.tuyenChinh).filter(Boolean)])].map(t => ({ value: t, label: `${t} (${n(t)})` }))], UI.plTuyen === '__none' ? '' : UI.plTuyen || ''); })()}<span class="grow"></span><span class="small muted">Thuế theo biểu 5 bậc, giảm trừ ${F.short(S().gtBanThan)}/NPT ${F.short(S().gtNPT)}</span></div><div class="tbl-wrap" id="plW"></div><div class="tbl-pager" id="plP"></div></div>`;
-    const pst = pgState('pl', 20);
-    onVal('pbF', v => { UI.pb = v; pst.page = 0; App.render(); });
-    onVal('tuF', v => { UI.plTuyen = v; pst.page = 0; App.render(); });
-    bindPager($('#plP'), pst, vLuong.draw);
-    $('#plQ').addEventListener('input', e => { UI.plq = e.target.value; pst.page = 0; vLuong.draw(); });
-    $('#plW').addEventListener('change', e => {
-      const i = e.target.closest('[data-k]'); if (!i) return;
-      const ym = UI.m; DB.extra[ym] = DB.extra[ym] || {}; const x = DB.extra[ym][i.dataset.e] = DB.extra[ym][i.dataset.e] || {};
-      x[i.dataset.k] = F.parse(i.value); Store.changed(); keepFocus(vLuong.draw);
-    });
-    vLuong.draw();
-  },
-  list() { const q = (UI.plq || '').toLowerCase(), tu = UI.plTuyen === '__none' ? '' : UI.plTuyen || ''; return payroll(UI.m, UI.pb).filter(x => (!q || (x.ten + ' ' + x.ma + ' ' + x.phongBan).toLowerCase().includes(q)) && (!tu || (tu === '__none' ? !x.tuyenChinh : x.tuyenChinh === tu))); },
-  draw() {
-    const L = vLuong.list(), w = $('#plW'); if (!w) return;
-    const pst = pgState('pl', 20), V = pageSlice(pst, L), off = pst.page * pst.size;
-    $('#plP').innerHTML = pagerHTML(pst, L.length, ' · dòng Tổng cộng tính cho tất cả');
-    // 2 cột đầu (STT, Họ tên) đứng yên khi cuộn ngang; cột Mã NV được ẩn trên màn hình
-    const LEFT = [0, 44];
-    const sk = (i, extra = '') => i <= 1 ? ` class="stk ${extra}" style="left:${LEFT[i]}px;${i < 1 ? 'min-width:44px;max-width:44px;' : 'min-width:170px;'}${i === 1 ? 'box-shadow:inset -1px 0 0 #e3e7ef' : ''}"` : (extra ? ` class="${extra}"` : '');
-    const VCOLS = PCOLS.filter(c => c.k !== 'ma');
-    const fmtv = (c, v) => c.t === 'num' ? F.num(v) : c.t === 'int' ? v : c.t === 'text' ? esc(v) : F.money(v);
-    const al = c => c.t !== 'text' ? 'r' : '';
-    let r1 = `<th${sk(0, 'c')} rowspan="2">STT</th>`, r2 = '';
-    VCOLS.forEach((c, i) => {
-      if (!c.g) r1 += `<th${sk(i + 1, al(c))} rowspan="2">${c.l}</th>`;
-      else { if (!i || VCOLS[i - 1].g !== c.g) r1 += `<th class="c grp" colspan="${VCOLS.filter(x => x.g === c.g).length}">${c.g}</th>`; r2 += `<th class="${al(c)}" style="top:33px">${c.l}</th>`; }
-    });
-    const totCell = c => c.t === 'money' && !['luongCB', 'luongBH'].includes(c.k) ? F.money(sum(L, x => x[c.k])) : ['cong', 'ot'].includes(c.k) ? F.num(sum(L, x => x[c.k])) : '';
-    w.innerHTML = `<table class="tbl compact pl"><thead><tr style="height:33px">${r1}<th rowspan="2"></th></tr><tr>${r2}</tr></thead>
-      <tbody>${V.map((x, ri) => `<tr><td${sk(0, 'c')}>${off + ri + 1}</td>${VCOLS.map((c, i) => c.input
-        ? `<td class="in"><input data-k="${c.k}" data-e="${x.id}" value="${x[c.k] ? F.money(x[c.k]) : ''}" data-money inputmode="numeric" placeholder="0"></td>`
-        : `<td${sk(i + 1, al(c) + (c.k === 'thucLinh' ? ' net' : ''))}>${c.k === 'ten' ? `<b>${esc(x.ten)}</b>` : c.b ? `<b>${fmtv(c, x[c.k])}</b>` : fmtv(c, x[c.k])}${c.k === 'luongBH' && x.noBH && x.luongBH ? ' <span class="badge b-amber" data-tip="Nghỉ không lương từ 14 ngày trở lên: tháng này không đóng BH">!</span>' : ''}${c.k === 'luongCong' && x.coDinh ? ' <span class="badge b-p" data-tip="Lương cố định: trả đủ mức này, không tính theo công">CĐ</span>' : ''}</td>`).join('')}<td class="act"><button class="ibtn" data-act="slip" data-id="${x.id}" data-tip="In phiếu lương">${ic('receipt')}</button></td></tr>`).join('') || `<tr><td colspan="30"><div class="empty">Không có nhân viên trong kỳ này</div></td></tr>`}</tbody>
-      ${L.length ? `<tfoot><tr><td${sk(0)}></td>${VCOLS.map((c, i) => `<td${sk(i + 1, al(c))}>${i === 0 ? 'TỔNG CỘNG' : totCell(c)}</td>`).join('')}<td></td></tr></tfoot>` : ''}</table>`;
-  },
-  excel() {
-    const L = vLuong.list();
-    const cols = [{ label: 'STT', type: 'int', width: 6 }, ...PCOLS.map(c => ({ label: c.l, type: c.t, sum: c.t === 'money' && !['luongCB', 'luongBH'].includes(c.k) || ['cong', 'ot'].includes(c.k), width: c.w || (c.t === 'money' ? 14 : c.t === 'text' ? 16 : 9) }))];
-    const rows = L.map((x, i) => [i + 1, ...PCOLS.map(c => x[c.k])]);
-    const s = S();
-    const dn = L.map((x, i) => [i + 1, x.ma, x.ten, x.luongBH, x.bhxh, x.bhyt, x.bhtn, x.bhNLD, x.bdxh, x.bdyt, x.bdtn, x.kpcd, x.bhDN, x.bhNLD + x.bhDN]);
-    XLSX.save(`Bang luong ${UI.m}`, [
-      { name: 'Bảng lương ' + UI.m, title: 'BẢNG THANH TOÁN TIỀN LƯƠNG ' + F.month(UI.m).toUpperCase(), subtitles: [companyLine(), `Công chuẩn ${s.congChuan} ngày · Giảm trừ bản thân ${F.money(s.gtBanThan)} · NPT ${F.money(s.gtNPT)}/người · BH NLĐ ${s.bhxhNLD}% + ${s.bhytNLD}% + ${s.bhtnNLD}%`], columns: cols, rows, totals: true, freezeCols: 3 },
-      { name: 'Bảo hiểm ' + UI.m, title: 'BẢNG TRÍCH NỘP BẢO HIỂM BẮT BUỘC ' + F.month(UI.m).toUpperCase(), subtitles: [companyLine()], columns: [{ label: 'STT', type: 'int', width: 6 }, { label: 'Mã NV', width: 9 }, { label: 'Họ và tên', width: 24 }, { label: 'Lương đóng BH', type: 'money' }, { label: `BHXH NLĐ ${s.bhxhNLD}%`, type: 'money', sum: true }, { label: `BHYT NLĐ ${s.bhytNLD}%`, type: 'money', sum: true }, { label: `BHTN NLĐ ${s.bhtnNLD}%`, type: 'money', sum: true }, { label: 'Cộng NLĐ', type: 'money', sum: true }, { label: `BHXH DN ${s.bhxhDN}%`, type: 'money', sum: true }, { label: `BHYT DN ${s.bhytDN}%`, type: 'money', sum: true }, { label: `BHTN DN ${s.bhtnDN}%`, type: 'money', sum: true }, { label: `KPCĐ ${s.kpcdDN}%`, type: 'money', sum: true }, { label: 'Cộng DN', type: 'money', sum: true }, { label: 'Tổng phải nộp', type: 'money', sum: true }], rows: dn, totals: true }
-    ]);
-  },
-  print() {
-    const L = vLuong.list();
-    const pc = PCOLS.filter(c => !['phongBan', 'tuyen', 'luongBH', 'pcKT', 'ot', 'soNPT', 'tnChiuThue'].includes(c.k));
-    const body = L.map((x, i) => `<tr><td class="c">${i + 1}</td>${pc.map(c => `<td class="${c.t === 'text' ? '' : 'r'}">${c.t === 'text' ? esc(x[c.k]) : c.t === 'num' ? F.num(x[c.k]) : F.money(x[c.k])}</td>`).join('')}<td style="width:60px"></td></tr>`).join('');
-    const foot = `<tr><td></td>${pc.map((c, i) => `<td class="r">${i === 1 ? 'Tổng cộng' : c.t === 'money' && c.k !== 'luongCB' ? F.money(sum(L, x => x[c.k])) : ''}</td>`).join('')}<td></td></tr>`;
-    Print.run(`<div class="pr">${Print.head()}<h2>Bảng thanh toán tiền lương</h2><div class="pr-sub">${F.month(UI.m)}${UI.pb ? ' · ' + esc(UI.pb) : ''}</div><table><thead><tr><th>STT</th>${pc.map(c => `<th>${c.l}</th>`).join('')}<th>Ký nhận</th></tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table><div class="pr-note">Tổng số tiền thực lĩnh bằng chữ: <b>${docSo(sum(L, x => x.thucLinh))}</b>.</div>${Print.signs(['Người lập biểu', 'Kế toán trưởng', 'Giám đốc'])}</div>`, { landscape: true, title: 'Bang luong ' + UI.m });
-  }
-};
 /* ===== Zalo Bot: gửi thông báo lương tháng (chỉ Admin) =====
    Token bot nằm trong Google Apps Script (máy chủ trung gian), không nằm trong app.
    Cấu hình kết nối lưu riêng trên máy quản lý (localStorage), không ghi vào dữ liệu app. */
@@ -2634,7 +2563,7 @@ function slipHTML(x) {
 }
 Object.assign(ACT, {
   slip: d => { const x = payroll(UI.m).find(p => p.id === d.id); if (x) Print.run(`<div class="pr">${slipHTML(x)}</div>`, { title: 'Phieu luong ' + x.ma + ' ' + UI.m }); },
-  slipAll: () => { const L = vLuong.list ? payroll(UI.m, UI.pb) : []; if (!L.length) return toast('Không có nhân viên', 'err'); Print.run(`<div class="pr">${L.map(slipHTML).join('')}</div>`, { title: 'Phieu luong ' + UI.m }); }
+  slipAll: () => { const L = payroll(UI.m, UI.pb); if (!L.length) return toast('Không có nhân viên', 'err'); Print.run(`<div class="pr">${L.map(slipHTML).join('')}</div>`, { title: 'Phieu luong ' + UI.m }); }
 });
 
 /* ---------- Mẫu quyết định bổ nhiệm người điều hành vận tải ---------- */
@@ -4052,102 +3981,6 @@ function routeKey(r) { return String(r || '').normalize('NFD').replace(/[\u0300-
 const ROUTE_ORDER = [/bien hoa.*vung tau/, /vung tau.*bien hoa/, /ho nai.*vung tau/, /vung tau.*ho nai/];
 function routeRank(r) { const k = routeKey(r), i = ROUTE_ORDER.findIndex(re => re.test(k)); return i < 0 ? 99 : i; }
 function routeCmp(a, b) { return (routeRank(a) - routeRank(b)) || String(a).localeCompare(String(b), 'vi'); }
-const gcRoutes = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))].sort(routeCmp);
-let gcTuyen = '';
-const gcRoutesNow = () => [...new Set(DB.giochay.map(g => g.tuyen).filter(Boolean))].sort(routeCmp);
-const gcCur = () => { const r = gcRoutesNow(); return r.includes(gcTuyen) ? gcTuyen : (r[0] || ''); };
-function gcForm(g) {
-  const isNew = !g;
-  if (isNew && !Auth.guard('giochay', 'add')) return;
-  const canEdit = isNew || Auth.can('giochay', 'edit'), canDel = Auth.can('giochay', 'del');
-  const m = Form.open({
-    title: isNew ? 'Thêm giờ chạy' : (canEdit ? 'Sửa giờ chạy ' : 'Xem giờ chạy ') + g.gio + ' · ' + g.tuyen, width: 640,
-    value: g || { gio: '', tuyen: gcCur() || '', tt: 'MỞ' },
-    fields: [
-      { key: 'tuyen', label: 'Tuyến', required: true, full: true, list: gcRoutes(), ph: 'VD: BIÊN HÒA ⇄ VŨNG TÀU' },
-      { key: 'gio', label: 'Giờ xuất bến', type: 'time', required: true },
-      { key: 'tt', label: 'Trạng thái', type: 'select', options: [{ value: 'MỞ', label: 'MỞ (nhận khách)' }, { value: 'ĐÓNG', label: 'ĐÓNG (không nhận khách)' }] },
-      { key: 'xeId', label: 'Số xe', type: 'select', blank: '(Chưa gán xe)', options: () => DB.vehicles.filter(v => !v.ngung || v.id === (g && g.xeId)).map(v => ({ value: v.id, label: v.bks })) },
-      { key: 'laiXe', label: 'Tên lái xe', type: 'select', blank: '(Chưa gán lái xe)', options: () => vcDrivers().map(e => ({ value: e.id, label: e.ten })) }
-    ],
-    saveText: 'Lưu giờ chạy',
-    onSave: d => {
-      if (!d.tuyen || !d.gio) { toast('Vui lòng nhập tuyến và giờ xuất bến', 'err'); return false; }
-      d.tuyen = String(d.tuyen).trim().toUpperCase();
-      if (DB.giochay.some(x => x !== g && x.tuyen === d.tuyen && x.gio === d.gio)) { toast('Tuyến này đã có chuyến giờ ' + d.gio, 'err'); return false; }
-      if (d.xeId) { const t = DB.giochay.find(x => x !== g && x.gio === d.gio && x.xeId === d.xeId); if (t) { toast('Xe này đã được gán chuyến ' + t.gio + ' tuyến ' + t.tuyen, 'err'); return false; } }
-      if (d.laiXe) { const t = DB.giochay.find(x => x !== g && x.gio === d.gio && x.laiXe === d.laiXe); if (t) { toast('Lái xe này đã chạy chuyến ' + t.gio + ' tuyến ' + t.tuyen, 'err'); return false; } }
-      if (isNew) DB.giochay.push({ id: uid(), ...d }); else Object.assign(g, d);
-      App.changed(); toast('Đã lưu giờ chạy', 'ok');
-    },
-    onDelete: isNew || !canDel ? null : () => { DB.giochay = DB.giochay.filter(x => x !== g); App.changed(); }
-  });
-  if (!canEdit) {
-    m.el.querySelectorAll('.modal-b input,.modal-b select,.modal-b textarea').forEach(i => i.disabled = true);
-    const s = m.el.querySelector('[data-save]'); if (s) s.remove();
-    const x = m.el.querySelector('[data-cancel]'); if (x) x.textContent = 'Đóng';
-  }
-}
-const gcCols = [
-  { key: 'tuyen', label: 'Tuyến', render: g => `<b>${esc(g.tuyen)}</b>` },
-  { key: 'gio', label: 'Giờ', align: 'c', render: g => `<b>${esc(g.gio)}</b>` },
-  { key: 'bks', label: 'Số xe', val: g => gcXe(g).bks || '', render: g => gcXe(g).bks ? `<b>${esc(gcXe(g).bks)}</b>` : '<span class="muted">Chưa gán</span>' },
-  { key: 'laiXe', label: 'Tên lái xe', val: g => gcLai(g), render: g => gcLai(g) ? esc(gcLai(g)) : '<span class="muted">Chưa gán</span>' },
-  { key: 'tt', label: 'Mở/Đóng', align: 'c', val: g => g.tt, render: g => { const off = g.tt === 'ĐÓNG', can = Auth.can('giochay', 'edit'); return `<button class="ibtn" ${can ? `data-act="gcToggle" data-id="${g.id}"` : 'disabled'} data-tip="${off ? 'Đang ĐÓNG, bấm để mở' : 'Đang MỞ, bấm để đóng'}" style="width:auto;height:auto;padding:2px;background:none;color:${off ? '#dc2626' : '#16a34a'}"><span style="display:inline-block;width:22px;height:22px">${ic(off ? 'lock' : 'unlock')}</span></button>`; } }
-];
-const vGC = {
-  title: 'Giờ chạy', icon: 'clock', desc: 'Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến',
-  tools: () => `<button class="btn pri" data-act="gcAdd">${ic('plus')} Thêm giờ chạy</button><button class="btn" data-act="gcBulk">${ic('clock')} Thêm nhiều giờ</button>${Auth.can('giochay', 'edit') ? `<button class="btn" data-act="ttTuyen" title="Tên tuyến, cự ly, mã số tuyến, bến và hành trình in trên Lệnh vận chuyển">${ic('route')} Thông tin tuyến</button>` : ''}`,
-  render(el) {
-    const L = gcSorted(), R = gcRoutes(), nOpen = L.filter(g => g.tt !== 'ĐÓNG').length, nUn = L.filter(g => g.tt !== 'ĐÓNG' && (!g.xeId || !g.laiXe)).length;
-    const rows = gcCur() ? L.filter(g => g.tuyen === gcCur()) : L;
-    el.insertAdjacentHTML('beforeend', (R.length ? `<div class="row" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="gcRouteSel" data-csq="1" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${gcCur() === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '') + '<div id="gcT"></div>');
-    const rs = $('#gcRouteSel', el); if (rs) rs.onchange = () => { gcTuyen = rs.value; App.render(); };
-    table($('#gcT', el), {
-      id: 'gc', columns: gcCols, rows, ph: 'Tìm tuyến, giờ, số xe, lái xe...', empty: 'Chưa có giờ chạy. Bấm "Thêm giờ chạy".', onRow: gcForm,
-      searchText: g => [g.tuyen, g.gio, gcXe(g).bks, gcLai(g)].join(' '),
-      rowClass: g => g.tt === 'ĐÓNG' ? 'veh-off' : '',
-      tools: `<span class="badge b-green">${nOpen} chuyến mở</span>${nUn ? `<span class="badge b-amber">${nUn} chuyến chưa gán đủ xe và lái xe</span>` : ''}<span class="grow"></span><span class="muted small">Bấm vào dòng để sửa</span>`,
-      actions: g => rowBtns(g.id, 'gcEdit', 'gcDel')
-    });
-  },
-  excel() { XLSX.save('Gio chay', [xSheet('Giờ chạy', 'LỊCH GIỜ CHẠY', gcCols, gcSorted())]); },
-  print() { Print.report({ title: 'Lịch giờ chạy' + (gcCur() ? ' · ' + gcCur() : ''), cols: gcCols.map(c => c.key === 'tt' ? { ...c, render: null } : c), rows: gcCur() ? gcSorted().filter(g => g.tuyen === gcCur()) : gcSorted(), signs: ['Người lập', 'Giám đốc'] }); }
-};
-Object.assign(ACT, {
-  gcBulk: () => {
-    const R = gcRoutes();
-    Form.open({ title: 'Thêm nhiều giờ chạy', width: 600, saveText: 'Thêm giờ', cols: 1,
-      value: { tuyen: gcCur() || (R.length === 1 ? R[0] : ''), tt: 'MỞ' },
-      fields: [
-        { key: 'tuyen', label: 'Tuyến', type: 'select', blank: '(Chọn tuyến)', options: [{ value: '*', label: 'Tất cả các tuyến' }, ...R.map(r => ({ value: r, label: r }))], hint: 'Chọn "Tất cả các tuyến" để thêm giờ cho mọi tuyến cùng lúc' },
-        { key: 'newTuyen', label: 'Hoặc nhập tuyến mới', hint: 'VD: BIÊN HÒA ⇄ LONG HẢI' },
-        { key: 'gios', label: 'Các giờ xuất bến', type: 'textarea', rows: 3, required: true, ph: '05:00, 05:30, 06:00', hint: 'Nhập nhiều giờ, cách nhau bằng dấu phẩy hoặc xuống dòng. Định dạng 24 giờ, VD 5:30 hoặc 17:00' },
-        { key: 'tt', label: 'Trạng thái', type: 'select', options: [{ value: 'MỞ', label: 'MỞ (nhận khách)' }, { value: 'ĐÓNG', label: 'ĐÓNG (không nhận khách)' }] }
-      ],
-      onSave: d => {
-        const nt = String(d.newTuyen || '').trim().toUpperCase();
-        const routes = nt ? [nt] : d.tuyen === '*' ? R : d.tuyen ? [d.tuyen] : [];
-        if (!routes.length) { toast('Vui lòng chọn hoặc nhập tuyến', 'err'); return false; }
-        const times = [], bad = [];
-        String(d.gios || '').split(/[\s,;]+/).filter(Boolean).forEach(s => {
-          const m = s.match(/^(\d{1,2})[:hH.](\d{2})$/) || s.match(/^(\d{1,2})[hH]$/);
-          const hh = m ? +m[1] : -1, mm = m && m[2] ? +m[2] : 0;
-          if (hh < 0 || hh > 23 || mm > 59) bad.push(s); else times.push(String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'));
-        });
-        if (bad.length) { toast('Giờ không hợp lệ: ' + bad.join(', '), 'err'); return false; }
-        if (!times.length) { toast('Vui lòng nhập ít nhất một giờ', 'err'); return false; }
-        let n = 0, skip = 0;
-        routes.forEach(r => [...new Set(times)].forEach(t => { if (DB.giochay.some(x => x.tuyen === r && x.gio === t)) skip++; else { DB.giochay.push({ id: uid(), gio: t, tuyen: r, xeId: '', laiXe: '', tt: d.tt || 'MỞ' }); n++; } }));
-        App.changed(); toast(`Đã thêm ${n} chuyến${skip ? ', bỏ qua ' + skip + ' chuyến đã có' : ''}`, 'ok');
-      } });
-  },
-  gcAdd: () => gcForm(), gcEdit: d => gcForm(gcById(d.id)),
-  gcRoute: d => { gcTuyen = d.r || ''; App.render(); },
-  gcToggle: d => { const g = gcById(d.id); if (!g) return; g.tt = g.tt === 'ĐÓNG' ? 'MỞ' : 'ĐÓNG'; App.changed(); },
-  gcDel: async d => { const g = gcById(d.id); if (g && await Modal.confirm(`Xóa chuyến <b>${esc(g.gio)}</b> tuyến <b>${esc(g.tuyen)}</b>?`, { ok: 'Xóa', danger: true })) { DB.giochay = DB.giochay.filter(x => x !== g); App.changed(); } }
-});
-
 /* ===== Lịch chạy ===== */
 const LC = { ngay: null };
 const lcGone = l => { const t = new Date(l.ngay + 'T' + (l.gio || '00:00') + ':00').getTime(); return !isNaN(t) && Date.now() > t + 20 * 60000; };
@@ -7434,7 +7267,7 @@ const CFG = {
     { group: 'Xe & nhiên liệu', items: ['phuongtien', 'nhienlieu', 'suachua'] },
     { group: 'Nhân sự & lương', items: ['nhanvien', 'lylich', 'chamcong', 'bangluong', 'hopdong', 'thue'] },
     { group: 'Thiết lập', items: ['caidat', 'users'] }],
-  views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: vGC, banggia: MODL.stub('banggia', {"title": "Bảng giá vé", "icon": "tag", "desc": "Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi"}), suachua: MODL.stub('suachua', {"title": "Sửa chữa", "icon": "wrench", "desc": "Phiếu sửa chữa phương tiện: nội dung, số lượng, đơn giá và chi phí theo xe"}), nhienlieu: MODL.stub('nhienlieu', { title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe' }), lylich: MODL.stub('lylich', {"title": "Lý lịch hành nghề", "icon": "idcard", "desc": "Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn"}), kmxe: MODL.stub('kmxe', {"title": "Km xe", "icon": "trend", "desc": "Thống kê km mỗi xe đã chạy theo ngày, tuần, tháng, năm (nhập báo cáo từ Skysoft)"}), lichchay: vLC, dieuhanh: vDH, hdvc: vVC, hopdong: vHD, chamcong: vCham, bangluong: vLuong, thue: MODL.stub('thue', {"title": "Thuế TNCN & Bảo hiểm", "label": "Thuế & bảo hiểm", "icon": "percent", "desc": "Tổng hợp theo năm và công cụ tính lương Gross / Net"}), caidat: vSet, users: vUsers }
+  views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: MODL.stub('giochay', {"title": "Giờ chạy", "icon": "clock", "desc": "Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến"}), banggia: MODL.stub('banggia', {"title": "Bảng giá vé", "icon": "tag", "desc": "Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi"}), suachua: MODL.stub('suachua', {"title": "Sửa chữa", "icon": "wrench", "desc": "Phiếu sửa chữa phương tiện: nội dung, số lượng, đơn giá và chi phí theo xe"}), nhienlieu: MODL.stub('nhienlieu', { title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe' }), lylich: MODL.stub('lylich', {"title": "Lý lịch hành nghề", "icon": "idcard", "desc": "Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn"}), kmxe: MODL.stub('kmxe', {"title": "Km xe", "icon": "trend", "desc": "Thống kê km mỗi xe đã chạy theo ngày, tuần, tháng, năm (nhập báo cáo từ Skysoft)"}), lichchay: vLC, dieuhanh: vDH, hdvc: vVC, hopdong: vHD, chamcong: vCham, bangluong: MODL.stub('bangluong', {"title": "Bảng lương", "icon": "wallet", "desc": "Tự tính lương theo công, OT, BHXH, thuế TNCN. Ô màu vàng nhập trực tiếp."}), thue: MODL.stub('thue', {"title": "Thuế TNCN & Bảo hiểm", "label": "Thuế & bảo hiểm", "icon": "percent", "desc": "Tổng hợp theo năm và công cụ tính lương Gross / Net"}), caidat: vSet, users: vUsers }
 };
 const Shell = {
   ids: ['dashboard', 'dieuhanh', 'lichchay', 'chamcong'], short: { dashboard: 'Tổng quan', dieuhanh: 'Điều hành', lichchay: 'Đặt vé', chamcong: 'Chấm công' },
@@ -12508,7 +12341,7 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T22:00';
+const APP_BUILD = '2026-11-05T22:15';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
