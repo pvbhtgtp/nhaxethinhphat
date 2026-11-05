@@ -7029,7 +7029,17 @@ service cloud.firestore {
     function acl() { return get(/databases/$(database)/documents/nhaxe_acl/$(request.auth.uid)).data; }
     function member() { return request.auth != null && exists(/databases/$(database)/documents/nhaxe_acl/$(request.auth.uid)) && acl().active == true; }
     function admin() { return owner() || (member() && acl().role == 'admin'); }
-    match /nhaxe/{doc} { allow read, write: if owner() || member(); }
+    function user() { return owner() || member(); }
+    // meta: chỉ ghi được khi nối tiếp đúng phiên bản đang có (chặn bản app cũ, chặn ghi đè dữ liệu cũ). Admin được ghi đè khi cần khôi phục.
+    function metaOk() {
+      return resource == null
+        || (request.resource.data.ver == resource.data.ver + 1 && request.resource.data.base == resource.data.ver);
+    }
+    match /nhaxe/{doc} {
+      allow read: if user();
+      allow create, update: if admin() || (user() && (doc != 'meta' || metaOk()));
+      allow delete: if admin() || (user() && doc != 'meta');
+    }
     match /nhaxe_acl/{uid} { allow read: if request.auth != null && (request.auth.uid == uid || admin()); allow write: if admin(); }
     match /nhaxe_dir/{id} { allow get: if true; allow list: if false; allow write: if admin(); }
   }
@@ -12210,7 +12220,7 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T22:50';
+const APP_BUILD = '2026-11-05T22:55';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
