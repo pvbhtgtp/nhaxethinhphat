@@ -3979,7 +3979,7 @@ const Lock = {
   release(t, gs) { if (!Lock.col) return; [].concat(gs).forEach(g => { try { Lock.col.doc(Lock.key(t, g)).acquire({ holder: Lock.sid, ttlMs: 1000, data: { exp: 0 } }).catch(() => { }); } catch (e) { } }); }
 };
 const lockMsg = (g, o) => 'Ghế ' + g + ' đang được ' + ((o && o.name) || 'nhân viên khác') + ' thao tác';
-function dvSetB(b) { const o = DB.datve.find(x => x.id === DV.selB); if (o) dvGrp(o).forEach(x => Lock.release(x.chuyen, x.ghe)); DV.selB = b ? b.id : null; return b ? Promise.all(dvGrp(b).map(x => Lock.take(x.chuyen, x.ghe))).then(r => r.every(Boolean)) : Promise.resolve(true); }
+function dvSetB(b) { DV.one = null; const o = DB.datve.find(x => x.id === DV.selB); if (o) dvGrp(o).forEach(x => Lock.release(x.chuyen, x.ghe)); DV.selB = b ? b.id : null; return b ? Promise.all(dvGrp(b).map(x => Lock.take(x.chuyen, x.ghe))).then(r => r.every(Boolean)) : Promise.resolve(true); }
 const DV = { ngay: null, trip: null, tab: 'ghe', tuyen: '', multi: false, sel: [], selTrip: null };
 const dvAllDay = () => DB.lichchay.filter(l => l.ngay === lcDay() && !l.khoa);   // chuyến khóa ở Điều hành không bán vé
 const dvRoutes = () => [...new Set(dvAllDay().map(l => l.tuyen))].sort(routeCmp);
@@ -4216,9 +4216,9 @@ function dvPrintTC(G, t) {
 }
 function dvCancelGrp(G) { const huy = { tg: dvLog.now(), nguoi: dvLog.who() }; G.forEach(x => { x.huy = { ...huy }; (x.lichSu = x.lichSu || []).push({ tg: huy.tg, nguoi: huy.nguoi, nd: 'Hủy vé' + (G.length > 1 ? ' (cả nhóm ' + G.length + ' vé)' : '') }); }); }
 function dvBAct(k) {
-  const b = DB.datve.find(x => x.id === DV.selB); if (!b) return; const t = dvTripOf(b); if (!t.id) return; const G = dvGrp(b);
+  const b = DB.datve.find(x => x.id === DV.selB); if (!b) return; const t = dvTripOf(b); if (!t.id) return; const one = DV.one === b.id, G = one ? [b] : dvGrp(b);
   const log = (x, nd) => (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd });
-  if (k === 'sua') return dvForm(t, b);
+  if (k === 'sua') return dvForm(t, b, null, one);
   if (k === 'ls') return dvHistory(G, t);
   if (k === 'in') return dvPrintTicket(G, t);
   if (k === 'tc') return dvPrintTC(G, t);
@@ -4819,6 +4819,7 @@ addCSS(`.dv-grid{perspective:1000px}
 const DV_QK = [['U', 'sua', 'Sửa vé'], ['M', 'doi', 'Chuyển vé'], ['P', 'tra', 'Thu tiền / bỏ thu tiền']];
 async function dvQKRun(b, k) {
   if (!b || b.huy) return;
+  const curG = dvGrp(DB.datve.find(x => x.id === DV.selB)); if (curG.length > 1 && curG.includes(b)) { DV.one = b.id; DV.selB = b.id; }
   if (DV.selB !== b.id) { const ok = await dvSetB(b); if (!ok) { DV.selB = null; return toast(lockMsg(b.ghe, Lock.other(b.chuyen, b.ghe)), 'err'); } }
   if (k === 'tra') { dvBAct('tra'); const G = dvGrp(b); toast((G.every(x => x.tt === 'tra') ? 'Đã thu tiền ' : 'Đã bỏ thu tiền ') + G.length + ' vé · ghế ' + dvSeatsTxt(G), 'ok'); return; }
   if (k === 'doi') { const st = window.scrollY; App.render(); window.scrollTo(0, st); }
@@ -4880,7 +4881,7 @@ Object.assign(ACT, {
   dvPrintMap: d => { const t = DB.lichchay.find(l => l.id === d.id); if (t) dvPrintMap(t); },
   dvRoute: d => { DV.tuyen = d.r || ''; DV.trip = null; App.render(); },
   dvTab: d => { DV.tab = d.t; App.render(); },
-  dvSeat: d => { const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; const b = d.b && DB.datve.find(x => x.id === d.b); if (b) { const lg = dvGrp(b).find(x => Lock.other(t.id, x.ghe)); if (lg) return toast(lockMsg(lg.ghe, Lock.other(t.id, lg.ghe)), 'err'); Lock.release(t.id, DV.sel); DV.sel = []; if (dvGrp(DB.datve.find(x => x.id === DV.selB)).includes(b)) { if (dvGrp(b).length > 1) return dvForm(t, b, null, true); dvSetB(null); } else { dvSetB(b).then(ok => { if (!ok) { dvSetB(null); toast('Có ghế vừa được nhân viên khác thao tác', 'err'); App.render(); } }); } App.render(); } else { const o = Lock.other(t.id, d.g); if (o) return toast(lockMsg(d.g, o), 'err'); dvForm(t, null, d.g); } },
+  dvSeat: d => { const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; const b = d.b && DB.datve.find(x => x.id === d.b); if (b) { const lg = dvGrp(b).find(x => Lock.other(t.id, x.ghe)); if (lg) return toast(lockMsg(lg.ghe, Lock.other(t.id, lg.ghe)), 'err'); Lock.release(t.id, DV.sel); DV.sel = []; if (dvGrp(DB.datve.find(x => x.id === DV.selB)).includes(b)) { if (dvGrp(b).length > 1 && DV.one !== b.id) { DV.one = b.id; DV.selB = b.id; } else { DV.one = null; dvSetB(null); } } else { dvSetB(b).then(ok => { if (!ok) { dvSetB(null); toast('Có ghế vừa được nhân viên khác thao tác', 'err'); App.render(); } }); } App.render(); } else { const o = Lock.other(t.id, d.g); if (o) return toast(lockMsg(d.g, o), 'err'); dvForm(t, null, d.g); } },
   dvMvPick: d => dvMvPick(d.g),
   dvMvCancel: () => dvMvEnd(),
   dvMvOther: () => { const b = DV.mvMode && DB.datve.find(x => x.id === DV.mvMode.id); if (b) dvMove(b); },
@@ -11959,10 +11960,10 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-ACT.dvOne = d => { const x = DB.datve.find(y => y.id === d.id), t = x && DB.lichchay.find(l => l.id === x.chuyen); if (t) dvForm(t, x, null, true); };
+ACT.dvOne = d => { const x = DB.datve.find(y => y.id === d.id); if (!x) return; if (DV.one === x.id) { DV.one = null; } else { DV.one = x.id; DV.selB = x.id; } const st = window.scrollY; App.render(); window.scrollTo(0, st); };
 Auth.ACT_PERM.dvOne = ['lichchay', 'view'];
-addCSS(`.dv-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 10px;margin-bottom:12px;font-size:13px}.dv-one>span{color:#0c4a6e;font-weight:600;margin-right:4px}.ab-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;font-size:12.5px;color:#475467}.ab-one button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:3px 10px;font-weight:700;cursor:pointer}.ab-one button:hover{border-color:#0369a1;color:#0369a1}`);
-const APP_BUILD = '2026-11-06T00:10';
+addCSS(`.dv-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 10px;margin-bottom:12px;font-size:13px}.dv-one>span{color:#0c4a6e;font-weight:600;margin-right:4px}.ab-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;font-size:12.5px;color:#475467}.ab-one button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:3px 10px;font-weight:700;cursor:pointer}.ab-one button:hover{border-color:#0369a1;color:#0369a1}.ab-one button.on{background:#0369a1;border-color:#0369a1;color:#fff}`);
+const APP_BUILD = '2026-11-06T00:25';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
