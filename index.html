@@ -2479,10 +2479,6 @@ const QD_F = () => [
   { key: 'trinhDo', label: 'Trình độ chuyên môn / chuyên ngành đào tạo', full: true, hint: 'Phải có bằng tốt nghiệp trung cấp trở lên về chuyên ngành vận tải hoặc trình độ cao đẳng, đại học trở lên đối với chuyên ngành khác theo quy định' },
   { key: 'thamNien', label: 'Thâm niên công tác trong lĩnh vực vận tải (năm)', type: 'number' }, { key: 'phuCap', label: 'Phụ cấp trách nhiệm / tháng (nếu có)', type: 'money' }
 ];
-function qdCard() {
-  const s = S(), q = Object.assign({ chucDanh: 'Người trực tiếp điều hành hoạt động vận tải', trinhDo: '', noi: 'Đồng Nai', ngayKy: D.today() }, s.qdBo || {});
-  return card('Mẫu quyết định bổ nhiệm người điều hành vận tải', `<p class="small muted" style="margin-top:0">Theo Nghị định 158/2024/NĐ-CP, đơn vị kinh doanh vận tải phải có người trực tiếp điều hành hoạt động vận tải. Chọn nhân viên, nhập các thông tin còn lại rồi in. Họ tên, ngày sinh, CCCD, địa chỉ tự lấy từ hồ sơ nhân viên.</p>${lpDocBtn('qdOpen', q.chucDanh ? 'Chức danh: ' + esc(q.chucDanh) : '')}`);
-}
 function qdPrint() {
   const box = $('#qdBox'); if (!box) return; const q = readForm(box, QD_F()), c = S().company || {};
   if (Auth.can('caidat', 'edit')) { S().qdBo = { ...q, nv: '' }; Store.changed(); }
@@ -2544,36 +2540,6 @@ const PCFG = {
   suffix() { try { return String((S().company || {}).kyHieuHD || 'TGTP').trim() || 'TGTP'; } catch (e) { return 'TGTP'; } },
   tag(t) { t = String(t || ''); if (!t) return t; const p = PCFG.suffix(); return t.toUpperCase().startsWith(p.toUpperCase() + ' - ') ? t : p + ' - ' + t; }   // tiền tố tên hồ sơ lưu trữ: TGTP - ...
 };
-function printCard() {
-  const st = S(); st.inCfg = { ...PCFG.DEF, ...(st.inCfg || {}) };
-  // hậu tố văn bản dùng chung với "Ký hiệu số HĐLĐ" (company.kyHieuHD), cỡ chữ vé K80 dùng chung với menu tài khoản (ve80.fs)
-  const o = new Proxy(st.inCfg, {
-    get: (t, k) => k === 'kyHieuHD' ? PCFG.suffix() : k === 'fs80' ? (+((S().ve80 || {}).fs) || 100) : t[k],
-    set: (t, k, v) => {
-      if (k === 'kyHieuHD') { const c = S().company = S().company || {}; c.kyHieuHD = String(v || '').trim().toUpperCase() || 'TGTP'; }
-      else if (k === 'fs80') { S().ve80 = { ...(S().ve80 || {}), fs: Math.min(140, Math.max(70, +v || 100)) }; }
-      else t[k] = v;
-      return true;
-    }
-  });
-  const fields = [
-    { type: 'section', label: 'Khổ giấy và phông chữ mặc định' },
-    { key: 'paper', label: 'Khổ giấy mặc định', type: 'select', options: [{ value: 'A4', label: 'A4 (210 × 297 mm)' }, { value: 'A5', label: 'A5 (148 × 210 mm)' }, { value: '80', label: 'K80 (rộng 80 mm, dài tự co theo nội dung)' }], hint: 'Bảng rộng (chấm công, lương, bảng kê) chỉ in A4 / A5' },
-    { key: 'font', label: 'Phông chữ văn bản in', type: 'select', options: PCFG.FONTS.map(f => ({ value: f, label: f.replace(/'/g, '') })), hint: 'Văn bản pháp lý chuẩn: Times New Roman' },
-    { key: 'fsDoc', label: 'Cỡ chữ văn bản (pt)', type: 'number', hint: 'Chuẩn văn bản hành chính: 13 – 14' },
-    { key: 'fs80', label: 'Cỡ chữ vé / phiếu K80 (%)', type: 'number', hint: '70 – 140. Nhỏ hơn thì tiết kiệm giấy' },
-    { type: 'section', label: 'Lề trang A4 / A5 (mm)' },
-    { key: 'mTop', label: 'Lề trên', type: 'number', hint: 'Chuẩn 20 – 25' }, { key: 'mBottom', label: 'Lề dưới', type: 'number', hint: 'Chuẩn 20 – 25' },
-    { key: 'mLeft', label: 'Lề trái', type: 'number', hint: 'Chuẩn 30 – 35' }, { key: 'mRight', label: 'Lề phải', type: 'number', hint: 'Chuẩn 15 – 20' },
-    { type: 'section', label: 'Đánh số văn bản và hồ sơ' },
-    { key: 'kyHieuHD', label: 'Hậu tố số văn bản (mã hồ sơ)', hint: 'Mặc định TGTP, ví dụ 01/QĐBN-TGTP. Dùng chung với Ký hiệu số HĐLĐ ở Thông tin công ty', full: true }
-  ];
-  return settingsCard('Quy tắc in', fields, o, 2, () => PCFG.css());
-}
-function paCard() {
-  const s = S(), q = Object.assign({ loaiXe: 'Ghế ngồi', noi: 'Đồng Nai', ngayKy: D.today() }, s.paKD || {});
-  return card('Mẫu phương án kinh doanh vận tải hành khách theo tuyến cố định', `<p class="small muted" style="margin-top:0">Nộp kèm hồ sơ đăng ký khai thác tuyến gửi Sở Giao thông vận tải. Tên đơn vị, giấy phép, số xe, số chỗ, số lái xe, giờ xuất bến từng đầu bến tự lấy từ dữ liệu app. Chọn tuyến, nhập phần còn lại rồi in.</p>${lpDocBtn('paOpen', 'Giờ xuất bến, số xe, số lái xe tự lấy từ app')}`);
-}
 function paPrint() {
   const box = $('#paBox'); if (!box) return; const q = readForm(box, PA_F()), c = S().company || {};
   if (!q.tuyen) return toast('Hãy chọn tuyến khai thác', 'err');
@@ -2643,10 +2609,6 @@ const NQ_F = () => [
   { type: 'section', label: 'Quy định bổ sung của công ty' },
   { key: 'boSung', label: 'Mỗi dòng là một khoản, in thành Điều riêng trước phần điều khoản thi hành', type: 'textarea', rows: 4, full: true, hint: 'Ví dụ: Lái xe phải tuân thủ thời gian lái xe liên tục không quá 4 giờ. Để trống nếu không có.' }
 ];
-function nqCard() {
-  const q = Object.assign({ ngayKy: D.today() }, NQ_DEF, S().nqLD || {});
-  return card('Nội quy lao động', `<p class="small muted" style="margin-top:0">Theo mẫu nội quy của công ty. Sửa các thông số cần thiết (giờ làm việc, ngày nghỉ, tỷ lệ làm thêm, kỷ luật...), thêm quy định riêng nếu cần rồi in. Nên đăng ký nội quy với cơ quan lao động khi công ty có từ 10 lao động trở lên.</p>${lpDocBtn('nqOpen', 'Làm việc ' + esc(q.gioNgay) + ' giờ/ngày, ' + esc(q.ngayTuan) + ' ngày/tuần')}`);
-}
 function nqRead() { const q = readForm($('#nqBox'), NQ_F()); return q; }
 function nqPrint(mode) {
   if (!$('#nqBox')) return; const raw = nqRead(), c = S().company || {};
@@ -2713,34 +2675,7 @@ function nqPrint(mode) {
 }
 Object.assign(ACT, { nqPrint: d => nqPrint(d.mode || 'both'), nqSave: () => { if (!Auth.guard('caidat', 'edit')) return; S().nqLD = nqRead(); Store.changed(); toast('Đã lưu nội quy', 'ok'); } });
 
-const LEGAL_FIELDS = [
-      { key: 'cccdGDSo', label: 'Số CCCD giám đốc' }, { key: 'gpkdSo', label: 'Số GPKD vận tải' }, { key: 'gpkdNgay', label: 'Ngày cấp GPKD vận tải', type: 'date' }, { key: 'gpkdNoiCap', label: 'Nơi cấp GPKD vận tải' },
-      { key: 'gpkdImg', label: 'Giấy phép kinh doanh', type: 'image', max: 2400, full: true, hint: 'Tải ảnh chụp hoặc quét giấy phép' },
-      { key: 'cccdGDTruoc', label: 'CCCD giám đốc (mặt trước)', type: 'image', max: 2400 }, { key: 'cccdGDSau', label: 'CCCD giám đốc (mặt sau)', type: 'image', max: 2400 },
-      { key: 'chenKy', label: 'Chèn chữ ký giám đốc và con dấu vào các bản in', type: 'checkbox', def: true, full: true },
-      { key: 'chuKyGD', label: 'Chữ ký giám đốc', type: 'image', max: 400, hint: 'Chụp trên giấy trắng, app tự tách nền, tự in vào hợp đồng' }, { key: 'conDau', label: 'Con dấu công ty', type: 'image', max: 400, hint: 'Chụp hoặc quét con dấu, app tự tách nền trắng' }];
 /* ---------- Cài đặt ---------- */
-const vSet = {
-  title: 'Cài đặt', icon: 'settings', desc: 'Thông tin công ty, công chuẩn, tỷ lệ bảo hiểm, biểu thuế TNCN', print: false,
-  render(el) {
-    const s = S();
-    el.innerHTML = `<div class="grid cols-2">
-      <div class="grid">${settingsCard('Thông tin công ty', Auth.can('users', 'view') ? [...COMPANY_FIELDS, { type: 'section', label: 'Hồ sơ pháp lý & chữ ký (chỉ Admin xem)' }, ...LEGAL_FIELDS] : COMPANY_FIELDS, s.company)}${atgtCard()}${qdCard()}${paCard()}${nqCard()}${printCard()}</div>
-      <div class="grid">
-        ${settingsCard('Chấm công & làm thêm', [{ key: 'congChuan', label: 'Công chuẩn / tháng', type: 'number' }, { key: 'gioCong', label: 'Số giờ / công', type: 'number' }, { key: 'heSoOT', label: 'Hệ số làm thêm giờ', type: 'number', hint: '1,5 ngày thường · 2 ngày nghỉ · 3 ngày lễ' }, { key: 'ngayNghi', label: 'Ngày nghỉ hằng tuần', type: 'select', options: [{ value: 'CN', label: 'Chủ nhật' }, { value: 'T7CN', label: 'Thứ 7 và Chủ nhật' }] }], s)}
-        ${settingsCard('Phòng ban', [{ key: 'pbText', label: 'Mỗi dòng một phòng ban', type: 'textarea', rows: 6, full: true }], { pbText: s.phongBan.join('\n') }, 2)}
-      </div>
-      ${bxCard()}${settingsCard('Bảo hiểm bắt buộc (%)', [{ key: 'luongCoSo', label: 'Lương cơ sở', type: 'money', hint: 'Trần BHXH, BHYT = 20 lần' }, { key: 'ltVung', label: 'Lương tối thiểu vùng', type: 'money', hint: 'Vùng I 5.310.000 (2026). Trần BHTN = 20 lần' },
-        { type: 'section', label: 'Người lao động đóng' }, { key: 'bhxhNLD', label: 'BHXH', type: 'number' }, { key: 'bhytNLD', label: 'BHYT', type: 'number' }, { key: 'bhtnNLD', label: 'BHTN', type: 'number' },
-        { type: 'section', label: 'Doanh nghiệp đóng' }, { key: 'bhxhDN', label: 'BHXH (gồm TNLĐ-BNN)', type: 'number' }, { key: 'bhytDN', label: 'BHYT', type: 'number' }, { key: 'bhtnDN', label: 'BHTN', type: 'number' }, { key: 'kpcdDN', label: 'Kinh phí công đoàn', type: 'number' }], s, 3)}
-      <div id="taxBox">${card('Thuế TNCN (biểu lũy tiến từng phần)', `<div class="form">${fieldHTML({ key: 'gtBanThan', label: 'Giảm trừ bản thân / tháng', type: 'money' }, s.gtBanThan)}${fieldHTML({ key: 'gtNPT', label: 'Giảm trừ mỗi người phụ thuộc', type: 'money' }, s.gtNPT)}</div>
-        <table class="tbl compact bac mt"><thead><tr><th>Bậc</th><th class="r">Thu nhập tính thuế đến (đồng/tháng)</th><th class="r">Thuế suất %</th></tr></thead><tbody>${s.bac.map((b, i) => `<tr><td>${i + 1}</td><td><input data-money data-bd="${i}" value="${b.den ? F.money(b.den) : ''}" placeholder="Không giới hạn"></td><td><input type="number" data-bt="${i}" value="${b.ts}"></td></tr>`).join('')}</tbody></table>
-        <p class="small muted">Mặc định theo quy định áp dụng từ kỳ tính thuế 2026: giảm trừ 15,5 triệu, người phụ thuộc 6,2 triệu, biểu 5 bậc 5% · 10% · 20% · 30% · 35%. Khi luật thay đổi, sửa ở đây là bảng lương tự tính lại.</p>
-        <div class="row"><button class="btn pri" data-act="taxSave">${ic('check')} Lưu cài đặt thuế</button><button class="btn" data-act="taxReset">${ic('refresh')} Về mặc định 2026</button></div>`)}</div>
-    </div>`;
-    setTimeout(() => { const b = $$('#view [data-sfsave]')[2]; if (b) b.onclick = () => { const v = b.closest('.card').querySelector('textarea').value.split('\n').map(x => x.trim()).filter(Boolean); if (!v.length) return toast('Cần ít nhất 1 phòng ban', 'err'); s.phongBan = [...new Set(v)]; App.changed(false); toast('Đã cập nhật phòng ban', 'ok'); }; }, 10);
-  }
-};
 Object.assign(ACT, {
   taxSave: () => {
     const box = $('#taxBox'), s = S();
@@ -3226,7 +3161,6 @@ function lpDocOpen({ title, boxId, fields, value, note = '', foot, build, tabs, 
   lpAttach(m, build, { tabs, empty });
   return m;
 }
-const lpDocBtn = (act, n) => `<div class="lp-doc"><button class="btn pri" data-act="${act}">${ic('eye')} Soạn &amp; xem trước</button><span class="small muted">${n}</span></div>`;
 Object.assign(ACT, {
   qdOpen: () => lpDocOpen({ title: 'Quyết định bổ nhiệm người điều hành vận tải', boxId: 'qdBox', fields: QD_F(), value: Object.assign({ chucDanh: 'Người trực tiếp điều hành hoạt động vận tải', trinhDo: '', noi: 'Đồng Nai', ngayKy: D.today() }, S().qdBo || {}),
     foot: `<button class="btn pri" data-act="qdPrint">${ic('printer')} In quyết định</button>`, build: () => lpCapture(qdPrint), empty: 'Chọn nhân viên được bổ nhiệm để xem trước' }),
@@ -3861,20 +3795,6 @@ const lcDay = () => LC.ngay || (LC.ngay = DB.lichchay.length ? DB.lichchay.slice
 const lcById = id => DB.lichchay.find(x => x.id === id);
 const lcEmp = l => lcHide(l) ? { ten: '🔒 Đã khóa' } : (DB.employees.find(e => e.id === l.laiXe) || {});
 const lcXe = l => DB.vehicles.find(v => v.id === l.xeId) || {};
-const lcRows = () => DB.lichchay.filter(l => l.ngay === lcDay() && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
-const lcCols = [
-  { key: 'tuyen', label: 'Tuyến', render: l => `<b>${esc(l.tuyen)}</b>` },
-  { key: 'gio', label: 'Giờ', align: 'c', val: l => l.gio + (lcGone(l) ? ' · Đã xuất bến' : ''), render: l => `<b>${esc(l.gio)}</b>${lcGone(l) ? '<br><span class="badge b-gray">Đã xuất bến</span>' : ''}` },
-  { key: 'bks', label: 'Số xe', val: l => lcXe(l).bks || '', render: l => lcXe(l).bks ? `<b>${esc(lcXe(l).bks)}</b>` : '<span class="muted">Chưa gán</span>' },
-  { key: 'lai', label: 'Tên lái xe', val: l => lcEmp(l).ten || '', render: l => lcEmp(l).ten ? esc(lcEmp(l).ten) : '<span class="muted">Chưa gán</span>' },
-  { key: 'sdt', label: 'Số điện thoại', val: l => lcEmp(l).sdt || '' },
-  { key: 'hang', label: 'Hạng bằng', align: 'c', val: l => lcEmp(l).bangHang || '' },
-  { key: 'soBang', label: 'Số bằng', val: l => lcEmp(l).bangSo || '' },
-  { key: 'hetHan', label: 'Hết hạn bằng', align: 'c', val: l => lcEmp(l).bangHetHan ? F.date(lcEmp(l).bangHetHan) : '', render: l => { const e = lcEmp(l); return e.bangHetHan ? F.date(e.bangHetHan) + ' ' + gplxBadge(e) : ''; } },
-  { key: 'soChuyen', label: 'Số chuyến', align: 'c', fmt: 'num', sum: true },
-  { key: 'tienCong', label: 'Tiền công', fmt: 'money', sum: true },
-  { key: 'nguoiCham', label: 'Người chấm công' }
-];
 /* Ghi nhớ chuyến đã xóa tay để chức năng tự tạo lịch từ Giờ chạy không tạo lại (lưu trong cài đặt, tự dọn ngày cũ) */
 const lcBo = () => { const s = S() || {}; s.autoLich = s.autoLich || {}; const b = s.autoLich.bo = s.autoLich.bo || {}; const td = D.today(); Object.keys(b).forEach(k => { if (k < td) delete b[k]; }); return b; };
 const lcMarkDel = l => { try { if (!l || !l.ngay || !l.tuyen || !l.gio || l.ngay < D.today()) return; const b = lcBo(), k = l.tuyen + '|' + l.gio; (b[l.ngay] = b[l.ngay] || []).includes(k) || b[l.ngay].push(k); } catch (e) { } };
@@ -3966,29 +3886,6 @@ const VT = { list: [['blue', 'Xanh dương', '#0284c7'], ['green', 'Xanh lá', '
 VT.apply(VT.get());
 addCSS('html[data-vt=green]{--vt-a:#4ade80;--vt-a2:#16a34a;--vt-d:#14532d;--vt-s:#e3f6ea;--vt-s2:#f3fbf6;--vt-b:#dcefe3}html[data-vt=purple]{--vt-a:#a78bfa;--vt-a2:#7c3aed;--vt-d:#4c1d95;--vt-s:#eee9fb;--vt-s2:#f7f5fd;--vt-b:#e7e1f7}html[data-vt=amber]{--vt-a:#fbbf24;--vt-a2:#d97706;--vt-d:#78350f;--vt-s:#fdf1d8;--vt-s2:#fefaf0;--vt-b:#f5e8c9}html[data-vt=rose]{--vt-a:#fb7185;--vt-a2:#e11d48;--vt-d:#881337;--vt-s:#fde4e8;--vt-s2:#fff4f6;--vt-b:#f8dde2}html[data-vt=slate]{--vt-a:#94a3b8;--vt-a2:#475569;--vt-d:#1e293b;--vt-s:#e8ecf1;--vt-s2:#f4f6f9;--vt-b:#e2e8f0}.vt-pk{display:inline-flex;gap:6px;align-items:center;padding:0 6px}.vt-sw{width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1;cursor:pointer;padding:0}.vt-sw:hover{transform:scale(1.12)}.vt-sw.on{box-shadow:0 0 0 2px #0f172a}');
 Object.assign(ACT, { vtSet: d => { try { localStorage.setItem(VT.key, d.c); } catch (e) { } VT.apply(d.c); App.render(); } });
-const vLC = {
-  printLabel: () => DV.tab === 'lt' ? 'In' : PM.label(dvCur()),
-  title: 'Đặt vé', icon: 'calendar', desc: 'Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe',
-  tools: () => `${VT.pick()}${Auth.can('lichchay', 'edit') ? `<button class="btn" data-act="gcSet" title="Nhắc và tự nhả vé giữ chỗ chưa thu tiền">${ic('clock')} Giữ chỗ</button>` : ''}<button class="btn pri" data-act="lcAdd">${ic('plus')} Thêm chuyến</button>`,
-  render(el) { vDV.render(el); },
-  renderTable(el, embed) {
-    const day = lcDay(), L = lcRows(), dw = D.dowName[D.parse(day).getDay()];
-    const tot = sum(L, l => l.tienCong), nUn = L.filter(l => !l.xeId || !l.laiXe).length;
-    const days = DB.lichchay.filter(l => l.ngay.slice(0, 7) === day.slice(0, 7));
-    el.insertAdjacentHTML('beforeend', `<div class="row wrap" style="gap:8px;margin-bottom:12px;align-items:center"><button class="btn sm" data-act="lcNav" data-n="-1">${ic('back')}</button><input type="date" class="inp" id="lcDate" value="${day}" style="width:auto"><button class="btn sm" data-act="lcNav" data-n="1" style="transform:none"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button><button class="btn sm" data-act="lcNav" data-n="0">Hôm nay</button><b>${dw}, ${F.date(day)}</b><span class="grow"></span><span class="muted small">Tháng ${day.slice(5, 7)}: ${days.length} chuyến · ${F.money(sum(days, l => l.tienCong))}</span></div><div id="lcT"></div>`);
-    if (embed) { const b = el.querySelector('.row.wrap'); if (b) b.remove(); }
-    const di = $('#lcDate', el); if (di) di.onchange = () => { if (di.value) { LC.ngay = di.value; App.render(); } };
-    table($('#lcT', el), {
-      id: 'lc', columns: lcCols, rows: L, ph: 'Tìm tuyến, giờ, số xe, lái xe...', empty: 'Ngày này chưa có lịch chạy. Bấm "Tạo lịch từ Giờ chạy" hoặc "Thêm chuyến".', onRow: lcForm,
-      searchText: l => [l.tuyen, l.gio, lcXe(l).bks, lcEmp(l).ten, lcEmp(l).sdt].join(' '),
-      tools: `<span class="badge b-green">${L.length} chuyến</span>${nUn ? `<span class="badge b-amber">${nUn} chuyến chưa gán đủ xe và lái xe</span>` : ''}<span class="badge b-blue">Tổng tiền công ${F.money(tot)}</span><span class="grow"></span><span class="muted small">Bấm vào dòng để sửa</span>`,
-      rowClass: l => lcGone(l) ? 'veh-off' : '',
-      actions: l => lcCan(l) ? `<button class="ibtn" data-act="lcQuick" data-id="${l.id}" data-tip="Sửa nhanh xe, lái xe">${ic('edit')}</button>` + rowBtns(l.id, 'lcEdit', 'lcDel') : ''
-    });
-  },
-  excel() { if (DV.tab !== 'lt') return vDV.excel(); XLSX.save('Lich chay ' + lcDay(), [xSheet('Lịch chạy', 'LỊCH CHẠY NGÀY ' + F.date(lcDay()), lcCols, lcRows())]); },
-  print() { if (DV.tab !== 'lt') return vDV.print(); Print.report({ title: 'Lịch chạy ngày ' + F.date(lcDay()), cols: lcCols.map(c => c.key === 'hetHan' ? { ...c, render: null } : c), rows: lcRows(), landscape: true, signs: ['Người chấm công', 'Điều hành', 'Giám đốc'] }); }
-};
 Object.assign(ACT, {
   lcAdd: () => lcForm(), lcEdit: d => lcForm(lcById(d.id)),
   lcNav: d => { LC.ngay = +d.n === 0 ? D.today() : D.add(lcDay(), +d.n); App.render(); },
@@ -4095,9 +3992,7 @@ const dvSO = l => {
   if (hs && hs.length) { const t = l.ngay + ' ' + (l.gio || '00:00'); let pick = hs[0]; for (const e of hs) if (e.tu <= t) pick = e; return sdNorm(pick.soDo, cap); }
   return sdNorm(v && v.soDo, cap);
 };
-const dvCap = l => sdSeats(dvSO(l)).length;
 const dvBook = id => DB.datve.filter(b => b.chuyen === id && !b.huy);
-const dvHuy = id => DB.datve.filter(b => b.chuyen === id && b.huy).sort((a, b) => String(b.huy.tg).localeCompare(String(a.huy.tg)));
 const dvCur = () => { const L = dvTrips(); return L.find(l => l.id === DV.trip) || (DV.trip = (L[0] || {}).id, L[0]); };
 const dvAbbr = s => String(s || '').trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 5);
 const dvLayout = cap => {  // lấp ghế từ hàng cuối lên, hàng lẻ nằm phía trên
@@ -4129,11 +4024,6 @@ addCSS(`.dv{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:st
 .dv-seat .plus{margin:auto;color:#98a2b3;font-size:26px;line-height:1}
 .dv-lbl{display:grid;place-items:center;font-size:22px;font-weight:800;color:#111827;text-align:center}
 .dv-tbl{width:100%;border-collapse:collapse;background:#fff;font-size:13px}.dv-tbl th,.dv-tbl td{padding:7px 10px;border-bottom:1px solid #eef0f3;text-align:left}.dv-tbl th{background:var(--vt-s,#f8fafc);color:var(--vt-d,#475467)}.dv-tbl td.r,.dv-tbl th.r{text-align:right}`);
-function dvHuyHTML(cur) {
-  const H = dvHuy(cur.id); if (!H.length) return '';
-  const free = g => !dvBook(cur.id).some(x => x.ghe === g), can = Auth.can('lichchay', 'edit') && lcCan(cur);
-  return `<div class="dv-huy"><div class="dv-huy-h">Vé hủy <b>${H.length}</b></div><div class="dv-huy-g">${H.map(b => `<div class="dv-hv" data-act="dvHuyLs" data-id="${b.id}" title="Bấm để xem lịch sử vé"><div class="hv-t"><b>${esc(b.ghe)}</b><span>${F.money(b.gia || 0)}đ</span></div><div class="hv-l">${esc(b.ten || '')}${b.sdt ? ' · ' + esc(b.sdt) : ''}</div><div class="hv-l">${esc(b.diemDon || '')}${b.diemDon || b.diemTra ? ' → ' : ''}${esc(b.diemTra || '')}</div><div class="hv-m">Đặt: ${esc(b.nguoiBan || '—')} · ${dvLog.fmt(b.tg)}<br>Hủy: <b>${esc(b.huy.nguoi || '—')}</b> · ${dvLog.fmt(b.huy.tg)}</div><div class="hv-ls">${ic('clock')} Xem lịch sử</div><div class="hv-a">${can && free(b.ghe) ? `<button class="btn sm" data-act="dvRestore" data-id="${b.id}">Khôi phục</button>` : can ? '<span class="muted small">Ghế đã có người</span>' : ''}${lcAdmin() ? `<button class="btn sm danger" data-act="dvPurge" data-id="${b.id}">${ic('trash')} Xóa hẳn</button>` : ''}</div></div>`).join('')}</div></div>`;
-}
 addCSS(`.dv-huy{margin-top:18px}.dv-huy-h{font-size:14px;font-weight:700;color:#475569;margin-bottom:8px}.dv-huy-h b{display:inline-block;min-width:22px;text-align:center;background:#e2e8f0;border-radius:999px;padding:0 6px;font-size:12px}
 .dv-huy-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}.dv-hv{background:#f1f5f9;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px;font-size:12px;color:#475569;display:flex;flex-direction:column;gap:2px}
 .hv-t{display:flex;justify-content:space-between;font-size:14px;color:#0f172a}.hv-m{font-size:11px;color:#64748b;margin-top:2px;line-height:1.4}.hv-a{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}`);
@@ -4200,28 +4090,11 @@ function dvForm(trip, b, seat) {
 const dvGrp = b => b && b.nhom ? DB.datve.filter(x => x.nhom === b.nhom && !x.huy && x.chuyen === b.chuyen) : (b ? [b] : []);
 const dvGrpH = b => b && b.nhom ? DB.datve.filter(x => x.nhom === b.nhom && x.huy) : (b ? [b] : []);
 const dvSeatsTxt = G => G.map(x => x.ghe).sort((a, c) => String(a).localeCompare(String(c), 'vi', { numeric: true })).join(', ');
-function dvActBar(cur) {
-  if (DV.mvMode && cur && DB.datve.some(x => x.id === DV.mvMode.id && x.chuyen === cur.id)) return dvMvBar();
-  const b = DV.selB && DB.datve.find(x => x.id === DV.selB && !x.huy && cur && x.chuyen === cur.id);
-  if (!b) return '';
-  const G = dvGrp(b), tel = String(b.sdt || '').replace(/[^0-9+]/g, ''), ok = Auth.can('lichchay', 'edit') && lcCan(cur), all = (k, v) => G.every(x => !!x[k] === v);
-  const paid = G.every(x => x.tt === 'tra'), xn = all('xn', true), len = all('len', true);
-  const btn = (k, ico, lb, cls = '', on = false) => `<button type="button" class="ab ${cls}${on ? ' on' : ''}" data-act="dvBA" data-k="${k}">${ic(ico)}<span>${lb}</span></button>`;
-  return `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${G.length > 1 ? G.length + ' vé:' : 'Vé:'}</span> <b>${esc(dvSeatsTxt(G))}</b> · ${esc(b.ten)}${b.ma ? ` <span class="dv-ma">${esc(b.ma)}</span>` : ''}${paid ? ' <em class="ab-p">Đã thu</em>' : ''}${xn ? ' <em class="ab-p">Đã xác nhận</em>' : ''}${len ? ' <em class="ab-p">Đã lên xe</em>' : ''} ${callTag(b)}</div><span class="ab-pr">${F.money(sum(G, x => dvTot(x)))}</span></div>
-    <div class="ab-ph">${tel ? `<button type="button" class="ab-tel" data-act="dvCall" data-p="${esc(tel)}" data-id="${b.id}">${ic('phone')} ${esc(b.sdt)}</button>` : '<span class="muted">Chưa có SĐT</span>'}<span class="ab-rt">${esc(dvAbbr(b.diemDon) || '—')} → ${esc(dvAbbr(b.diemTra) || '—')}</span></div>
-    <div class="ab-row">${btn('sua', 'edit', ok ? 'Sửa' : 'Xem')}${ok ? btn('huy', 'x', 'Hủy vé', 'red') + btn('tra', 'wallet', paid ? 'Bỏ thu tiền' : 'Thanh toán', '', paid) + btn('xn', 'check', 'Xác nhận', '', xn) + btn('len', 'user', 'Lên xe', '', len) + btn('doi', 'refresh', 'Chuyển vé') + btn('sc', 'copy', 'Sao chép vé') + btn('kh', 'refresh', 'Khứ hồi') : ''}${btn('in', 'printer', 'In vé')}${btn('tc', 'printer', 'In T/C')}${btn('ls', 'clock', 'Lịch sử')}${btn('cp', 'copy', 'Chép thông tin')}</div></div><div class="dv-selpad ab-pad"></div>`;
-}
 function dvMoveMode(b) {
   const t = dvTripOf(b); if (!Auth.guard('lichchay', 'edit')) return; if (!lcCan(t)) return lcLockMsg();
   const G = dvGrp(b); DV.mvMode = { id: b.id, picks: [] }; DV.mvIds = G.map(x => x.id); DV.sel = []; const st = window.scrollY; App.render(); window.scrollTo(0, st);
 }
 function dvMvEnd() { DV.mvMode = null; DV.mvIds = null; const st = window.scrollY; App.render(); window.scrollTo(0, st); }
-function dvMvBar() {
-  const b = DB.datve.find(x => x.id === DV.mvMode.id); if (!b) return '';
-  const G = dvGrp(b), k = DV.mvMode.picks.length;
-  return `<div class="dv-selbar ab-bar mv-bar"><div class="ab-h"><button class="sb-x" data-act="dvMvCancel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>Chuyển ${G.length > 1 ? G.length + ' vé' : 'vé'}:</span> <b>${esc(dvSeatsTxt(G))}</b> · ${esc(b.ten)}</div></div>
-    <div class="ab-ph"><span class="mv-hint">${G.length > 1 ? `Chọn ${G.length} ghế trống (đã chọn ${k}/${G.length}: ${esc(DV.mvMode.picks.join(', ') || '—')})` : 'Chạm ghế trống để chuyển tới, hoặc chạm vé khác để đổi chỗ'}</span><button class="sb-st" data-act="dvMvOther">Giờ / ngày khác</button></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>`;
-}
 function dvMvPick(g) {
   const M = DV.mvMode; if (!M) return; const b = DB.datve.find(x => x.id === M.id); if (!b) return dvMvEnd();
   const t = dvTripOf(b), G = dvGrp(b).slice().sort((x, y) => String(x.ghe).localeCompare(String(y.ghe), 'vi', { numeric: true }));
@@ -4776,12 +4649,6 @@ function dvPrintBtn(m, trip, getG, canEdit, isNew) {
 addCSS(`.dv-pbtn{border-color:#f59e0b;color:#b45309}.dv-pbtn:hover{background:#fffbeb;border-color:#d97706;color:#92400e}`);
 /* ===== Ctrl (hoặc ⌘) + bấm vào vé để chọn nhiều vé, in một lượt ===== */
 function dvPkList(cur) { if (!cur) return []; DV.pk = (DV.pk || []).filter(id => DB.datve.some(x => x.id === id && x.chuyen === cur.id && !x.huy)); return DV.pk.map(id => DB.datve.find(x => x.id === id)); }
-function dvPkBar(cur) {
-  const L = dvPkList(cur); if (!L.length && !DV.pkMode) return '';
-  if (!L.length) return `<div class="dv-selbar pk-bar"><button class="sb-x" data-act="dvPkClear" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>Chọn nhiều vé:</span> <span class="muted small">chạm vào các vé muốn in</span></div><button class="btn" data-act="dvPkAll">Chọn tất cả</button><button class="btn" data-act="dvPkClear">Thoát</button></div><div class="dv-selpad"></div>`;
-  const tot = sum(L, dvTot), un = L.filter(x => x.tt !== 'tra');
-  return `<div class="dv-selbar pk-bar"><button class="sb-x" data-act="dvPkClear" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>Đã chọn ${L.length} vé:</span> <b>${esc(dvSeatsTxt(L))}</b> <span class="muted small">· ${F.money(tot)} đ${un.length ? ' · ' + un.length + ' vé chưa thu' : ''} · ${DV.pkMode ? 'chạm vé để thêm/bỏ' : 'Ctrl + bấm để thêm/bỏ'}</span></div><button class="btn" data-act="dvPkAll">Chọn tất cả</button><button class="btn pri" data-act="dvPkPrint">${ic('printer')} In ${L.length} vé</button>${DV.pkMode ? '<button class="btn" data-act="dvPkClear">Thoát</button>' : ''}</div><div class="dv-selpad"></div>`;
-}
 const dvPkRedraw = () => { const st = window.scrollY; App.render(); window.scrollTo(0, st); };
 document.addEventListener('click', e => {
   if (!(e.ctrlKey || e.metaKey || DV.pkMode) || App.cur !== 'lichchay' || DV.mvMode) return;
@@ -4801,8 +4668,6 @@ Object.assign(ACT, {
   dvPkPrint: () => { const cur = dvCur(), L = dvPkList(cur); if (!L.length) return; dvPrintTicket(L, cur); }
 });
 addCSS(`.dv-grid .dv-seat.pk{outline:3px solid #534AB7;outline-offset:2px;--ty:-3px}.dv-grid .dv-seat.pk::before{content:'✓';position:absolute;left:-8px;top:-8px;width:20px;height:20px;border-radius:50%;background:#534AB7;color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;z-index:6;transform:translateZ(30px)}.pk-bar .sb-t span.muted{font-weight:400}.dv-selbar.pk-bar{padding-right:96px}@media(max-width:700px){.dv-selbar.pk-bar{padding-right:76px;flex-wrap:wrap;row-gap:6px}.pk-bar .sb-t{flex:1 1 calc(100% - 44px);min-width:0}.pk-bar .sb-t span.muted{display:none}.pk-bar .btn{flex:1 1 0;justify-content:center}}@media(max-width:900px){.dv-grid .dv-seat.pk::before{left:auto;right:4px;top:auto;bottom:4px}}`);
-const dvSortGone = L => [...L.filter(l => !lcGone(l)), ...L.filter(l => lcGone(l))];
-const dvGoneH = (l, i, A) => lcGone(l) && (i === 0 || !lcGone(A[i - 1])) ? '<div class="dv-gone-h">Đã qua giờ khởi hành</div>' : '';
 /* ===== Lộ trình: điểm dừng của từng tuyến + số phút sau giờ xuất bến; mã viết tắt tự tạo từ tên điểm ===== */
 const LT = {
   all: () => (DB.settings.loTrinh = DB.settings.loTrinh || {}),
@@ -4870,7 +4735,7 @@ const CALL_KQ = [
   { k: 'tb', t: 'Thuê bao / sai số', s: 'Sai số / thuê bao', ic: '⚠', c: 'bad' }
 ];
 const callKQ = k => CALL_KQ.find(x => x.k === k) || CALL_KQ[0];
-const callTelCls = b => { try { const x = callLast(b); return x ? ' tel-' + x.kq : ''; } catch (e) { return ''; } };   // màu số điện thoại theo kết quả gọi gần nhất
+   // màu số điện thoại theo kết quả gọi gần nhất
 const callWho = () => { const u = Auth.user || {}, r = (DB.roles && DB.roles[u.role]) || {}, nm = String(r.name || r.ten || u.role || '').toLowerCase(); return /lái|tài xế|phụ xe|taixe|laixe/.test(nm) ? 'Tài xế' : 'Nhân viên'; };
 function callLast(b) { const L = (b && b.goi) || []; if (!L.length) return null; const x = L[L.length - 1]; let n = 0; for (let i = L.length - 1; i >= 0 && L[i].kq === x.kq; i--) n++; return { ...x, n }; }
 function callLog(b, kq, note) {
@@ -4894,17 +4759,6 @@ body .dv-grid .dv-seat .tel.tel-ok svg,body html[data-sm] .dv-grid .dv-seat .tel
 body .btn.cl-call.tel-ok{background:#16a34a!important;border-color:#16a34a!important;color:#fff!important}body .btn.cl-call.tel-nr,body .btn.cl-call.tel-tb{background:#dc2626!important;border-color:#dc2626!important;color:#fff!important}body .btn.cl-call.tel-hl{background:#d97706!important;border-color:#d97706!important;color:#fff!important}
 body .btn.cl-call.tel-ok svg,body .btn.cl-call.tel-nr svg,body .btn.cl-call.tel-tb svg,body .btn.cl-call.tel-hl svg{stroke:#fff}`);
 // Danh sách gọi khách của chuyến (tab "Gọi khách"): xếp theo thứ tự điểm đón, có giờ xe tới
-function callListHTML(cur) {
-  const seen = {}, R = [];
-  dvBook(cur.id).forEach(b => { const k = b.nhom ? 'g' + b.nhom : b.id; if (seen[k]) return; seen[k] = 1; R.push({ b, G: dvGrp(b) }); });
-  const ix = x => { const i = LT.find(cur.tuyen, x.b.diemDon); return i < 0 ? 999 : i; };
-  R.sort((a, c) => ix(a) - ix(c) || String(a.b.ghe).localeCompare(String(c.b.ghe), 'vi', { numeric: true }));
-  if (!R.length) return '<div class="muted">Chưa có hành khách.</div>';
-  const done = R.filter(x => (callLast(x.b) || {}).kq === 'ok').length;
-  return `<div class="cl-sum"><b>${done}/${R.length}</b> khách đã gọi xác nhận${R.length - done ? ` · còn <b>${R.length - done}</b> khách` : ''}</div><div class="cl">${R.map(({ b, G }) => { const tel = String(b.sdt || '').replace(/[^0-9+]/g, ''), eta = LT.eta(cur, b.diemDon), x = callLast(b); return `<div class="cl-i${x && x.kq === 'ok' ? ' done' : ''}">
-    <div class="cl-h"><b class="cl-g">${esc(dvSeatsTxt(G))}</b><div class="cl-n"><b>${esc(b.ten || 'KHÁCH LẺ')}</b><span>${esc(b.diemDon || 'Chưa ghi điểm đón')}${eta ? ' · ~' + eta : ''}${b.tt !== 'tra' ? ' · <em>chưa thu ' + F.money(sum(G, dvTot)) + 'đ</em>' : ''}</span></div>${tel ? `<a class="btn pri cl-call${callTelCls(b)}" href="tel:${esc(tel)}">${ic('phone')} ${esc(b.sdt)}</a>` : '<span class="muted small">Không có SĐT</span>'}</div>
-    ${callTag(b) ? `<div class="cl-st">${callTag(b)}${x && x.note ? ` <span class="muted small">${esc(x.note)}</span>` : ''}</div>` : ''}${callBtns(b)}</div>`; }).join('')}</div>`;
-}
 addCSS(`.ct{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:700;border-radius:5px;padding:1px 6px;margin-top:2px;vertical-align:bottom}.ct-ok{background:#E1F5EE;color:#085041}.ct-bad{background:#FCEBEB;color:#A32D2D}.ct-warn{background:#FAEEDA;color:#854F0B}
 @media(hover:hover) and (min-width:901px){.dv-grid .dv-seat .ct{margin-bottom:16px;align-self:flex-start}}.dv-grid .dv-seat.len .ct-ok{background:rgba(255,255,255,.2);color:#fff!important}
 .cb{display:flex;flex-wrap:wrap;gap:6px}.cb-b{border:1px solid #d6dce7;background:#fff;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:#344054}.cb-b:hover{border-color:#98a2b3}.cb-ok{border-color:#5DCAA5;color:#085041}.cb-ok:hover{background:#E1F5EE}.cb-bad{border-color:#F09595;color:#A32D2D}.cb-bad:hover{background:#FCEBEB}.cb-warn{border-color:#EF9F27;color:#854F0B}.cb-warn:hover{background:#FAEEDA}
@@ -4959,7 +4813,6 @@ addCSS(`.dv-grid{perspective:1000px}
 }
 /* ===== Nút tắt trên thẻ ghế: U = Sửa vé, M = Chuyển vé, P = Thu tiền (bấm chữ hoặc gõ phím khi đang chọn vé) ===== */
 const DV_QK = [['U', 'sua', 'Sửa vé'], ['M', 'doi', 'Chuyển vé'], ['P', 'tra', 'Thu tiền / bỏ thu tiền']];
-const dvQK = (b, t) => { const ok = Auth.can('lichchay', 'edit') && lcCan(t); return `<span class="qk">${DV_QK.filter(q => ok || q[1] === 'sua').map(([c, k, tt]) => `<span class="qk-b${k === 'tra' && b.tt === 'tra' ? ' on' : ''}" data-act="dvQK" data-k="${k}" data-id="${b.id}" title="${tt} (phím ${c})">${c}</span>`).join('')}</span>`; };
 async function dvQKRun(b, k) {
   if (!b || b.huy) return;
   if (DV.selB !== b.id) { const ok = await dvSetB(b); if (!ok) { DV.selB = null; return toast(lockMsg(b.ghe, Lock.other(b.chuyen, b.ghe)), 'err'); } }
@@ -4976,11 +4829,7 @@ document.addEventListener('keydown', e => {
 });
 addCSS(`.qk{display:none}
 @media(hover:hover) and (min-width:901px){.dv-grid .dv-seat .qk{display:flex;gap:4px;position:absolute;left:6px;bottom:5px;z-index:3}.dv-grid .dv-seat .qk-b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.25);color:#344054;cursor:pointer;line-height:1}.dv-grid .dv-seat .qk-b:hover{background:#fff;border-color:var(--vt-a2,#0369a1);color:var(--vt-a2,#0369a1)}.dv-grid .dv-seat .qk-b.on{background:#3B6D11;border-color:#3B6D11;color:#fff}.dv-grid .dv-seat.len .qk-b{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5);color:#fff}.dv-grid .dv-seat .by{padding-left:84px}}`);
-const DV_PT = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#639922', '#BA7517', '#5F5E5A'];
-const dvPtColor = s => { const k = (typeof bgNorm === 'function' ? bgNorm(s) : String(s || '').trim().toLowerCase()); let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return DV_PT[h % DV_PT.length]; };
-const dvLegend = () => `<div class="dv-lg">${[['e', 'Trống'], ['h', 'Giữ chỗ'], ['c', 'Đã xác nhận'], ['p', 'Đã thu'], ['b', 'Đã lên xe'], ['u', 'Sắp hết hạn giữ'], ['l', 'Người khác đang thao tác'], ['i', 'Đã in vé / phơi'], ['o', 'Sửa sau khi in, cần in lại']].map(([k, t]) => `<span><i class="lg-${k}"></i>${t}</span>`).join('')}<span class="lg-tip">Mẹo: bấm <b>Chọn nhiều</b> hoặc giữ <kbd>Ctrl</kbd> + bấm vào vé để in nhiều vé một lượt</span></div>`;
 const dvTripOf = b => DB.lichchay.find(l => l.id === b.chuyen) || {};
-const dvTabBar = cur => `<div class="dv-tabs">${[['ghe', 'Sơ đồ ghế'], ['goi', 'Gọi khách'], ['hk', 'Hành khách' + (cur ? ` (${dvBook(cur.id).length})` : '')], ['dt', 'Đón / Trả'], ['gh', 'Gửi hàng' + (cur ? ` (${GH.list(cur.id).length})` : '')], ['tk', 'Thống kê'], ['lt', 'Lịch chạy ngày']].map(([k, t]) => `<button class="${DV.tab === k ? 'on' : ''}" data-act="dvTab" data-t="${k}">${t}</button>`).join('')}</div>`;
 addCSS(`.hd .ph-hd{display:flex;justify-content:space-between;align-items:flex-start;text-align:left;margin-bottom:6px}.hd .ph-hd h1{margin:0;font-size:20px;text-align:center;line-height:1.2}.hd .ph-t{table-layout:fixed;margin:8px 0}.hd .ph-t td.bx{border:1.5px solid #000;padding:3px 5px;vertical-align:top;font-size:12.5px;text-align:left}.hd .ph-t td.nb{border:0;text-align:center;vertical-align:middle;font-size:14px}.hd .ph-t .pp{font-size:10px;line-height:1.2;margin-top:2px;font-weight:400}.hd .ph-tt{font-size:14px;font-weight:700;margin:2px 0;text-align:left}.hd .ph-sg{display:grid;grid-template-columns:repeat(3,1fr);margin-top:8px;text-align:left}.hd .ph-sg small{display:block;font-size:11px}`);
 function dvPhoiHTML(l) {
   const so = dvSO(l), B = dvBook(l.id), co = S().company || {}, xe = lcXe(l), lai = lcEmp(l).ten || '';
@@ -5001,82 +4850,6 @@ function dvPhoiHTML(l) {
 }
 const dvPrintPhoi = list => { if (!list.length) return toast('Không có chuyến nào để in phơi', 'err'); PrintDlg.open({ htmls: list.map(dvPhoiHTML), title: list.length === 1 ? 'Phoi ' + list[0].gio + ' ' + (lcXe(list[0]).bks || '') : 'Phoi ngay ' + F.date(list[0].ngay) }); };
 function dvPrintMap(l) { dvPrintPhoi([l]); }
-const vDV = {
-  title: 'Đặt vé', icon: 'tag', desc: 'Chọn ngày và chuyến, đặt vé theo sơ đồ ghế, xem hành khách và điểm đón trả',
-  tools: () => `<button class="btn" data-act="dvSearch">${ic('search')} Tìm vé</button>${Auth.can('lichchay', 'edit') ? `<button class="btn" data-act="gcSet">${ic('clock')} Giữ chỗ</button>` : ''}`,
-  render(el) {
-    const day = dvDay(), L = dvTrips(), cur = dvCur(), ym = day.slice(0, 7), nd = D.daysIn(ym), lead = (D.parse(ym + '-01').getDay() + 6) % 7;
-    const hasTrip = {}; DB.lichchay.forEach(l => { if (l.ngay.slice(0, 7) === ym) hasTrip[l.ngay] = 1; });
-    const cells = [...Array(lead).fill(null), ...Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'))];
-    const calH = `<div class="row" style="align-items:center;gap:6px"><button class="btn sm" data-act="dvNav" data-n="-1">${ic('back')}</button><b class="grow" style="text-align:center">Tháng ${day.slice(5, 7)}/${day.slice(0, 4)}</b><button class="btn sm" data-act="dvNav" data-n="1"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button></div>
-      <div class="dv-days">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small style="font-size:11px;color:#98a2b3;padding:2px 0">${x}</small>`).join('')}${cells.map(d => d ? `<button class="dv-d ${d === day ? 'sel' : ''} ${d === D.today() ? 'tod' : ''}" data-act="dvDay" data-d="${d}"><b>${+d.slice(8)}</b>${AL.cell(d)}<small style="height:6px">${hasTrip[d] ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + (d === day ? '#fff' : '#38a3e8') + '"></span>' : ''}</small></button>` : '<span></span>').join('')}</div>${AL.selHTML(day)}`;   // lịch tháng (dùng cho cột trái máy tính và đầu trang điện thoại)
-    const side = `<div class="dv-side">${calH}
-      <div class="row" style="gap:6px;margin-bottom:10px"><input type="date" class="inp" id="dvDate" value="${day}"><button class="btn sm" data-act="dvDay" data-d="${D.today()}">Hôm nay</button></div>
-      ${L.length ? `<div class="dv-trips">${dvSortGone(L).map((l, i, A) => { const n = dvBook(l.id).length, c = dvCap(l), v = lcXe(l); return dvGoneH(l, i, A) + `<button class="dv-t ${l.id === (cur && cur.id) ? 'sel' : ''} ${n >= c ? 'full' : ''}${PM.tCls(l)}" data-act="dvTrip" data-id="${l.id}" title="${esc(l.tuyen)}"><div class="tm">${esc(l.gio)}${PM.tMark(l)}${lcGone(l) ? ' <span class="badge b-gray" style="font-size:9px;font-weight:600">Đã xuất bến</span>' : ''}</div><div class="r"><span><i class="${v.bks ? '' : 'off'}"></i>${esc(String(v.bks || '').replace(/^\d+\w-/, '') || '—')}</span><span>${n}|${c}</span></div><div class="dv-bar"><div style="width:${Math.min(100, n / c * 100)}%"></div></div></button>`; }).join('')}</div>` : '<div class="muted small" style="padding:8px">Ngày này chưa có chuyến. Hãy tạo lịch trong mục <b>Lịch chạy</b>.</div>'}</div>`;
-    let main = '<div class="dv-main"><div class="dv-body muted">Chưa chọn chuyến.</div></div>';
-    if (DV.tab === 'lt') main = `<div class="dv-main">${dvTabBar(cur)}<div class="dv-body" id="dvLt"></div></div>`;
-    else if (cur) {
-      const B = dvBook(cur.id), cap = dvCap(cur), xe = lcXe(cur), lai = lcEmp(cur).ten || '';
-      if (DV.selTrip !== cur.id) { DV.selTrip = cur.id; DV.sel = []; DV.selTT = 'giu'; }
-      DV.sel = DV.sel.filter(g => !B.some(x => x.ghe === g));
-      let body = '';
-      if (DV.tab === 'ghe') {
-        const cell = s => {
-          if (s === 'D') return '<div class="dv-lbl">TÀI XẾ</div>';
-          if (s === 'DOOR') return '<div class="dv-lbl">CỬA</div>';
-          if (!s) return '<div></div>';
-          const b = B.find(x => x.ghe === s);
-          const lk = Lock.other(cur.id, s), gsel = dvGrp(DB.datve.find(z => z.id === DV.selB));
-          if (DV.mvMode && !lk) { const pk = DV.mvMode.picks.indexOf(s); if (!b) return `<button class="dv-seat mvt${pk >= 0 ? ' on' : ''}" data-act="dvMvPick" data-g="${s}"><span class="no">${s}</span><span class="plus">${pk >= 0 ? pk + 1 : '↓'}</span></button>`; }
-          if (lk && !b) return `<button class="dv-seat lk" data-act="dvLocked" data-g="${s}" data-n="${esc(lk.name || '')}"><span class="no">${s}</span><span class="lkn">🔒 ${esc(lk.name || 'Đang thao tác')}</span><span class="lkd">đang thao tác</span></button>`;
-          if (!b) { if (Auth.can('lichchay', 'add') && lcCan(cur)) { const on = DV.sel.includes(s); return `<button class="dv-seat ${on ? 'ms' : ''}" data-act="dvPickSeat" data-g="${s}"><span class="no">${s}</span><span class="plus">${on ? '✓' : '+'}</span></button>`; } return `<button class="dv-seat" data-act="dvSeat" data-id="${cur.id}" data-g="${s}"><span class="no">${s}</span><span class="plus">+</span></button>`; }
-          return `<button class="dv-seat ${b.tt === 'tra' ? 'pd' : 'bk'}${GC.isWarn(b) ? ' gcw' : ''}${(DV.pk || []).includes(b.id) ? ' pk' : ''}${b.len ? ' len' : ''}${b.xn ? ' xn' : ''}${gsel.includes(b) ? ' ms' : ''}${lk ? ' lk' : ''}${b.nhom ? ' grp' : ''}${PM.sCls(b)}${DV.mvIds && DV.mvIds.includes(b.id) ? ' mv' : ''}" data-act="${DV.mvMode && !(DV.mvIds || []).includes(b.id) ? 'dvMvPick' : 'dvSeat'}" data-id="${cur.id}" data-g="${s}" data-b="${b.id}"><span class="no">${s}</span>${PM.badge(b)}${lk ? `<span class="lkn">🔒 ${esc(lk.name || 'Đang thao tác')}</span>` : ''}${b.diemDon ? `<span class="tag" style="background:${dvPtColor(b.diemDon)}">${esc(dvAbbr(b.diemDon))}</span>` : ''}${b.diemDon ? `<span class="dp"><em>Đón:</em> ${esc(b.diemDon)}</span>` : ''}${b.diemTra ? `<span class="dp"><em>Trả:</em> ${esc(b.diemTra)}</span>` : ''}<div class="pr"><b>${esc(b.ten)}</b><b>${F.money(dvTot(b))}đ</b></div><div class="pr" style="margin-top:2px">${b.sdt ? `<span class="tel${callTelCls(b)}" data-act="dvCall" data-p="${esc(b.sdt)}" data-id="${b.id}">${ic('phone')} ${esc(b.sdt)}</span>` : '<span></span>'}</div>${b.ghiChu ? `<span class="nt">${esc(b.ghiChu)}</span>` : ''}${b.xuatCT ? '<span class="nt">🧾 Xuất chứng từ</span>' : ''}${callTag(b)}${dvQK(b, cur)}<span class="by">${b.len ? (b.tt === 'tra' ? '✓ Đã lên xe' : '<i class="lx-due" title="Khách đã lên xe nhưng chưa thu tiền">Chưa thu</i>') : b.tt === 'tra' ? 'Đã thu' + (b.httt ? ' · ' + (b.httt === 'ck' ? 'CK' : b.httt === 'tm' ? 'TM' : dvHT(b.httt)) : '') : +b.coc > 0 ? 'Đã cọc ' + F.money(b.coc) : b.xn ? '✓ Đã xác nhận' : GC.isWarn(b) ? '⏱ Giữ chỗ · ' + GC.ltxt(GC.left(dvTripOf(b))).replace('còn ', 'còn ') : 'Giữ chỗ'}${b.nguoiBan && !b.len ? ' · ' + esc(b.nguoiBan) : ''}</span></button>`;
-        };
-        const so = dvSO(cur);
-        const gone = lcGone(cur), dI = Math.max(0, so.rows.findIndex(r => r.includes('D'))), band = gone ? `<div class="dv-gone" style="grid-column:1/-1"><b>XE ĐÃ XUẤT BẾN</b><small>${lcAdmin() ? 'Admin vẫn sửa được' : 'Đã khóa mọi thao tác sửa, xóa · chỉ Admin được chỉnh'}</small></div>` : '';
-        body = `<div class="dv-grid${gone ? ' is-gone' : ''}" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr))">${so.rows.map((r, i) => r.map(cell).join('') + (i === dI ? band : '')).join('')}</div>` + dvLegend() + dvHuyHTML(cur) + (dvPkBar(cur) || dvActBar(cur)) + (DV.clone && !DV.sel.length && !DV.selB ? `<div class="dv-selbar ab-bar"><div class="ab-h"><button class="sb-x" data-act="dvClearSel" aria-label="Thoát">${ic('x')}</button><div class="sb-t grow"><span>${DV.clone.nhom ? 'Thêm vé cho:' : 'Sao chép vé:'}</span> <b>${esc(DV.clone.ten)}</b>${DV.clone.nhom && DV.clone.chuyen === cur.id ? ' <span class="muted small">· vé thêm vào cùng nhóm, chung mã vé</span>' : ''}</div></div><div class="ab-ph"><span class="mv-hint">Chạm các ghế trống để đặt thêm vé với thông tin này</span></div></div><div class="dv-selpad ab-pad" style="height:96px!important"></div>` : '') + (DV.sel.length ? `<div class="dv-selbar"><button class="sb-x" data-act="dvClearSel" aria-label="Bỏ chọn">${ic('x')}</button><div class="sb-t grow"><span>${DV.sel.length} vé:</span> <b>${DV.sel.map(esc).join(', ')}</b></div><button class="sb-st ${DV.selTT === 'tra' ? 'pd' : ''}" data-act="dvTT">${DV.selTT === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ'}</button><button class="sb-go" data-act="dvBookSel" aria-label="Tiếp tục">${ic('arrow')}</button></div><div class="dv-selpad"></div>` : '');
-      } else if (DV.tab === 'hk') {
-        const R = B.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
-        body = R.length ? `<table class="dv-tbl"><tr><th>Ghế</th><th>Mã vé</th><th>Tên khách</th><th>SĐT</th><th>Điểm đón</th><th>Điểm trả</th><th class="r">Tiền vé</th><th>Tình trạng</th><th>Ghi chú</th></tr>${R.map(b => `<tr><td><b>${esc(b.ghe)}</b></td><td>${esc(b.ma || '')}</td><td>${esc(b.ten)}</td><td>${b.sdt ? `<a class="tel${callTelCls(b)}" href="tel:${esc(String(b.sdt).replace(/[^0-9+]/g, ''))}">${esc(b.sdt)}</a>` : ''}</td><td>${esc(b.diemDon || '')}</td><td>${esc(b.diemTra || '')}</td><td class="r">${F.money(dvTot(b))}</td><td>${b.tt === 'tra' ? 'Đã thanh toán' + (b.httt ? ' · ' + dvHT(b.httt) : '') : +b.coc ? 'Đã cọc ' + F.money(b.coc) : 'Giữ chỗ'}</td><td>${b.xuatCT ? '<b>[Xuất CT]</b> ' : ''}${callTag(b)} ${esc(b.ghiChu || '')}</td></tr>`).join('')}<tr><th colspan="6">Tổng ${R.length} khách</th><th class="r">${F.money(sum(R, b => dvTot(b)))}</th><th colspan="2"></th></tr></table>` : '<div class="muted">Chưa có hành khách.</div>';
-      } else if (DV.tab === 'gh') {
-        body = GH.tab(cur);
-      } else if (DV.tab === 'goi') {
-        body = callListHTML(cur);
-      } else if (DV.tab === 'dt') {
-        const grp = k => { const m = {}; B.forEach(b => { const x = b[k] || '(Chưa ghi)'; (m[x] = m[x] || []).push(b); }); const ix = x => { const i = LT.find(cur.tuyen, x); return i < 0 ? 999 : i; }; return Object.entries(m).sort((p, q) => ix(p[0]) - ix(q[0])).map(([x, a]) => `<tr><td><b>${esc(x)}</b>${LT.eta(cur, x) ? ` <span class="badge b-green">~${LT.eta(cur, x)}</span>` : ''}</td><td class="r">${a.length}</td><td>${a.map(b => esc(b.ghe + ' ' + b.ten)).join(', ')}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">Chưa có</td></tr>'; };
-        body = `<h4 style="margin:0 0 6px">Điểm đón</h4><table class="dv-tbl"><tr><th>Điểm đón</th><th class="r">Số khách</th><th>Hành khách</th></tr>${grp('diemDon')}</table><h4 style="margin:14px 0 6px">Điểm trả</h4><table class="dv-tbl"><tr><th>Điểm trả</th><th class="r">Số khách</th><th>Hành khách</th></tr>${grp('diemTra')}</table>`;
-      } else {
-        const rows = L.map(l => { const bb = dvBook(l.id); return { l, n: bb.length, c: dvCap(l), t: sum(bb, x => dvTot(x)), p: sum(bb.filter(x => x.tt === 'tra'), x => dvTot(x)) }; });
-        body = `<table class="dv-tbl"><tr><th>Giờ</th><th>Tuyến</th><th>Số xe</th><th>Lái xe</th><th class="r">Đã bán</th><th class="r">Còn trống</th><th class="r">Doanh thu</th><th class="r">Đã thu</th></tr>${rows.map(r => `<tr><td><b>${esc(r.l.gio)}</b></td><td>${esc(r.l.tuyen)}</td><td>${esc(lcXe(r.l).bks || '')}</td><td>${esc(lcEmp(r.l).ten || '')}</td><td class="r">${r.n}/${r.c}</td><td class="r">${r.c - r.n}</td><td class="r">${F.money(r.t)}</td><td class="r">${F.money(r.p)}</td></tr>`).join('')}<tr><th colspan="4">Tổng ngày ${F.date(day)}</th><th class="r">${sum(rows, r => r.n)}/${sum(rows, r => r.c)}</th><th class="r">${sum(rows, r => r.c - r.n)}</th><th class="r">${F.money(sum(rows, r => r.t))}</th><th class="r">${F.money(sum(rows, r => r.p))}</th></tr></table>`;
-      }
-      main = `<div class="dv-main"><div class="dm-mh" style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center"><b style="font-size:16px">${esc(cur.gio)} · ${esc(cur.tuyen)}</b>${Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="ltEdit" data-t="${esc(cur.tuyen)}" title="Điểm dừng và giờ dự kiến của tuyến">${ic('arrow')} Lộ trình</button>` : ''}${LT.get(cur.tuyen).length ? `<div style="flex-basis:100%">${LT.strip(cur, '', '', true)}</div>` : ''}${lcGone(cur) ? '<span class="badge b-red">ĐÃ XUẤT BẾN</span>' : ''}<button class="btn sm${DV.pkMode ? ' on' : ''}" data-act="dvPkMode" title="Bật để chạm chọn nhiều vé, in một lượt">${ic('check')} Chọn nhiều</button><button class="btn sm${PM.bCls(cur)}" data-act="dvPrintMap" data-id="${cur.id}" title="${esc(PM.tip(cur))}">${ic('printer')} ${PM.label(cur)}</button>${lcCan(cur) && Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="lcQuick" data-id="${cur.id}">${ic('edit')} Sửa nhanh xe, lái xe</button><button class="btn sm" data-act="mvTrip" data-id="${cur.id}" title="Xe hư, hủy chuyến: chuyển toàn bộ vé và hàng sang chuyến khác">${ic('arrow')} Dời cả chuyến</button>` : lcGone(cur) ? '<span class="muted small">Đã khóa chỉnh sửa (chỉ Admin)</span>' : ''}${cur.doiSang ? (() => { const n2 = DB.lichchay.find(l => l.id === cur.doiSang); return n2 ? `<span class="badge b-amber" title="${esc(cur.lyDoHuy || '')}">Đã chuyển sang ${esc(n2.gio)} ${F.date(n2.ngay)} · ${esc(cur.lyDoHuy || '')}</span>` : ''; })() : ''}<span class="muted small">Xe: <b>${esc(xe.bks || 'chưa gán')}</b> · Lái xe: <b>${esc(lai || 'chưa gán')}</b> · ${B.length}/${cap} ghế khách đã bán · ${cap - B.length} trống · tổng ${cap + sdDriver(dvSO(cur))} chỗ kể cả ghế lái xe</span></div>${dvTabBar(cur)}<div class="dv-body">${body}</div></div>`;
-    }
-    const R = dvRoutes(), rc = dvRoute();
-    const chips = R.length ? `<div class="row dm-hide" style="gap:8px;margin-bottom:12px;align-items:center"><select class="inp" id="dvRoute" data-csq="1" style="width:330px;max-width:100%;font-weight:600">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>` : '';
-    let mob = '';
-    if (R.length) {
-      const B2 = cur ? dvBook(cur.id) : [], cap2 = cur ? dvCap(cur) : 0, tot = sum(B2, b => dvTot(b)), paid = sum(B2.filter(b => b.tt === 'tra'), b => dvTot(b)), hold = B2.filter(b => b.tt !== 'tra').length;
-      const idx = cur ? L.findIndex(l => l.id === cur.id) : -1, prv = idx > 0 ? L[idx - 1] : null, nxt = idx >= 0 && idx < L.length - 1 ? L[idx + 1] : null;
-      const xe2 = cur ? lcXe(cur) : {}, lai2 = cur ? lcEmp(cur).ten || '' : '';
-      const arrow = (t, dis, a) => `<button type="button" class="dm-ar" ${dis ? 'disabled' : ''} ${a}>${t === 'l' ? ic('back') : `<span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span>`}</button>`;
-      mob = `<div class="dm-hd"><div class="dm-card"><div class="dm-route"><select class="inp" id="dvRouteM" data-csq="1">${R.map(r => `<option value="${esc(r)}" ${rc === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
-        <div class="dm-row">${arrow('l', false, `data-act="dvDay" data-d="${D.add(day, -1)}"`)}<label class="dm-date"><b>${D.dowName[D.parse(day).getDay()]}, ${F.date(day)}</b><input type="date" id="dvDateM" value="${day}"></label>${arrow('r', false, `data-act="dvDay" data-d="${D.add(day, 1)}"`)}<div class="dm-time">${cur ? esc(cur.gio) : '--:--'}</div></div></div></div><div class="dm-cal">${calH}</div>
-        ${L.length ? `<div class="dm-trip">${arrow('l', !prv, prv ? `data-act="dvTrip" data-id="${prv.id}"` : '')}<button type="button" class="dm-tx" data-act="dvPick"><span>${cur ? esc(cur.gio) + ' • ' + esc(xe2.bks || 'Chưa gán xe') + (lai2 ? ' • ' + esc(lai2) : '') : 'Chọn chuyến'}</span><em>▾</em></button>${cur ? `<span class="dm-b a">${B2.length}</span><span class="dm-b">${cap2 - B2.length}</span>` : ''}${arrow('r', !nxt, nxt ? `data-act="dvTrip" data-id="${nxt.id}"` : '')}</div>` : '<div class="muted small" style="padding:8px">Ngày này chưa có chuyến.</div>'}
-        ${DV.pick && L.length ? `<div class="dm-list">${dvSortGone(L).map((l, i, A) => { const n = dvBook(l.id).length, c = dvCap(l), v = lcXe(l); return dvGoneH(l, i, A) + `<button class="dv-t ${l.id === (cur && cur.id) ? 'sel' : ''} ${n >= c ? 'full' : ''}${PM.tCls(l)}" data-act="dvTrip" data-id="${l.id}"><div class="tm">${esc(l.gio)}${PM.tMark(l)}</div><div class="r"><span><i class="${v.bks ? '' : 'off'}"></i>${esc(String(v.bks || '').replace(/^\d+\w-/, '') || '—')}</span><span>${n}|${c}</span></div><div class="dv-bar"><div style="width:${Math.min(100, n / c * 100)}%"></div></div></button>`; }).join('')}</div>` : ''}
-        ${cur ? `<div class="dm-sum"><div class="dm-s1"><span>Tổng vé đặt <b>${B2.length}</b></span><span><i class="o"></i>Trống <b>${cap2 - B2.length}</b></span><span><i class="g"></i>Giữ chỗ <b>${hold}</b></span></div><div class="dm-s2">Tổng tiền <b>${F.money(tot)} đ</b> • Đã thu <b>${F.money(paid)} đ</b></div>${lcGone(cur) ? '<div class="dm-s3">Chuyến đã xuất bến</div>' : ''}</div>
-        <div class="dm-act">${lcCan(cur) && Auth.can('lichchay', 'edit') ? `<button class="btn sm" data-act="lcQuick" data-id="${cur.id}">${ic('edit')} Xe, lái xe</button>` : lcGone(cur) ? '<span class="muted small">Đã khóa chỉnh sửa</span>' : ''}<button class="btn sm${DV.pkMode ? ' on' : ''}" data-act="dvPkMode" title="Bật để chạm chọn nhiều vé, in một lượt">${ic('check')} Chọn nhiều</button><button class="btn sm${PM.bCls(cur)}" data-act="dvPrintMap" data-id="${cur.id}" title="${esc(PM.tip(cur))}">${ic('printer')} ${PM.label(cur)}</button></div>` : ''}`;
-    }
-    el.insertAdjacentHTML('beforeend', `<button type="button" class="dv-sbar" data-act="dvSearch">${ic('search')}<span>Tìm vé theo số điện thoại, tên khách, mã vé…</span></button>` + `<div id="gcBox">${GC.html()}</div>` + (mob ? `<div class="dm">${mob}</div>` : '') + chips + `<div class="dv">${side}${main}</div>`);
-    const rm = $('#dvRouteM', el); if (rm) rm.onchange = () => { DV.tuyen = rm.value; DV.trip = null; DV.pick = false; App.render(); };
-    const dm = $('#dvDateM', el); if (dm) dm.onchange = () => { if (dm.value) { LC.ngay = dm.value; DV.trip = null; App.render(); } };
-    if (DV.tab === 'lt') vLC.renderTable($('#dvLt', el), true);
-    const rs = $('#dvRoute', el); if (rs) rs.onchange = () => { DV.tuyen = rs.value; DV.trip = null; App.render(); };
-    const di = $('#dvDate', el); if (di) di.onchange = () => { if (di.value) { LC.ngay = di.value; DV.trip = null; App.render(); } };
-  },
-  excel() { const cur = dvCur(); if (!cur) return toast('Chưa chọn chuyến', 'err'); XLSX.save('Hanh khach ' + cur.gio + ' ' + dvDay(), [xSheet('Hành khách', 'DANH SÁCH HÀNH KHÁCH ' + cur.gio + ' ' + cur.tuyen + ' NGÀY ' + F.date(dvDay()), dvPaxCols, dvBook(cur.id))]); },
-  print() { const cur = dvCur(); if (!cur) return toast('Chưa chọn chuyến', 'err'); dvPrintPhoi([cur]); }
-};
-const dvPaxCols = [{ key: 'ghe', label: 'Ghế' }, { key: 'ma', label: 'Mã vé' }, { key: 'ten', label: 'Tên khách' }, { key: 'sdt', label: 'Số điện thoại' }, { key: 'diemDon', label: 'Điểm đón' }, { key: 'diemTra', label: 'Điểm trả' }, { key: 'gia', label: 'Giá vé', fmt: 'money', sum: true }, { key: 'phuThu', label: 'Phụ thu', fmt: 'money', sum: true }, { key: 'coc', label: 'Đặt cọc', fmt: 'money', sum: true }, { key: 'tt', label: 'Tình trạng', val: b => b.tt === 'tra' ? 'Đã thanh toán' : 'Giữ chỗ' }, { key: 'httt', label: 'Hình thức TT', val: b => dvHT(b.httt) }, { key: 'xuatCT', label: 'Xuất chứng từ', val: b => b.xuatCT ? 'Có' : '' }, { key: 'ghiChu', label: 'Ghi chú' }];
 Object.assign(ACT, {
   dvNav: d => { const dd = D.parse(dvDay()); dd.setDate(1); dd.setMonth(dd.getMonth() + +d.n); const mx = D.daysIn(D.iso(dd).slice(0, 7)); dd.setDate(Math.min(+dvDay().slice(8), mx)); LC.ngay = D.iso(dd); DV.trip = null; App.render(); },
   dvDay: d => { LC.ngay = d.d; DV.trip = null; App.render(); },
@@ -5156,7 +4929,6 @@ addCSS(`body{text-rendering:optimizeLegibility;-moz-osx-font-smoothing:grayscale
 let dhSel = [], dhOpen = false, dhPop = false;
 document.addEventListener('click', e => { if (dhPop && App.cur === 'dieuhanh' && e.target.isConnected && !e.target.closest('.dx-dp')) { dhPop = false; App.render(); } });
 const dhShow = {};   // giờ được người dùng chủ động thêm/hiện lại theo từng ngày
-const dhAbbr = r => { const ini = t => String(t || '').split(/\s+/).filter(Boolean).map(x => x[0].toUpperCase()).join(''), p = String(r || '').split(/\s*(?:⇄|<>)\s*/).map(ini).filter(Boolean); return p.length ? p.join('⇄') : String(r || ''); };
 let dhMode = 'route';   // 'route': từng tuyến một chiều · 'group': gộp hai chiều thành một nhóm
 const dhGrp = r => { if (dhMode !== 'group') return String(r || ''); const p = String(r || '').split(/\s*(?:⇄|<>)\s*/).map(x => x.trim().toUpperCase()).filter(Boolean); return p.length === 2 ? p.sort((a, b) => a.localeCompare(b, 'vi')).join(' ⇄ ') : String(r || ''); };
 addCSS('.dx-dd{position:relative;display:inline-block;width:330px;max-width:100%}.dx-ddb{width:100%;text-align:left;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}.dx-pn{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.14);padding:6px;max-height:300px;overflow:auto}.dx-pn label{display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px}.dx-pn label:hover{background:#f0f9ff}');
@@ -5421,33 +5193,6 @@ function dhTimeWarn(l) {
   return [...new Set(w)];
 }
 addCSS(`.dx-wn.dx-wt{left:auto;right:34px;background:#d97706;box-shadow:0 2px 6px rgba(217,119,6,.4)}.dx-wn{position:absolute;left:6px;top:-8px;background:#dc2626;color:#fff;font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 6px;z-index:2;box-shadow:0 2px 6px rgba(220,38,38,.4)}.dx-chip{position:relative}`);
-const vDH = {
-  print: false,
-  title: 'Điều hành xe', icon: 'kanban', desc: 'Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến',
-  tools: () => `${VT.pick()}<button class="btn" data-act="dhPrint">${ic('printer')} In phân công</button><button class="btn xl" data-act="dhImport">${ic('sheet')} Nhập Excel</button><button class="btn" data-act="dhScan">${ic('upload')} Quét ảnh</button>${Auth.can('hoso', 'add') ? `<button class="btn" data-act="dhSaveRange" title="Lưu Bảng phân công của nhiều ngày vào Lưu trữ hồ sơ">${ic('folder')} Lưu phân công vào hồ sơ</button>` : ''}<button class="btn" data-act="lcGen">${ic('refresh')} Tạo lịch từ Giờ chạy</button>`,
-  render(el) {
-    const day = lcDay(), T = DB.lichchay.filter(l => l.ngay === day), GC = DB.giochay.filter(g => g.tt !== 'ĐÓNG' && g.tuyen && g.gio);
-    const allR = [...new Set([...T.map(l => l.tuyen), ...GC.map(g => g.tuyen)])].sort(routeCmp), allG = [...new Set(allR.map(dhGrp))], sel = dhSel.filter(g => allG.includes(g)), curL = sel.length ? sel : (allG[0] ? [allG[0]] : []);
-    const TR = T.filter(l => curL.includes(dhGrp(l.tuyen))), gios = [...new Set([...TR.map(l => l.gio), ...GC.filter(g => curL.includes(dhGrp(g.tuyen))).map(g => g.gio)])].sort(), nHid = 0, routes = curL.flatMap(g => allR.filter(r => dhGrp(r) === g).sort((a, b) => (a.toUpperCase() === g ? -1 : 0) - (b.toUpperCase() === g ? -1 : 0)));
-    const used = {}; T.forEach(l => { if (l.xeId) used[l.xeId] = (used[l.xeId] || 0) + 1; });
-    const veh = DB.vehicles.filter(v => !v.ngung);
-    const chip = l => { const v = lcXe(l), e = lcEmp(l), n = dvBook(l.id).length, c = dvCap(l), wn = dhDocWarn(l), wt = dhTimeWarn(l), wk = (wn.length ? `<span class="dx-wn" title="Giấy tờ hết hạn (NĐ 158/2024, Điều 11 khoản 4):\n• ${esc(wn.join('\n• '))}">⚠ ${wn.length}</span>` : '') + (wt.length ? `<span class="dx-wn dx-wt" title="Thời gian lái xe (NĐ 158/2024, Điều 11 khoản 5; Luật TTATGTĐB Điều 64):\n• ${esc(wt.join('\n• '))}">⏱ ${wt.length}</span>` : ''), lk = !(l.laiXe || l.khoa) || !Auth.can('dieuhanh', 'edit') ? '' : l.khoa ? (lcAdmin() ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Chuyến đang khóa: chỉ Admin thấy tên lái xe. Bấm để mở khóa cho mọi người cùng thấy">${ic('lock')}</span>` : `<span class="dx-lk" title="Chuyến đã khóa, chỉ Admin xem và mở khóa được">${ic('lock')}</span>`) : lcCan(l) ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Bấm để khóa chuyến: ẩn tên lái xe, chỉ Admin thấy">${ic('unlock')}</span>` : ''; return `<button class="dx-chip ${n >= c ? 'full' : ''} ${lcGone(l) ? 'gone' : ''}" data-act="dhChip" data-id="${l.id}" title="Bấm để sửa nhanh xe, lái xe, hủy chuyến hoặc mở sơ đồ ghế">${lk}${wk}<b>${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><span class="nm">${e.ten ? avatarHTML(e.ten, e.avatar, 'dx-av') + esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</span><span class="st"><span class="n">${n}/${c}</span> vé${lcGone(l) ? '<em>Đã xuất bến</em>' : ''}</span></button>`; };
-    const lbl = dhMode === 'group' ? 'nhóm tuyến đường' : 'tuyến đường', allL = dhMode === 'group' ? 'Tất cả các nhóm tuyến đường' : 'Tất cả các tuyến đường';
-    const selBox = `<div class="dx-chips">${allG.length > 1 ? `<button type="button" class="dx-cp all ${curL.length === allG.length ? 'on' : ''}" data-act="dhAll" title="${allL}">Tất cả</button>` : ''}${allG.map(g => `<button type="button" class="dx-cp ${curL.includes(g) ? 'on' : ''}" data-act="dhG" data-g="${esc(g)}" title="Bấm để chọn / bỏ ${lbl} này">${esc(g)}</button>`).join('') || `<span class="muted">Chưa có ${lbl}</span>`}</div>`;
-    const nT = TR.filter(l => l.laiXe).length, nDay = T.filter(l => l.laiXe).length, nNo = TR.filter(l => !l.laiXe).length, nMiss = routes.reduce((a, r) => a + gios.filter(g => GC.some(x => x.tuyen === r && x.gio === g) && !TR.some(l => l.tuyen === r && l.gio === g)).length, 0);
-    const head = `<div class="dx-bar"><div class="dx-dt"><button class="btn sm" data-act="dhNav" data-n="-1" title="Ngày trước">${ic('back')}</button><span class="dx-dp"><button type="button" class="inp dx-dbtn" data-act="dhPop" title="Bấm để mở lịch (dương và âm lịch)">${ic('calendar')}<b>${F.date(day)}</b><span class="car">▾</span></button>${dhPop ? '<div class="dx-pop">@@DXCAL@@</div>' : ''}</span><button class="btn sm" data-act="dhNav" data-n="1" title="Ngày sau"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button><button class="btn sm" data-act="dhNav" data-n="0">Hôm nay</button><b class="dx-dow">${D.dowName[D.parse(day).getDay()]}, ${F.date(day)}<span class="dx-al">🌙 ${AL.txt(day)}</span></b></div><div class="dx-rt"><div class="dx-modes">${[['route', 'Tuyến đường'], ['group', 'Nhóm tuyến đường']].map(m => `<button type="button" class="dx-rd ${dhMode === m[0] ? 'on' : ''}" data-act="dhMode" data-m="${m[0]}"><i></i>${m[1]}</button>`).join('')}</div>${selBox}</div></div><div class="dx-stats"><span><b>${nT}</b> chuyến đã chọn có lái xe</span><span><b>${nDay}</b> chuyến cả ngày</span>${nNo ? `<span class="mut"><b>${nNo}</b> chuyến chưa gán lái xe</span>` : ''}${nMiss ? `<span class="mut"><b>${nMiss}</b> giờ chưa tạo chuyến${Auth.can('dieuhanh', 'add') ? ` · <a role="button" style="cursor:pointer" data-act="lcGen">Tạo lịch từ Giờ chạy</a>` : ''}</span>` : ''}</div>`;
-    const table = routes.length && gios.length ? `<div class="dx-wrap"><table class="dx" style="--dxw:${120 + gios.length * 200 + 64}px"><thead><tr><th class="rt"></th>${gios.map(g => `<th>${esc(g)}</th>`).join('')}<th class="dx-addh"></th></tr></thead><tbody>${routes.map(r => `<tr><th class="rt" title="${esc(r)}">${esc(dhAbbr(r))} <span class="dx-cnt">(${TR.filter(l => l.tuyen === r && l.laiXe).length})</span></th>${gios.map(g => { const L = TR.filter(l => l.tuyen === r && l.gio === g), gc = !L.length && GC.find(x => x.tuyen === r && x.gio === g); return `<td data-t="${esc(g)}" class="${L.length ? '' : 'e'}">${L.map(chip).join('')}${gc ? (Auth.can('dieuhanh', 'add') ? `<button type="button" class="dx-chip dx-new" data-act="dhMk" data-r="${esc(r)}" data-g="${esc(g)}" title="Giờ chạy có trong mục Giờ chạy nhưng hôm nay chưa tạo chuyến. Bấm để tạo và gán xe, lái xe">${ic('plus')}<b>Tạo chuyến</b><span class="nm">${gc.xeId ? esc((DB.vehicles.find(v => v.id === gc.xeId) || {}).bks || '') : 'Chưa có chuyến'}</span></button>` : '<span class="dx-nt">Chưa có chuyến</span>') : ''}</td>`; }).join('')}<td class="dx-addc">${Auth.can('dieuhanh', 'add') ? `<button type="button" class="dx-addbtn" data-act="dhAddGio" data-r="${esc(r)}" title="Thêm giờ chạy cho tuyến ${esc(r)}">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted" style="padding:20px">Chưa có giờ chạy nào. Vào mục <b>Giờ chạy</b> để thêm giờ chạy cho các tuyến.</div>';
-    const foot = `<details class="dx-foot"><summary>Xe chưa điều (${veh.filter(v => !used[v.id]).length}) · Xe đã điều (${veh.filter(v => used[v.id]).length})</summary><div><b>Xe chưa điều:</b>${veh.filter(v => !used[v.id]).map(v => `<span><i class="lk"></i>${esc(v.bks)} (${esc(v.soCho || '?')})</span>`).join('') || '<span class="muted">Không còn xe</span>'}</div><div><b>Xe đã điều:</b>${veh.filter(v => used[v.id]).map(v => `<span><i></i>${esc(v.bks)} (${used[v.id]})</span>`).join('') || '<span class="muted">Chưa điều xe nào</span>'}</div></details>`;
-    const ym = day.slice(0, 7), nd = D.daysIn(ym), lead = (D.parse(ym + '-01').getDay() + 6) % 7, hasT = {}; DB.lichchay.forEach(l => { if (l.ngay.slice(0, 7) === ym && l.laiXe) hasT[l.ngay] = 1; });
-    const cells = [...Array(lead).fill(null), ...Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'))];
-    const cal = `<div class="dv-side dx-cal"><div class="row" style="align-items:center;gap:6px"><button class="btn sm" data-act="dhMon" data-n="-1">${ic('back')}</button><b class="grow" style="text-align:center">Tháng ${day.slice(5, 7)}/${day.slice(0, 4)}</b><button class="btn sm" data-act="dhMon" data-n="1"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button></div>
-      <div class="dv-days">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small style="font-size:11px;color:#98a2b3;padding:2px 0">${x}</small>`).join('')}${cells.map(d => d ? `<button class="dv-d ${d === day ? 'sel' : ''} ${d === D.today() ? 'tod' : ''}" data-act="dhDay" data-d="${d}"><b>${+d.slice(8)}</b>${AL.cell(d)}<small style="height:6px">${hasT[d] ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + (d === day ? '#fff' : 'var(--vt-a,#38a3e8)') + '"></span>' : ''}</small></button>` : '<span></span>').join('')}</div>${AL.selHTML(day)}
-      <button class="btn sm" data-act="dhDay" data-d="${D.today()}" style="width:100%">Hôm nay</button></div>`;
-    el.insertAdjacentHTML('beforeend', `<div class="dx-top2">${head.replace('@@DXCAL@@', () => cal)}</div>` + table);
-    const cd = el.querySelector('.dx-cald'); if (cd) cd.ontoggle = () => { try { localStorage.setItem('dh.cal', cd.open ? '1' : '0'); } catch (e) { } };
-    const di = $('#dhDate', el); if (di) di.onchange = () => { if (di.value) { LC.ngay = di.value; App.render(); } };
-  },
-};
 Object.assign(ACT, {
   dhMode: d => { if (dhMode === d.m) return; dhMode = d.m; dhSel = []; dhOpen = false; App.render(); },
   dhDD: () => { dhOpen = !dhOpen; App.render(); },
@@ -7146,7 +6891,7 @@ const CFG = {
     { group: 'Xe & nhiên liệu', items: ['phuongtien', 'nhienlieu', 'suachua'] },
     { group: 'Nhân sự & lương', items: ['nhanvien', 'lylich', 'chamcong', 'bangluong', 'hopdong', 'thue'] },
     { group: 'Thiết lập', items: ['caidat', 'users'] }],
-  views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: MODL.stub('giochay', {"title": "Giờ chạy", "icon": "clock", "desc": "Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến"}), banggia: MODL.stub('banggia', {"title": "Bảng giá vé", "icon": "tag", "desc": "Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi"}), suachua: MODL.stub('suachua', {"title": "Sửa chữa", "icon": "wrench", "desc": "Phiếu sửa chữa phương tiện: nội dung, số lượng, đơn giá và chi phí theo xe"}), nhienlieu: MODL.stub('nhienlieu', { title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe' }), lylich: MODL.stub('lylich', {"title": "Lý lịch hành nghề", "icon": "idcard", "desc": "Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn"}), kmxe: MODL.stub('kmxe', {"title": "Km xe", "icon": "trend", "desc": "Thống kê km mỗi xe đã chạy theo ngày, tuần, tháng, năm (nhập báo cáo từ Skysoft)"}), lichchay: vLC, dieuhanh: vDH, hdvc: vVC, hopdong: MODL.stub('hopdong', {"title":"Hợp đồng lao động","icon":"file","desc":"Soạn HĐLĐ tự động cho từng nhân viên từ hồ sơ nhân sự, bấm vào dòng để xem trước","print":false}), chamcong: MODL.stub('chamcong', {"title":"Bảng chấm công","icon":"calcheck","desc":"Lái xe tự tính công từ Lịch chạy · Văn phòng tự điền X ngày làm việc"}), bangluong: MODL.stub('bangluong', {"title": "Bảng lương", "icon": "wallet", "desc": "Tự tính lương theo công, OT, BHXH, thuế TNCN. Ô màu vàng nhập trực tiếp."}), thue: MODL.stub('thue', {"title": "Thuế TNCN & Bảo hiểm", "label": "Thuế & bảo hiểm", "icon": "percent", "desc": "Tổng hợp theo năm và công cụ tính lương Gross / Net"}), caidat: vSet, users: vUsers }
+  views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: MODL.stub('giochay', {"title": "Giờ chạy", "icon": "clock", "desc": "Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến"}), banggia: MODL.stub('banggia', {"title": "Bảng giá vé", "icon": "tag", "desc": "Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi"}), suachua: MODL.stub('suachua', {"title": "Sửa chữa", "icon": "wrench", "desc": "Phiếu sửa chữa phương tiện: nội dung, số lượng, đơn giá và chi phí theo xe"}), nhienlieu: MODL.stub('nhienlieu', { title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe' }), lylich: MODL.stub('lylich', {"title": "Lý lịch hành nghề", "icon": "idcard", "desc": "Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn"}), kmxe: MODL.stub('kmxe', {"title": "Km xe", "icon": "trend", "desc": "Thống kê km mỗi xe đã chạy theo ngày, tuần, tháng, năm (nhập báo cáo từ Skysoft)"}), lichchay: MODL.stub('lichchay', {"title":"Đặt vé","icon":"calendar","desc":"Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe"}), dieuhanh: MODL.stub('dieuhanh', {"title":"Điều hành xe","icon":"kanban","desc":"Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến","print":false}), hdvc: vVC, hopdong: MODL.stub('hopdong', {"title":"Hợp đồng lao động","icon":"file","desc":"Soạn HĐLĐ tự động cho từng nhân viên từ hồ sơ nhân sự, bấm vào dòng để xem trước","print":false}), chamcong: MODL.stub('chamcong', {"title":"Bảng chấm công","icon":"calcheck","desc":"Lái xe tự tính công từ Lịch chạy · Văn phòng tự điền X ngày làm việc"}), bangluong: MODL.stub('bangluong', {"title": "Bảng lương", "icon": "wallet", "desc": "Tự tính lương theo công, OT, BHXH, thuế TNCN. Ô màu vàng nhập trực tiếp."}), thue: MODL.stub('thue', {"title": "Thuế TNCN & Bảo hiểm", "label": "Thuế & bảo hiểm", "icon": "percent", "desc": "Tổng hợp theo năm và công cụ tính lương Gross / Net"}), caidat: MODL.stub('caidat', {"title": "Cài đặt", "icon": "settings", "desc": "Thông tin công ty, công chuẩn, tỷ lệ bảo hiểm, biểu thuế TNCN", "print": false}), users: vUsers }
 };
 const Shell = {
   ids: ['dashboard', 'dieuhanh', 'lichchay', 'chamcong'], short: { dashboard: 'Tổng quan', dieuhanh: 'Điều hành', lichchay: 'Đặt vé', chamcong: 'Chấm công' },
@@ -8836,10 +8581,7 @@ PQ.mountIn = function () { };
 PQ.isDrv = e => /(lai xe|tai xe|phu xe|driver)/.test(PQ.nm(e && e.chucVu));
 DRV.on = function () { const u = Auth.user; if (!u || u.role === 'admin') return false; const r = DB.roles && DB.roles[u.role]; if (!r) return false; if (r.selfOnly) return true; if (r.dept == null || r.selfDrv === false) return false; const e = PQ.emp(u); return !!e && PQ.isDrv(e); };
 { const n0 = Auth.nav; Auth.nav = function () { const r = n0.apply(this, arguments); try { PD.labels(); } catch (e) { } return r; }; }
-Object.defineProperty(vLC, 'title', { configurable: true, get: () => DRV.on() ? 'Chuyến của tôi' : 'Đặt vé', set() { } });
-Object.defineProperty(vLC, 'desc', { configurable: true, get: () => DRV.on() ? 'Các chuyến được phân cho bạn, kèm danh sách khách để gọi' : 'Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe', set() { } });
 /* Cài đặt: thêm thẻ phân quyền (chỉ Admin thấy) */
-{ const r0 = vSet.render; vSet.render = function (el) { const r = r0.apply(this, arguments); try { if (PD.isAdmin()) PD.mount(el); } catch (e) { console.warn('PD', e); } return r; }; vSet.desc = 'Phân quyền theo phòng ban, thông tin công ty, công chuẩn, bảo hiểm, thuế TNCN'; }
 /* Màn hình tài khoản: bỏ bảng vai trò cũ, chỉ còn danh sách tài khoản */
 { const u0 = vUsers.render;
   vUsers.render = function (el) { const r = u0.apply(this, arguments); try { el.querySelectorAll('.card').forEach(c => { const h = c.querySelector('h3'); if (h && /Phân quyền theo vai trò/.test(h.textContent)) c.outerHTML = `<div class="card"><div class="card-h"><h3>${ic('shield')} Phân quyền đã chuyển sang Cài đặt</h3></div><div class="card-b"><p class="small muted" style="margin:0 0 10px">Quyền của mỗi tài khoản đi theo <b>phòng ban</b> trong hồ sơ nhân viên. Vào <b>Cài đặt → Phân quyền theo phòng ban</b> để tích Xem · Thêm · Sửa · Xóa cho từng phòng ban. Admin là quyền cao nhất.</p><button class="btn pri" data-act="pdGo">${ic('settings')} Mở phân quyền theo phòng ban</button></div></div>`; }); } catch (e) { } return r; };
@@ -10659,13 +10401,6 @@ const BX = {
   },
   save() { const ym = BX.ym(), [y, mo] = ym.split('-'); return HS.saveDoc({ path: [y, 'Tài chính - Kế toán', 'BHXH & lương chuyển khoản'], ten: `BHXH và lương chuyển khoản tháng ${mo}/${y}`, tenFile: `BHXH-LuongCK-${ym}.pdf`, html: BX.html(), ref: 'bhxh:' + ym, ghiChu: `Bảng tháng ${mo}/${y}` }); }
 };
-function bxCard() {
-  const ym = BX.ym(), L = BX.emps(), ed = BX.canEdit(), T = BX.tot();
-  const rows = L.map(e => { const v = BX.val(e); return `<tr><td class="nw muted">${ym.slice(5)}/${ym.slice(0, 4)}</td><td><b>${esc(e.ten)}</b></td><td class="c"><input type="checkbox" data-bx="bh" data-e="${e.id}" ${v.bh ? 'checked' : ''} ${ed ? '' : 'disabled'} style="width:20px;height:20px"></td><td><input class="inp r" data-bx="ck" data-e="${e.id}" value="${v.ck ? F.money(v.ck) : ''}" inputmode="numeric" placeholder="0" ${ed ? '' : 'disabled'}></td><td><input class="inp r" data-bx="ml" data-e="${e.id}" value="${v.ml ? F.money(v.ml) : ''}" inputmode="numeric" placeholder="0" ${ed ? '' : 'disabled'}></td></tr>`; }).join('');
-  return card('Đóng BHXH & lương chuyển khoản theo tháng', `<div class="v2f"><p class="small muted" style="margin-top:0">Chọn tháng, tick nhân viên đóng BHXH, nhập lương chuyển khoản và số tiền Bảo hiểm xã hội (mức lương đóng BHXH). Có thể lưu bảng thành PDF vào Lưu trữ hồ sơ.</p>
-    <div class="row" style="gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap"><label class="field" style="margin:0"><span>Tháng</span><input type="month" class="inp" data-bx="m" value="${ym}"></label><span class="grow"></span>${ed ? `<button class="btn" data-bxa="fill">Lấy từ hồ sơ nhân viên</button><button class="btn" data-bxa="all">Tick đóng BHXH tất cả</button>` : ''}<button class="btn pri" data-bxa="save">${ic('folder')} Lưu hồ sơ</button></div>
-    <div class="tbl-wrap free"><table class="tbl compact bx-t"><thead><tr><th>Tháng</th><th>Tên nhân viên</th><th class="c">Đóng BHXH</th><th class="r">Lương chuyển khoản</th><th class="r" title="Mức lương đóng bảo hiểm xã hội">Bảo hiểm xã hội</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">Chưa có nhân viên</td></tr>'}</tbody><tfoot><tr id="bxTot" style="font-weight:700"><td></td><td>Tổng cộng</td><td class="c">${T.n} người</td><td class="r">${F.money(T.ck)}</td><td class="r">${F.money(T.ml)}</td></tr></tfoot></table></div></div>`);
-}
 document.addEventListener('change', e => {
   const x = e.target.closest && e.target.closest('[data-bx]'); if (!x || !BX.canEdit() && x.dataset.bx !== 'm') return; const k = x.dataset.bx;
   if (k === 'm') { BX.m = x.value || BX.ym(); return App.render(); }
@@ -10731,10 +10466,6 @@ const ATG_F = () => [
 Object.assign(ATG, {
   persist(q) { if (Auth.can('caidat', 'edit')) { S().atgt = q; Store.changed(); } }
 });
-function atgtCard() {
-  const q = ATG.get();
-  return card('Mẫu quyết định thành lập Ban An toàn giao thông', `<p class="small muted" style="margin-top:0">Soạn quyết định thành lập Ban An toàn giao thông (thành viên, nhiệm vụ), xem trước bản in rồi in hoặc lưu bản PDF vào Lưu trữ hồ sơ. Các căn cứ pháp lý chỉ là mẫu, cần đối chiếu văn bản hiện hành.</p>${lpDocBtn('atgOpen', 'Ban: ' + esc(q.ten) + ' · Số ' + esc(q.so))}`);
-}
 Object.assign(ACT, {
   atgOpen: () => lpDocOpen({ title: 'Quyết định thành lập Ban An toàn giao thông', boxId: 'atgBox', fields: ATG_F(), value: ATG.get(),
     foot: `<button class="btn pri" data-act="atgPrint">${ic('printer')} In quyết định</button>`, build: () => ATG.html(readForm($('#atgBox'), ATG_F())), empty: 'Nhập thông tin để xem trước' }),
@@ -11250,34 +10981,6 @@ addCSS(`.au-rm{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-siz
    Khi tải từ Firebase: mã tham chiếu được đổi lại thành ảnh (lấy từ bộ nhớ đệm IndexedDB của máy, thiếu thì tải từ Drive),
    nên toàn bộ màn hình, bản in trong app vẫn dùng ảnh như cũ. Chưa kết nối Google Drive thì giữ nguyên cách lưu cũ. */
 /* ===== Lịch âm (thuật toán Hồ Ngọc Đức, múi giờ +7) — dùng cho Đặt vé và Điều hành xe ===== */
-const AL = {
-  jd(d, m, y) { const a = Math.floor((14 - m) / 12), yy = y + 4800 - a, mm = m + 12 * a - 3; let j = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045; if (j < 2299161) j = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - 32083; return j; },
-  nm(k) { const T = k / 1236.85, T2 = T * T, T3 = T2 * T, dr = Math.PI / 180; let J = 2415020.75933 + 29.53058868 * k + 0.0001178 * T2 - 0.000000155 * T3 + 0.00033 * Math.sin((166.56 + 132.87 * T - 0.009173 * T2) * dr);
-    const M = 359.2242 + 29.10535608 * k - 0.0000333 * T2 - 0.00000347 * T3, Mp = 306.0253 + 385.81691806 * k + 0.0107306 * T2 + 0.00001236 * T3, F = 21.2964 + 390.67050646 * k - 0.0016528 * T2 - 0.00000239 * T3;
-    let C = (0.1734 - 0.000393 * T) * Math.sin(M * dr) + 0.0021 * Math.sin(2 * dr * M) - 0.4068 * Math.sin(Mp * dr) + 0.0161 * Math.sin(dr * 2 * Mp) - 0.0004 * Math.sin(dr * 3 * Mp) + 0.0104 * Math.sin(dr * 2 * F) - 0.0051 * Math.sin(dr * (M + Mp)) - 0.0074 * Math.sin(dr * (M - Mp)) + 0.0004 * Math.sin(dr * (2 * F + M)) - 0.0004 * Math.sin(dr * (2 * F - M)) - 0.0006 * Math.sin(dr * (2 * F + Mp)) + 0.0010 * Math.sin(dr * (2 * F - Mp)) + 0.0005 * Math.sin(dr * (2 * Mp + M));
-    const dt = T < -11 ? 0.001 + 0.000839 * T + 0.0002261 * T2 - 0.00000845 * T3 - 0.000000081 * T * T3 : -0.000278 + 0.000265 * T + 0.000262 * T2; return J + C - dt; },
-  nmd: k => Math.floor(AL.nm(k) + 0.5 + 7 / 24),
-  sun(jdn) { const T = (jdn - 2451545.5 - 7 / 24) / 36525, T2 = T * T, dr = Math.PI / 180, M = 357.5291 + 35999.0503 * T - 0.0001559 * T2 - 0.00000048 * T * T2, L0 = 280.46645 + 36000.76983 * T + 0.0003032 * T2;
-    let DL = (1.9146 - 0.004817 * T - 0.000014 * T2) * Math.sin(dr * M) + (0.019993 - 0.000101 * T) * Math.sin(dr * 2 * M) + 0.00029 * Math.sin(dr * 3 * M), L = (L0 + DL) * dr; L -= Math.PI * 2 * Math.floor(L / (Math.PI * 2)); return Math.floor(L / Math.PI * 6); },
-  m11(y) { const off = AL.jd(31, 12, y) - 2415021, k = Math.floor(off / 29.530588853); let nm = AL.nmd(k); if (AL.sun(nm) >= 9) nm = AL.nmd(k - 1); return nm; },
-  leapOff(a11) { const k = Math.floor((a11 - 2415021.076998695) / 29.530588853 + 0.5); let last, i = 1, arc = AL.sun(AL.nmd(k + i)); do { last = arc; i++; arc = AL.sun(AL.nmd(k + i)); } while (arc !== last && i < 14); return i - 1; },
-  cache: {},
-  of(iso) {
-    if (AL.cache[iso]) return AL.cache[iso];
-    const [yy, mm, dd] = String(iso).split('-').map(Number), dn = AL.jd(dd, mm, yy), k = Math.floor((dn - 2415021.076998695) / 29.530588853);
-    let ms = AL.nmd(k + 1); if (ms > dn) ms = AL.nmd(k);
-    let a11 = AL.m11(yy), b11 = a11, ly; if (a11 >= ms) { ly = yy; a11 = AL.m11(yy - 1); } else { ly = yy + 1; b11 = AL.m11(yy + 1); }
-    const d = dn - ms + 1, diff = Math.floor((ms - a11) / 29); let leap = false, m = diff + 11;
-    if (b11 - a11 > 365) { const ld = AL.leapOff(a11); if (diff >= ld) { m = diff + 10; if (diff === ld) leap = true; } }
-    if (m > 12) m -= 12; if (m >= 11 && diff < 4) ly -= 1;
-    return (AL.cache[iso] = { d, m, y: ly, leap });
-  },
-  CAN: ['Giáp', 'Ất', 'Bính', 'Đinh', 'Mậu', 'Kỷ', 'Canh', 'Tân', 'Nhâm', 'Quý'], CHI: ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'],
-  nam: y => AL.CAN[(y + 6) % 10] + ' ' + AL.CHI[(y + 8) % 12],
-  txt(iso) { try { const a = AL.of(iso); return `${a.d}/${a.m}${a.leap ? ' nhuận' : ''} năm ${AL.nam(a.y)}`; } catch (e) { return ''; } },
-  cell(iso) { try { const a = AL.of(iso); return `<i class="al${a.d === 1 || a.d === 15 ? ' al-r' : ''}">${a.d === 1 ? a.d + '/' + a.m : a.d}</i>`; } catch (e) { return ''; } },
-  selHTML(iso) { const t = AL.txt(iso); return t ? `<div class="al-sel">🌙 Âm lịch: <b>${t}</b></div>` : ''; }
-};
 addCSS(`.dv-d .al{display:block;font-style:normal;font-size:9.5px;line-height:1.1;color:#98a2b3;margin-top:1px}.dv-d .al.al-r{color:#dc2626;font-weight:700}.dv-d.sel .al{color:#dbeafe}.dv-d.sel .al.al-r{color:#fff}
 .al-sel{font-size:12.5px;color:#475467;margin:2px 0 8px;text-align:center}.al-sel b{color:#b45309}.dx-al{font-weight:500;color:#b45309;font-size:.9em;margin-left:6px;white-space:nowrap}`);
 addCSS(`.dm-cal{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:14px;padding:10px;margin:0 10px 10px}.dm-cal .dv-days{margin:6px 0 4px}.dm-cal .dv-d{padding:3px 0}.dm-cal .dv-d b{font-size:15px}@media(min-width:901px){.dm-cal{display:none}}`);
@@ -11457,6 +11160,38 @@ const LIVE = {
 
 ICONS.chart = ICONS.chart || '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>';
 Auth.VIEWMOD.baocaovt = 'dieuhanh';
+/* dùng chung cho Đặt vé, Điều hành, lệnh vận chuyển (giữ ở index) */
+const dvCap = l => sdSeats(dvSO(l)).length;
+const AL = {
+  jd(d, m, y) { const a = Math.floor((14 - m) / 12), yy = y + 4800 - a, mm = m + 12 * a - 3; let j = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045; if (j < 2299161) j = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - 32083; return j; },
+  nm(k) { const T = k / 1236.85, T2 = T * T, T3 = T2 * T, dr = Math.PI / 180; let J = 2415020.75933 + 29.53058868 * k + 0.0001178 * T2 - 0.000000155 * T3 + 0.00033 * Math.sin((166.56 + 132.87 * T - 0.009173 * T2) * dr);
+    const M = 359.2242 + 29.10535608 * k - 0.0000333 * T2 - 0.00000347 * T3, Mp = 306.0253 + 385.81691806 * k + 0.0107306 * T2 + 0.00001236 * T3, F = 21.2964 + 390.67050646 * k - 0.0016528 * T2 - 0.00000239 * T3;
+    let C = (0.1734 - 0.000393 * T) * Math.sin(M * dr) + 0.0021 * Math.sin(2 * dr * M) - 0.4068 * Math.sin(Mp * dr) + 0.0161 * Math.sin(dr * 2 * Mp) - 0.0004 * Math.sin(dr * 3 * Mp) + 0.0104 * Math.sin(dr * 2 * F) - 0.0051 * Math.sin(dr * (M + Mp)) - 0.0074 * Math.sin(dr * (M - Mp)) + 0.0004 * Math.sin(dr * (2 * F + M)) - 0.0004 * Math.sin(dr * (2 * F - M)) - 0.0006 * Math.sin(dr * (2 * F + Mp)) + 0.0010 * Math.sin(dr * (2 * F - Mp)) + 0.0005 * Math.sin(dr * (2 * Mp + M));
+    const dt = T < -11 ? 0.001 + 0.000839 * T + 0.0002261 * T2 - 0.00000845 * T3 - 0.000000081 * T * T3 : -0.000278 + 0.000265 * T + 0.000262 * T2; return J + C - dt; },
+  nmd: k => Math.floor(AL.nm(k) + 0.5 + 7 / 24),
+  sun(jdn) { const T = (jdn - 2451545.5 - 7 / 24) / 36525, T2 = T * T, dr = Math.PI / 180, M = 357.5291 + 35999.0503 * T - 0.0001559 * T2 - 0.00000048 * T * T2, L0 = 280.46645 + 36000.76983 * T + 0.0003032 * T2;
+    let DL = (1.9146 - 0.004817 * T - 0.000014 * T2) * Math.sin(dr * M) + (0.019993 - 0.000101 * T) * Math.sin(dr * 2 * M) + 0.00029 * Math.sin(dr * 3 * M), L = (L0 + DL) * dr; L -= Math.PI * 2 * Math.floor(L / (Math.PI * 2)); return Math.floor(L / Math.PI * 6); },
+  m11(y) { const off = AL.jd(31, 12, y) - 2415021, k = Math.floor(off / 29.530588853); let nm = AL.nmd(k); if (AL.sun(nm) >= 9) nm = AL.nmd(k - 1); return nm; },
+  leapOff(a11) { const k = Math.floor((a11 - 2415021.076998695) / 29.530588853 + 0.5); let last, i = 1, arc = AL.sun(AL.nmd(k + i)); do { last = arc; i++; arc = AL.sun(AL.nmd(k + i)); } while (arc !== last && i < 14); return i - 1; },
+  cache: {},
+  of(iso) {
+    if (AL.cache[iso]) return AL.cache[iso];
+    const [yy, mm, dd] = String(iso).split('-').map(Number), dn = AL.jd(dd, mm, yy), k = Math.floor((dn - 2415021.076998695) / 29.530588853);
+    let ms = AL.nmd(k + 1); if (ms > dn) ms = AL.nmd(k);
+    let a11 = AL.m11(yy), b11 = a11, ly; if (a11 >= ms) { ly = yy; a11 = AL.m11(yy - 1); } else { ly = yy + 1; b11 = AL.m11(yy + 1); }
+    const d = dn - ms + 1, diff = Math.floor((ms - a11) / 29); let leap = false, m = diff + 11;
+    if (b11 - a11 > 365) { const ld = AL.leapOff(a11); if (diff >= ld) { m = diff + 10; if (diff === ld) leap = true; } }
+    if (m > 12) m -= 12; if (m >= 11 && diff < 4) ly -= 1;
+    return (AL.cache[iso] = { d, m, y: ly, leap });
+  },
+  CAN: ['Giáp', 'Ất', 'Bính', 'Đinh', 'Mậu', 'Kỷ', 'Canh', 'Tân', 'Nhâm', 'Quý'], CHI: ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'],
+  nam: y => AL.CAN[(y + 6) % 10] + ' ' + AL.CHI[(y + 8) % 12],
+  txt(iso) { try { const a = AL.of(iso); return `${a.d}/${a.m}${a.leap ? ' nhuận' : ''} năm ${AL.nam(a.y)}`; } catch (e) { return ''; } },
+  cell(iso) { try { const a = AL.of(iso); return `<i class="al${a.d === 1 || a.d === 15 ? ' al-r' : ''}">${a.d === 1 ? a.d + '/' + a.m : a.d}</i>`; } catch (e) { return ''; } },
+  selHTML(iso) { const t = AL.txt(iso); return t ? `<div class="al-sel">🌙 Âm lịch: <b>${t}</b></div>` : ''; }
+};
+Object.defineProperty(CFG.views.lichchay, 'title', { configurable: true, get: () => DRV.on() ? 'Chuyến của tôi' : 'Đặt vé', set() { } });
+Object.defineProperty(CFG.views.lichchay, 'desc', { configurable: true, get: () => DRV.on() ? 'Các chuyến được phân cho bạn, kèm danh sách khách để gọi' : 'Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe', set() { } });
 CFG.views.baocaovt = MODL.stub('baocaovt', { title: 'Báo cáo vận tải', label: 'Báo cáo vận tải', icon: 'chart', print: false, desc: 'Tỷ lệ thực hiện chuyến theo tuyến, cảnh báo ngừng khai thác, sản lượng hành khách theo NĐ 158/2024' });
 ICONS.camera = ICONS.camera || '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>';
 Auth.VIEWMOD.scan = 'hoso';
@@ -12220,7 +11955,7 @@ const PERM = {
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T23:05';
+const APP_BUILD = '2026-11-05T23:45';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){

@@ -98,7 +98,7 @@ function kmPanel(el) {
   box.querySelectorAll('[data-km]').forEach(b => b.onclick = ev => { ev.preventDefault(); KM.mode = b.dataset.km; App.render(); });
   box.querySelectorAll('.km-row').forEach(tr => tr.onclick = () => { const r = A.rows.find(x => x.bks === tr.dataset.bks); if (r) kmDetail(r, KM.mode, A.a, A.b); });
 }
-{ const r0 = vDH.render; vDH.render = function (el) { r0.call(this, el); kmPanel(el); }; }
+/* bảng Km hiện trong màn hình Điều hành: dieuhanh.js tự nạp module này rồi gọi kmPanel */
 addCSS(`.km-dx{margin-top:16px;background:#fff;border:1px solid #bae6fd;border-radius:14px;padding:12px 14px}.km-dx>summary{cursor:pointer;list-style:none;font-size:14.5px;color:#0c4a6e}.km-dx>summary::-webkit-details-marker{display:none}.km-dx>summary::before{content:'▸ ';color:#0284c7}.km-dx[open]>summary::before{content:'▾ '}`);
 Object.assign(ACT, { kmImport: () => kmImport(), kmManual: () => kmManual() });
 addCSS(`.km-seg{display:inline-flex;border:1px solid #bae6fd;border-radius:10px;overflow:hidden}.km-seg button{border:0;background:#fff;padding:0 14px;height:40px;font:inherit;font-weight:600;color:#64748b;cursor:pointer}.km-seg button.on{background:#0284c7;color:#fff}.km-lbl{min-width:120px;text-align:center}.km-bar{height:8px;background:#e0f2fe;border-radius:6px;overflow:hidden}.km-bar i{display:block;height:100%;background:#0ea5e9;border-radius:6px}.km-row:hover td{background:#f0f9ff}
