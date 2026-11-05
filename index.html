@@ -2063,7 +2063,11 @@ const empCols = [
 const vEmp = {
   title: 'Nhân viên', icon: 'users', desc: 'Hồ sơ nhân sự, lương cơ bản, lương đóng bảo hiểm, người phụ thuộc',
   tools: () => `<button class="btn" data-act="empImport">${ic('upload')} Nhập danh sách nhân viên</button><button class="btn pri" data-act="empAdd">${ic('plus')} Thêm nhân viên</button>`,
-  rows() { return DB.employees.filter(e => !UI.pb || e.phongBan === UI.pb); },
+  rows() {   // xếp theo phòng ban (đúng thứ tự trong Cài đặt), trong phòng: lãnh đạo trước, người nghỉ việc cuối, rồi theo mã
+    const pb = S().phongBan || [], ix = e => { const i = pb.indexOf(e.phongBan); return i < 0 ? 999 : i; };
+    const rk = e => { const c = String(e.chucVu || '').toLowerCase(); return /phó giám đốc/.test(c) ? 1 : /giám đốc/.test(c) ? 0 : /trưởng|quản lý/.test(c) ? 2 : /phó/.test(c) ? 3 : 5; };
+    return DB.employees.filter(e => !UI.pb || e.phongBan === UI.pb).slice().sort((a, b) => ix(a) - ix(b) || String(a.phongBan || '').localeCompare(String(b.phongBan || ''), 'vi') || (a.trangThai === 'Nghỉ việc') - (b.trangThai === 'Nghỉ việc') || rk(a) - rk(b) || String(a.ma || '').localeCompare(String(b.ma || ''), 'vi', { numeric: true }));
+  },
   render(el) {
     table(el, {
       id: 'emp', columns: empCols.filter(c => !c.noShow), rows: vEmp.rows(), ph: 'Tìm mã, tên, phòng ban...',
@@ -13025,7 +13029,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T00:20';
+const APP_BUILD = '2026-11-05T00:30';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
