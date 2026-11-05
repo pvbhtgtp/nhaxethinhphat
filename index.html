@@ -12804,7 +12804,7 @@ const BCVT = {
       const tl = dkTo ? X.length / dkTo * 100 : null, lr = lastRun[r] || '', idle = lr ? D.diff(today, lr) : null;
       return { tuyen: r, nGio, dk, dkTo, th: X.length, tl, hk: B.length, dt: B.reduce((a, b) => a + (+b.gia || 0) + (+b.phuThu || 0), 0), lr, idle };
     });
-    const V = {}; T.filter(done).forEach(l => { const v = V[l.xeId] = V[l.xeId] || { bks: ((DB.vehicles || []).find(x => x.id === l.xeId) || {}).bks || '?', ch: 0, hk: 0, tuyen: new Set() }; v.ch++; v.hk += (byTrip[l.id] || []).length; v.tuyen.add(l.tuyen); });
+    const V = {}; T.filter(done).forEach(l => { const v = V[l.xeId] = V[l.xeId] || { id: l.xeId, bks: ((DB.vehicles || []).find(x => x.id === l.xeId) || {}).bks || '?', ch: 0, hk: 0, tuyen: new Set() }; v.ch++; v.hk += (byTrip[l.id] || []).length; v.tuyen.add(l.tuyen); });
     return { ym, nd, daysTo, R, V: Object.values(V).sort((a, b) => b.ch - a.ch) };
   },
   st(r) { if (r.tl == null) return ['—', '']; if (r.tl < 70) return ['Dưới 70%: nguy cơ thu hồi tuyến', 'bad']; if (r.tl < 80) return ['Sát ngưỡng 70%', 'warn']; return ['Đạt', 'ok']; },
@@ -12819,14 +12819,17 @@ const BCVT = {
         ${d.R.map(r => { const s = BCVT.st(r), i = BCVT.idle(r); return `<tr><td><b>${esc(r.tuyen)}</b></td><td class="r">${r.nGio}</td><td class="r">${F.num(r.dk)}</td><td class="r">${F.num(r.dkTo)}</td><td class="r"><b>${F.num(r.th)}</b></td><td class="r"><b>${pct(r.tl)}</b></td><td><span class="bc-s ${s[1]}">${s[0]}</span></td><td><span class="bc-s ${i[1]}">${esc(i[0])}</span></td><td class="r">${F.num(r.hk)}</td><td class="r">${F.money(r.dt)}</td></tr>`; }).join('') || '<tr><td colspan="10" class="muted">Chưa có tuyến nào.</td></tr>'}
       </tbody></table></div></div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Sản lượng theo xe · ${F.month(ym)}</h3></div><div class="card-b p0"><div class="tbl-wrap"><table class="tbl compact"><thead><tr><th>Biển số</th><th>Tuyến khai thác</th><th class="r">Số chuyến</th><th class="r">Hành khách</th><th class="r">Bình quân khách/chuyến</th></tr></thead><tbody>
-        ${d.V.map(v => `<tr><td><b>${esc(v.bks)}</b></td><td>${esc([...v.tuyen].join(', '))}</td><td class="r">${v.ch}</td><td class="r">${v.hk}</td><td class="r">${v.ch ? (v.hk / v.ch).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có chuyến thực hiện.</td></tr>'}
+        ${d.V.map(v => `<tr><td><a href="javascript:void 0" class="bc-xe" data-bc="xe" data-id="${esc(v.id)}" title="Xem các chuyến của xe trong tháng"><b>${esc(v.bks)}</b></a></td><td>${esc([...v.tuyen].join(', '))}</td><td class="r">${v.ch}</td><td class="r">${v.hk}</td><td class="r">${v.ch ? (v.hk / v.ch).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có chuyến thực hiện.</td></tr>'}
       </tbody></table></div></div></div>
       <div class="small muted" style="margin-top:8px">Chuyến thực hiện = chuyến đã có xe và lái xe, ngày chạy không sau hôm nay. Chuyến đăng ký = số giờ chạy đang mở của tuyến × số ngày. Đối chiếu với biểu đồ chạy xe đã đăng ký với Sở GTVT để có số liệu chính xác.</div>`;
   },
   cols: [{ key: 'tuyen', label: 'Tuyến' }, { key: 'nGio', label: 'Giờ chạy/ngày' }, { key: 'dk', label: 'Đăng ký tháng' }, { key: 'dkTo', label: 'Đăng ký tới nay' }, { key: 'th', label: 'Thực hiện' }, { key: 'tlTxt', label: 'Tỷ lệ' }, { key: 'dg', label: 'Đánh giá' }, { key: 'kt', label: 'Khai thác liên tục' }, { key: 'hk', label: 'Hành khách' }, { key: 'dt', label: 'Doanh thu', fmt: 'money' }],
   rows(ym) { return BCVT.data(ym).R.map(r => ({ ...r, tlTxt: r.tl == null ? '—' : r.tl.toFixed(1) + '%', dg: BCVT.st(r)[0], kt: BCVT.idle(r)[0] })); },
-  act(a) {
+  act(a, b) {
     const ym = BCVT.ym || D.ymNow();
+    if (a === 'xe') return BCVT.xe(b.dataset.id, ym);
+    if (a === 'go') { LC.ngay = b.dataset.d; const g = dhGrp(b.dataset.t); if (g) dhSel = [g]; BCVT._m && BCVT._m.close(); return App.go('dieuhanh'); }
+    if (a === 'close') return BCVT._m && BCVT._m.close();
     if (a === 'print') return Print.report({ title: 'BÁO CÁO THỰC HIỆN VẬN TẢI HÀNH KHÁCH TUYẾN CỐ ĐỊNH', sub: F.month(ym), cols: BCVT.cols, rows: BCVT.rows(ym), landscape: true, signs: ['Người lập biểu', 'Người điều hành vận tải', 'Giám đốc'] });
     if (a === 'xls') return XLSX.save('Bao cao van tai ' + ym, [xSheet('Theo tuyến', 'BÁO CÁO THỰC HIỆN VẬN TẢI TUYẾN CỐ ĐỊNH · ' + F.month(ym), BCVT.cols, BCVT.rows(ym)), xSheet('Theo xe', 'SẢN LƯỢNG THEO XE · ' + F.month(ym), [{ key: 'bks', label: 'Biển số' }, { key: 'tuyenTxt', label: 'Tuyến' }, { key: 'ch', label: 'Số chuyến' }, { key: 'hk', label: 'Hành khách' }], BCVT.data(ym).V.map(v => ({ ...v, tuyenTxt: [...v.tuyen].join(', ') })))]);
   }
@@ -12835,7 +12838,14 @@ const vBCVT = {
   title: 'Báo cáo vận tải', label: 'Báo cáo vận tải', icon: 'chart', print: false, desc: 'Tỷ lệ thực hiện chuyến theo tuyến, cảnh báo ngừng khai thác, sản lượng hành khách theo NĐ 158/2024',
   render(el) { el.innerHTML = `<div class="bc">${BCVT.html()}</div>`; const m = $('#bcM', el); if (m) m.onchange = () => { BCVT.ym = m.value || D.ymNow(); App.render(); }; }
 };
-document.addEventListener('click', e => { if (App.cur !== 'baocaovt') return; const b = e.target.closest && e.target.closest('[data-bc]'); if (b) BCVT.act(b.dataset.bc); });
+BCVT.xe = (id, ym) => {
+  const v = (DB.vehicles || []).find(x => x.id === id) || {}, today = D.today(), emp = i => ((DB.employees || []).find(e => e.id === i) || {}).ten || '';
+  const L = (DB.lichchay || []).filter(l => l.xeId === id && String(l.ngay).startsWith(ym)).sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio));
+  const rows = L.map(l => { const ok = l.laiXe && l.ngay <= today; return `<tr><td>${F.date(l.ngay)}</td><td>${esc(l.gio || '')}</td><td>${esc(l.tuyen || '')}</td><td>${esc([emp(l.laiXe), emp(l.laiXe2)].filter(Boolean).join(', ')) || '<span class="muted">Chưa gán</span>'}</td><td class="r">${(DB.datve || []).filter(x => !x.huy && x.chuyen === l.id).length}</td><td>${ok ? '<span class="bc-s ok">Tính sản lượng</span>' : '<span class="bc-s">Chưa tính</span>'}</td><td><button class="btn sm" data-bc="go" data-d="${esc(l.ngay)}" data-t="${esc(l.tuyen || '')}">Mở Điều hành</button></td></tr>`; }).join('');
+  BCVT._m = Modal.open({ title: 'Xe ' + (v.bks || '?') + ' · ' + F.month(ym) + ' · ' + L.length + ' chuyến', width: 820, body: `<div class="tbl-wrap"><table class="tbl compact"><thead><tr><th>Ngày</th><th>Giờ</th><th>Tuyến</th><th>Lái xe</th><th class="r">Vé</th><th>Báo cáo</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">Không có chuyến.</td></tr>'}</tbody></table></div><div class="small muted" style="margin-top:8px">Bấm "Mở Điều hành" để tới đúng ngày, tuyến đó và sửa xe nếu gán nhầm.</div>`, foot: '<button class="btn" data-bc="close">Đóng</button>' });
+};
+addCSS(`.bc-xe{color:inherit;text-decoration:underline dotted;cursor:pointer}.bc-xe:hover{color:var(--pri,#2563eb)}`);
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-bc]'); if (!b) return; const a = b.dataset.bc; if (App.cur !== 'baocaovt' && !b.closest('.modal-wrap')) return; BCVT.act(a, b); });
 ICONS.chart = ICONS.chart || '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>';
 Auth.VIEWMOD.baocaovt = 'dieuhanh';
 CFG.views.baocaovt = vBCVT;
@@ -13405,7 +13415,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T09:30';
+const APP_BUILD = '2026-11-05T09:45';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
