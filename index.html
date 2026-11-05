@@ -4880,7 +4880,7 @@ Object.assign(ACT, {
   dvPrintMap: d => { const t = DB.lichchay.find(l => l.id === d.id); if (t) dvPrintMap(t); },
   dvRoute: d => { DV.tuyen = d.r || ''; DV.trip = null; App.render(); },
   dvTab: d => { DV.tab = d.t; App.render(); },
-  dvSeat: d => { const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; const b = d.b && DB.datve.find(x => x.id === d.b); if (b) { const lg = dvGrp(b).find(x => Lock.other(t.id, x.ghe)); if (lg) return toast(lockMsg(lg.ghe, Lock.other(t.id, lg.ghe)), 'err'); Lock.release(t.id, DV.sel); DV.sel = []; if (dvGrp(DB.datve.find(x => x.id === DV.selB)).includes(b)) dvSetB(null); else { dvSetB(b).then(ok => { if (!ok) { dvSetB(null); toast('Có ghế vừa được nhân viên khác thao tác', 'err'); App.render(); } }); } App.render(); } else { const o = Lock.other(t.id, d.g); if (o) return toast(lockMsg(d.g, o), 'err'); dvForm(t, null, d.g); } },
+  dvSeat: d => { const t = DB.lichchay.find(l => l.id === d.id); if (!t) return; const b = d.b && DB.datve.find(x => x.id === d.b); if (b) { const lg = dvGrp(b).find(x => Lock.other(t.id, x.ghe)); if (lg) return toast(lockMsg(lg.ghe, Lock.other(t.id, lg.ghe)), 'err'); Lock.release(t.id, DV.sel); DV.sel = []; if (dvGrp(DB.datve.find(x => x.id === DV.selB)).includes(b)) { if (dvGrp(b).length > 1) return dvForm(t, b, null, true); dvSetB(null); } else { dvSetB(b).then(ok => { if (!ok) { dvSetB(null); toast('Có ghế vừa được nhân viên khác thao tác', 'err'); App.render(); } }); } App.render(); } else { const o = Lock.other(t.id, d.g); if (o) return toast(lockMsg(d.g, o), 'err'); dvForm(t, null, d.g); } },
   dvMvPick: d => dvMvPick(d.g),
   dvMvCancel: () => dvMvEnd(),
   dvMvOther: () => { const b = DV.mvMode && DB.datve.find(x => x.id === DV.mvMode.id); if (b) dvMove(b); },
@@ -11962,7 +11962,7 @@ const PERM = {
 ACT.dvOne = d => { const x = DB.datve.find(y => y.id === d.id), t = x && DB.lichchay.find(l => l.id === x.chuyen); if (t) dvForm(t, x, null, true); };
 Auth.ACT_PERM.dvOne = ['lichchay', 'view'];
 addCSS(`.dv-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 10px;margin-bottom:12px;font-size:13px}.dv-one>span{color:#0c4a6e;font-weight:600;margin-right:4px}.ab-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;font-size:12.5px;color:#475467}.ab-one button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:3px 10px;font-weight:700;cursor:pointer}.ab-one button:hover{border-color:#0369a1;color:#0369a1}`);
-const APP_BUILD = '2026-11-06T00:00';
+const APP_BUILD = '2026-11-06T00:10';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
