@@ -12950,13 +12950,20 @@ const IMGX = {
     return data;
   },
   busyF: false, busyU: false,
+  pend: new Set(),
   async fetch(ids) {
-    if (IMGX.busyF || !IMGX.on()) return; IMGX.busyF = true;
+    if (IMGX.busyF || !IMGX.on()) { (ids || []).forEach(i => IMGX.pend.add(i)); return; } IMGX.busyF = true;
     try {
       await IMGX.pool(ids.filter(id => !IMGX.img.has(id)), 3, async id => { const r = await HS.dcall({ action: 'hs_get', id }, 120000); if (r && r.data) IMGX.save(id, 'data:' + (r.mime || 'application/octet-stream') + ';base64,' + r.data); });
       let ch = false; IMGX.walk(DB, (v, o, k) => { if (v.startsWith(IMGX.PRE)) { const s = IMGX.img.get(v.slice(IMGX.PRE.length)); if (s) { o[k] = s; ch = true; } } });
       if (ch && !document.querySelector('.modal-wrap')) { const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); }
-    } finally { IMGX.busyF = false; }
+    } finally { IMGX.busyF = false; if (IMGX.pend.size) { const q = [...IMGX.pend]; IMGX.pend.clear(); setTimeout(() => IMGX.fetch(q), 500); } }
+  },
+  paint() {                         // ảnh còn là mã tham chiếu trên màn hình: thay bằng ảnh đệm, thiếu thì tải về (không hiện hình vỡ)
+    const L = document.querySelectorAll('img[src^="nxdrv:"]'); if (!L.length) return; const miss = new Set();
+    L.forEach(im => { const id = im.getAttribute('src').slice(IMGX.PRE.length), v = IMGX.img.get(id); if (v) im.src = v; else miss.add(id); });
+    try { IMGX.fill(DB); } catch (e) { }
+    if (miss.size) IMGX.fetch([...miss]);
   },
   async up() {                      // chạy nền: đưa ảnh mới lên Drive, xong thì lưu lại để Firestore chỉ còn mã tham chiếu
     if (IMGX.busyU || !IMGX.on() || typeof DB === 'undefined' || !DB) return; IMGX.busyU = true;
@@ -12983,7 +12990,10 @@ const IMGX = {
   };
   const sz0 = SB.sizes;              // dung lượng Firestore ước tính: không tính ảnh đã chuyển sang Drive
   SB.sizes = function () { const r = sz0.apply(this, arguments); try { const s = IMGX.stat(); r.core = Math.max(0, r.core - s.sz + s.n * 40); } catch (e) { } return r; };
-  IMGX.open().then(() => { try { if (typeof DB !== 'undefined' && DB) IMGX.fill(DB); } catch (e) { } });
+  IMGX.open().then(() => { try { if (typeof DB !== 'undefined' && DB) IMGX.fill(DB); } catch (e) { } IMGX.paint(); });
+  addCSS('img[src^="nxdrv:"]{visibility:hidden}');
+  { let t = 0; new MutationObserver(() => { if (t) return; t = setTimeout(() => { t = 0; IMGX.open().then(() => IMGX.paint()); }, 150); }).observe(document.body, { childList: true, subtree: true }); }
+  setInterval(() => { if (IMGX.pend.size) IMGX.fetch([]); }, 15000);
   setTimeout(() => IMGX.up(), 20000); setInterval(() => IMGX.up(), 10 * 60000);
 }
 
@@ -13419,7 +13429,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T10:15';
+const APP_BUILD = '2026-11-05T10:25';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
