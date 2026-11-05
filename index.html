@@ -5713,6 +5713,8 @@ function dhAssignHTML(day, pdf) {   // pdf: bản lưu hồ sơ (không dòng tr
     <div style="page-break-inside:avoid">${pdf ? `<table style="width:100%;margin-top:14px;text-align:center;font-size:13px;border:0;border-collapse:collapse"><tr>${['Người lập lịch tài', 'Đội trưởng điều hành', 'Bộ phận quản lý ATGT'].map(t => `<td style="width:33%;vertical-align:top;border:0!important"><b>${t}</b><br><i style="font-size:12px">(Ký, ghi rõ họ tên)</i><div style="height:70px"></div></td>`).join('')}</tr></table>` : Print.signs(['Người lập lịch tài', 'Đội trưởng điều hành', 'Bộ phận quản lý ATGT'], false)}</div></div>`;
 }
 function dhPrintAssign() { const day = lcDay(); Print.run(dhAssignHTML(day), { landscape: true, title: 'Phan cong lich tai va xe ' + day }); }
+const dhCalOpen = () => { try { return localStorage.getItem('dh.cal') !== '0'; } catch (e) { return true; } };   // lịch tháng Điều hành: mặc định mở
+addCSS(`.dx-cald{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;margin:0 0 12px;max-width:420px}.dx-cald>summary{cursor:pointer;padding:10px 14px;font-weight:700;list-style-position:inside}.dx-cald>summary span{font-weight:500;color:#b45309;margin-left:6px}.dx-cald .dx-cal{border:0;border-top:1px solid #eef0f4;border-radius:0 0 12px 12px}.dx-cald .dx-cal>.btn[data-act=dhDay]{display:none}`);
 const vDH = {
   print: false,
   title: 'Điều hành xe', icon: 'kanban', desc: 'Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến',
@@ -5732,10 +5734,11 @@ const vDH = {
     const foot = `<details class="dx-foot"><summary>Xe chưa điều (${veh.filter(v => !used[v.id]).length}) · Xe đã điều (${veh.filter(v => used[v.id]).length})</summary><div><b>Xe chưa điều:</b>${veh.filter(v => !used[v.id]).map(v => `<span><i class="lk"></i>${esc(v.bks)} (${esc(v.soCho || '?')})</span>`).join('') || '<span class="muted">Không còn xe</span>'}</div><div><b>Xe đã điều:</b>${veh.filter(v => used[v.id]).map(v => `<span><i></i>${esc(v.bks)} (${used[v.id]})</span>`).join('') || '<span class="muted">Chưa điều xe nào</span>'}</div></details>`;
     const ym = day.slice(0, 7), nd = D.daysIn(ym), lead = (D.parse(ym + '-01').getDay() + 6) % 7, hasT = {}; DB.lichchay.forEach(l => { if (l.ngay.slice(0, 7) === ym && l.laiXe) hasT[l.ngay] = 1; });
     const cells = [...Array(lead).fill(null), ...Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'))];
-    const cal = `<div class="dv-side dx-cal"><div class="row" style="align-items:center;gap:6px"><button class="btn sm" data-act="dvNav" data-n="-1">${ic('back')}</button><b class="grow" style="text-align:center">Tháng ${day.slice(5, 7)}/${day.slice(0, 4)}</b><button class="btn sm" data-act="dvNav" data-n="1"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button></div>
-      <div class="dv-days">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small style="font-size:11px;color:#98a2b3;padding:2px 0">${x}</small>`).join('')}${cells.map(d => d ? `<button class="dv-d ${d === day ? 'sel' : ''} ${d === D.today() ? 'tod' : ''}" data-act="dvDay" data-d="${d}"><b>${+d.slice(8)}</b>${AL.cell(d)}<small style="height:6px">${hasT[d] ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + (d === day ? '#fff' : 'var(--vt-a,#38a3e8)') + '"></span>' : ''}</small></button>` : '<span></span>').join('')}</div>${AL.selHTML(day)}
-      <button class="btn sm" data-act="dvDay" data-d="${D.today()}" style="width:100%">Hôm nay</button></div>`;
-    el.insertAdjacentHTML('beforeend', `<div class="dx-top2">${head}</div>` + table);
+    const cal = `<div class="dv-side dx-cal"><div class="row" style="align-items:center;gap:6px"><button class="btn sm" data-act="dhMon" data-n="-1">${ic('back')}</button><b class="grow" style="text-align:center">Tháng ${day.slice(5, 7)}/${day.slice(0, 4)}</b><button class="btn sm" data-act="dhMon" data-n="1"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button></div>
+      <div class="dv-days">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small style="font-size:11px;color:#98a2b3;padding:2px 0">${x}</small>`).join('')}${cells.map(d => d ? `<button class="dv-d ${d === day ? 'sel' : ''} ${d === D.today() ? 'tod' : ''}" data-act="dhDay" data-d="${d}"><b>${+d.slice(8)}</b>${AL.cell(d)}<small style="height:6px">${hasT[d] ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + (d === day ? '#fff' : 'var(--vt-a,#38a3e8)') + '"></span>' : ''}</small></button>` : '<span></span>').join('')}</div>${AL.selHTML(day)}
+      <button class="btn sm" data-act="dhDay" data-d="${D.today()}" style="width:100%">Hôm nay</button></div>`;
+    el.insertAdjacentHTML('beforeend', `<div class="dx-top2">${head}</div>` + `<details class="dx-cald" ${dhCalOpen() ? 'open' : ''}><summary>📅 Lịch tháng ${day.slice(5, 7)}/${day.slice(0, 4)} · âm lịch <span>🌙 ${AL.txt(day)}</span></summary>${cal}</details>` + table);
+    const cd = el.querySelector('.dx-cald'); if (cd) cd.ontoggle = () => { try { localStorage.setItem('dh.cal', cd.open ? '1' : '0'); } catch (e) { } };
     const di = $('#dhDate', el); if (di) di.onchange = () => { if (di.value) { LC.ngay = di.value; App.render(); } };
   },
 };
@@ -5745,6 +5748,8 @@ Object.assign(ACT, {
   dhAll: () => { dhSel = [...new Set([...DB.lichchay.filter(l => l.ngay === lcDay()).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; App.render(); },
   dhG: d => { const all = [...new Set([...DB.lichchay.filter(l => l.ngay === lcDay()).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; let cur = dhSel.filter(g => all.includes(g)); if (!cur.length && all[0]) cur = [all[0]]; if (cur.includes(d.g)) { if (cur.length === 1) return toast('Cần chọn ít nhất một tuyến', 'err'); cur = cur.filter(g => g !== d.g); } else cur = [...cur, d.g]; dhSel = cur; App.render(); },
   dhNav: d => { LC.ngay = +d.n === 0 ? D.today() : D.add(lcDay(), +d.n); App.render(); },
+  dhDay: d => { LC.ngay = d.d; App.render(); },
+  dhMon: d => { const dd = D.parse(lcDay()), k = +dd.getDate(); dd.setDate(1); dd.setMonth(dd.getMonth() + +d.n); dd.setDate(Math.min(k, D.daysIn(D.iso(dd).slice(0, 7)))); LC.ngay = D.iso(dd); App.render(); },
   dhUnlock: async d => {
     const t = lcById(d.id); if (!t) return; if (!Auth.guard('dieuhanh', 'edit')) return; if (!lcCan(t)) return lcLockMsg();
     if (t.khoa) { if (await Modal.confirm(`Bạn có muốn <b>mở khóa</b> không?<br><span class="muted small">Chuyến ${esc(t.gio)} · ${esc(t.tuyen)}. Mọi người sẽ nhìn thấy tên lái xe.</span>`, { ok: 'Mở khóa', title: 'Mở khóa chuyến' })) { t.khoa = false; App.changed(); toast('Đã mở khóa, mọi người đều thấy tên lái xe', 'ok'); } return; }
@@ -13020,7 +13025,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T00:15';
+const APP_BUILD = '2026-11-05T00:20';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
