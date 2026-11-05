@@ -13659,14 +13659,19 @@ const PERM = {
   audit() { const P = Auth.ACT_PERM || {}; return Object.keys(ACT).filter(a => !P[a] && !/^(nav|banner|view|hub)/.test(a)); }
 };
 {
-  const c1 = Auth.can; Auth.can = function (mod, act) { if (!Auth.user) return false; if (PERM.admin()) return true; return c1.apply(this, arguments); };
+  const c1 = Auth.can; Auth.can = function (mod, act) {
+    if (!Auth.user) return false; if (PERM.admin()) return true;
+    if (mod === 'lichchay' && App.cur === 'dieuhanh' && act !== 'all') mod = 'dieuhanh';   // đang ở màn hình Điều hành: sửa chuyến theo quyền Điều hành
+    return c1.call(this, mod, act);
+  };
+  try { const sd = HS.saveDlg; HS.saveDlg = function () { if (!Auth.guard('hoso', 'add')) return; return sd.apply(this, arguments); }; } catch (e) { }
   Object.entries(PERM.ACT).forEach(([k, v]) => { if (!Auth.ACT_PERM[k]) Auth.ACT_PERM[k] = v; });
   /* thao tác của màn hình Điều hành xe theo quyền của chính module Điều hành (trước đây mượn quyền Đặt vé) */
   Object.keys(Auth.ACT_PERM).forEach(k => { if (/^dh[A-Z]/.test(k) && Auth.ACT_PERM[k][0] === 'lichchay') Auth.ACT_PERM[k] = ['dieuhanh', Auth.ACT_PERM[k][1]]; });
   const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
   window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
 }
-const APP_BUILD = '2026-11-05T20:05';
+const APP_BUILD = '2026-11-05T20:20';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
