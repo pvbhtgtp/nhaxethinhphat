@@ -571,7 +571,11 @@ function checkForm(root, fields) {
   for (const f of fields) {
     if (!f.required) continue;
     const el = root.querySelector(`[name="${f.key}"]`);
-    if (el && !String(el.value).trim()) { el.focus(); toast(`Vui lòng nhập "${f.label}"`, 'err'); return false; }
+    if (el && !String(el.value).trim()) {
+      const box = el.closest('label,.fld,div') || el; try { box.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) { }
+      el.classList.add('inp-bad'); el.addEventListener('input', () => el.classList.remove('inp-bad'), { once: true }); setTimeout(() => { try { el.focus({ preventScroll: true }); } catch (x) { } }, 300);
+      toast(`Chưa lưu được: vui lòng nhập "${f.label}"`, 'err', 6000); return false;
+    }
   }
   return true;
 }
@@ -2014,7 +2018,7 @@ const EMP_FIELDS = () => [
   { key: 'hdDienThoai', label: 'Phụ lục II: hỗ trợ điện thoại', type: 'money' }, { key: 'hdKhac', label: 'Phụ lục II: hỗ trợ khác', type: 'money' },
   { key: 'moTaCV', label: 'Mô tả công việc riêng (mỗi dòng một việc)', type: 'textarea', full: true, hint: 'Để trống thì dùng mô tả công việc mẫu trong Phụ lục I' },
   { type: 'section', label: 'Lương & phụ cấp' },
-  { key: 'luongCB', label: 'Lương CK (tháng)', type: 'money', required: true }, { key: 'luongCoDinh', label: 'Lương cố định (tháng)', type: 'money', hint: 'Nếu nhập: tháng nào cũng trả đúng mức này, không phụ thuộc số công. Để trống thì tính theo công' },
+  { key: 'luongCB', label: 'Lương CK (tháng)', type: 'money' }, { key: 'luongCoDinh', label: 'Lương cố định (tháng)', type: 'money', hint: 'Nếu nhập: tháng nào cũng trả đúng mức này, không phụ thuộc số công. Để trống thì tính theo công' },
   { key: 'luongBH', label: 'Lương đóng bảo hiểm', type: 'money', hint: 'Để 0 nếu không tham gia BHXH' }, { key: 'soNPT', label: 'Số người phụ thuộc', type: 'number', min: 0, step: 1 },
   { key: 'pcChiuThue', label: 'Phụ cấp chịu thuế', type: 'money', hint: 'Trách nhiệm, xăng xe, nhà ở...' }, { key: 'pcKhongThue', label: 'Phụ cấp không chịu thuế', type: 'money', hint: 'Ăn ca, điện thoại theo quy chế...' },
   { key: 'tuyenChinh', label: 'Nhóm tuyến chính', type: 'select', blank: 'Tự động: nhóm tuyến chạy nhiều công nhất trong tháng', options: allNhom(), hint: 'Lương CK và BHXH chỉ trừ ở nhóm tuyến chính. Các tuyến khác chỉ tính tiền công theo chuyến', full: true },
@@ -13640,7 +13644,8 @@ addCSS(`.me-row{cursor:pointer}.me-row:hover td{background:#f5f8ff!important}.me
 .med-imgs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:16px}.med-img{margin:0}.med-img figcaption{font-size:12px;color:#64748b;margin-bottom:4px}.med-img img{width:100%;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;aspect-ratio:85.6/54;object-fit:cover;background:#f8fafc}
 .med-no{aspect-ratio:85.6/54;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}.med-h{font-weight:700;font-size:13px;margin-top:16px;color:#334155}
 @media(max-width:600px){.med-kv{grid-template-columns:1fr}}`);
-const APP_BUILD = '2026-11-05T13:45';
+addCSS('.inp-bad{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;background:#fff5f5!important}');
+const APP_BUILD = '2026-11-05T14:00';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
