@@ -5726,7 +5726,25 @@ function dhDocWarn(l) {
   [l.laiXe, l.laiXe2].filter(Boolean).forEach(id => { const e = (DB.employees || []).find(x => x.id === id); if (!e) return; ex(e.bangHetHan, e.ten + ': GPLX'); try { const sk = llLatest(e.id, 'sk'); if (sk) ex(llHan(sk), e.ten + ': giấy khám sức khỏe'); } catch (x) { } });
   return w;
 }
-addCSS(`.dx-wn{position:absolute;left:6px;top:-8px;background:#dc2626;color:#fff;font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 6px;z-index:2;box-shadow:0 2px 6px rgba(220,38,38,.4)}.dx-chip{position:relative}`);
+// NĐ 158/2024 Đ11 k5 + Luật TTATGTĐB Đ64: lái xe ≤10 giờ/ngày, ≤4 giờ liên tục, nghỉ ≥15 phút giữa 2 lần lái
+function dhDur(tuyen) { const P = LT.get(tuyen), m = P.length ? Math.max(...P.map(x => +x.phut || 0)) : 0; return m > 0 ? m : (+S().tgChayMacDinh || 120); }
+function dhTimeWarn(l) {
+  const w = [], ng = l.ngay, mn = g => { const [h, m] = String(g || '').split(':').map(Number); return isNaN(h) ? null : h * 60 + (m || 0); }, hm = x => Math.floor(x / 60) + 'g' + (x % 60 ? String(x % 60).padStart(2, '0') : '');
+  [l.laiXe, l.laiXe2].filter(Boolean).forEach(id => {
+    const e = (DB.employees || []).find(x => x.id === id), nm = e ? e.ten : 'Lái xe';
+    const L = DB.lichchay.filter(t => t.ngay === ng && (t.laiXe === id || t.laiXe2 === id) && mn(t.gio) != null).map(t => { const d = dhDur(t.tuyen), a = mn(t.gio); return { id: t.id, a, b: a + d, lai: t.laiXe && t.laiXe2 ? Math.round(d / 2) : d }; }).sort((x, y) => x.a - y.a);
+    if (!L.length) return;
+    const tot = L.reduce((s, x) => s + x.lai, 0); if (tot > 600) w.push(nm + ': lái ' + hm(tot) + ' trong ngày (quá 10 giờ)');
+    let cont = 0, prev = null;
+    L.forEach(x => {
+      if (prev) { const gap = x.a - prev.b; if (gap < 0 && (x.id === l.id || prev.id === l.id)) { const o = x.id === l.id ? prev : x; w.push(nm + ': trùng giờ với chuyến ' + String(Math.floor(o.a / 60)).padStart(2, '0') + ':' + String(o.a % 60).padStart(2, '0')); } else if (gap < 15 && (x.id === l.id || prev.id === l.id)) w.push(nm + ': nghỉ ' + gap + ' phút giữa 2 chuyến (cần ≥ 15 phút)'); cont = gap < 15 ? cont + x.lai : x.lai; } else cont = x.lai;
+      if (cont > 240 && x.id === l.id) w.push(nm + ': lái liên tục ' + hm(cont) + ' (quá 4 giờ)');
+      prev = x;
+    });
+  });
+  return [...new Set(w)];
+}
+addCSS(`.dx-wn.dx-wt{left:auto;right:34px;background:#d97706;box-shadow:0 2px 6px rgba(217,119,6,.4)}.dx-wn{position:absolute;left:6px;top:-8px;background:#dc2626;color:#fff;font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 6px;z-index:2;box-shadow:0 2px 6px rgba(220,38,38,.4)}.dx-chip{position:relative}`);
 const vDH = {
   print: false,
   title: 'Điều hành xe', icon: 'kanban', desc: 'Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến',
@@ -5737,7 +5755,7 @@ const vDH = {
     const TR = T.filter(l => curL.includes(dhGrp(l.tuyen))), gios = [...new Set([...TR.map(l => l.gio), ...GC.filter(g => curL.includes(dhGrp(g.tuyen))).map(g => g.gio)])].sort(), nHid = 0, routes = curL.flatMap(g => allR.filter(r => dhGrp(r) === g).sort((a, b) => (a.toUpperCase() === g ? -1 : 0) - (b.toUpperCase() === g ? -1 : 0)));
     const used = {}; T.forEach(l => { if (l.xeId) used[l.xeId] = (used[l.xeId] || 0) + 1; });
     const veh = DB.vehicles.filter(v => !v.ngung);
-    const chip = l => { const v = lcXe(l), e = lcEmp(l), n = dvBook(l.id).length, c = dvCap(l), wn = dhDocWarn(l), wk = wn.length ? `<span class="dx-wn" title="Giấy tờ hết hạn (NĐ 158/2024, Điều 11 khoản 4):\n• ${esc(wn.join('\n• '))}">⚠ ${wn.length}</span>` : '', lk = !(l.laiXe || l.khoa) || !Auth.can('dieuhanh', 'edit') ? '' : l.khoa ? (lcAdmin() ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Chuyến đang khóa: chỉ Admin thấy tên lái xe. Bấm để mở khóa cho mọi người cùng thấy">${ic('lock')}</span>` : `<span class="dx-lk" title="Chuyến đã khóa, chỉ Admin xem và mở khóa được">${ic('lock')}</span>`) : lcCan(l) ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Bấm để khóa chuyến: ẩn tên lái xe, chỉ Admin thấy">${ic('unlock')}</span>` : ''; return `<button class="dx-chip ${n >= c ? 'full' : ''} ${lcGone(l) ? 'gone' : ''}" data-act="dhChip" data-id="${l.id}" title="Bấm để sửa nhanh xe, lái xe, hủy chuyến hoặc mở sơ đồ ghế">${lk}${wk}<b>${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><span class="nm">${e.ten ? avatarHTML(e.ten, e.avatar, 'dx-av') + esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</span><span class="st"><span class="n">${n}/${c}</span> vé${lcGone(l) ? '<em>Đã xuất bến</em>' : ''}</span></button>`; };
+    const chip = l => { const v = lcXe(l), e = lcEmp(l), n = dvBook(l.id).length, c = dvCap(l), wn = dhDocWarn(l), wt = dhTimeWarn(l), wk = (wn.length ? `<span class="dx-wn" title="Giấy tờ hết hạn (NĐ 158/2024, Điều 11 khoản 4):\n• ${esc(wn.join('\n• '))}">⚠ ${wn.length}</span>` : '') + (wt.length ? `<span class="dx-wn dx-wt" title="Thời gian lái xe (NĐ 158/2024, Điều 11 khoản 5; Luật TTATGTĐB Điều 64):\n• ${esc(wt.join('\n• '))}">⏱ ${wt.length}</span>` : ''), lk = !(l.laiXe || l.khoa) || !Auth.can('dieuhanh', 'edit') ? '' : l.khoa ? (lcAdmin() ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Chuyến đang khóa: chỉ Admin thấy tên lái xe. Bấm để mở khóa cho mọi người cùng thấy">${ic('lock')}</span>` : `<span class="dx-lk" title="Chuyến đã khóa, chỉ Admin xem và mở khóa được">${ic('lock')}</span>`) : lcCan(l) ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Bấm để khóa chuyến: ẩn tên lái xe, chỉ Admin thấy">${ic('unlock')}</span>` : ''; return `<button class="dx-chip ${n >= c ? 'full' : ''} ${lcGone(l) ? 'gone' : ''}" data-act="dhChip" data-id="${l.id}" title="Bấm để sửa nhanh xe, lái xe, hủy chuyến hoặc mở sơ đồ ghế">${lk}${wk}<b>${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><span class="nm">${e.ten ? avatarHTML(e.ten, e.avatar, 'dx-av') + esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</span><span class="st"><span class="n">${n}/${c}</span> vé${lcGone(l) ? '<em>Đã xuất bến</em>' : ''}</span></button>`; };
     const lbl = dhMode === 'group' ? 'nhóm tuyến đường' : 'tuyến đường', allL = dhMode === 'group' ? 'Tất cả các nhóm tuyến đường' : 'Tất cả các tuyến đường';
     const selBox = `<div class="dx-dd"><div class="dx-sel ${dhOpen ? 'open' : ''}" data-act="dhDD">${curL.map(g => `<span class="dx-tag">${esc(g)}</span>`).join('') || `<span class="muted">Chọn ${lbl}</span>`}<span class="car">▾</span></div>${dhOpen ? `<div class="dx-pn"><div class="dx-op" data-act="dhAll">${allL}</div>${allG.map(g => `<div class="dx-op ${curL.includes(g) ? 'on' : ''}" data-act="dhG" data-g="${esc(g)}"><span class="ck dx-ckb">${curL.includes(g) ? ic('check') : ''}</span>${esc(g)}</div>`).join('')}</div>` : ''}</div>`;
     const nT = TR.filter(l => l.laiXe).length, nDay = T.filter(l => l.laiXe).length, nNo = TR.filter(l => !l.laiXe).length, nMiss = routes.reduce((a, r) => a + gios.filter(g => GC.some(x => x.tuyen === r && x.gio === g) && !TR.some(l => l.tuyen === r && l.gio === g)).length, 0);
@@ -13387,7 +13405,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T01:45';
+const APP_BUILD = '2026-11-05T09:30';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
