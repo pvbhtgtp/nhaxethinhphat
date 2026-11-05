@@ -13479,7 +13479,7 @@ const IDC = {
   MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', noiThuongTru: 'diaChiTT', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT' },
     gplx1: { so: 'bangSo', hoTen: 'ten', ngaySinh: 'ngaySinh', hang: 'bangHang', ngayCap: 'bangNgayCap', hetHan: 'bangHetHan', noiCap: 'bangNoiCap' }, gplx2: { so: 'bangSo', hang: 'bangHang', hetHan: 'bangHetHan', ngayCap: 'bangNgayCap' } },
   LB: { cccd: 'Số CCCD', ten: 'Họ và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', diaChiTT: 'Địa chỉ thường trú', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
-  n: v => String(v || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/Đ/g, 'D').replace(/[^0-9A-Z]/g, ''),
+  n: v => String(v || '').normalize('NFC').toUpperCase().replace(/[^\p{L}\p{N}]/gu, ''),
   async read(kind, canvas, root) {
     if (!AIX.ok()) return toast('Đã cắt thẳng ảnh thẻ. Chưa cài khóa AI nên chưa đọc đối chiếu thông tin', 'ok', 5000);
     toast('Đang đọc thông tin trên thẻ để đối chiếu…', 'ok', 3000);
@@ -13508,7 +13508,7 @@ document.addEventListener('change', e => {
     toast('Đã tự cắt thẳng ảnh thẻ về đúng khổ', 'ok'); return IDC.read(kind, c, root);
   }).catch(err => { console.warn('IDC', err); resizeImage(file, +el.dataset.max || 1000).then(u => { box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; }).catch(() => toast('Không đọc được ảnh', 'err')); });
 }, true);
-const APP_BUILD = '2026-11-05T12:20';
+const APP_BUILD = '2026-11-05T12:25';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
