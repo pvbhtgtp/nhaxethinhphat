@@ -10498,7 +10498,7 @@ const TK = {
   /* khi máy khác lưu khối dữ liệu chung: lấy về sớm nhất có thể (đợi nếu đang lưu dở hoặc đang mở hộp thoại) */
   pullSoon(n = 0) {
     clearTimeout(TK.pt); if (!GS.on || !(TK.latest > GS.ver)) return;
-    if (Store.dirty || GS.busy || document.querySelector('.modal-wrap')) { if (n < 200) TK.pt = setTimeout(() => TK.pullSoon(n + 1), 1500); return; }
+    if (Store.dirty || GS.busy) { if (n < 200) TK.pt = setTimeout(() => TK.pullSoon(n + 1), 600); return; }   // đang mở hộp thoại vẫn lấy ngay (cập nhật tại chỗ, xem LIVE)
     GS.pull(false).catch(() => { if (n < 6) TK.pt = setTimeout(() => TK.pullSoon(n + 1), 3000); });
   }
 };
@@ -12413,6 +12413,52 @@ html[data-sm=that] .lg-e{background:#eef2f7!important;border-color:#94a3b8!impor
 html[data-sm=that] .lg-c{background:#bfdbfe!important;border-color:#2563eb!important}html[data-sm=that] .lg-p{background:#bbf7d0!important;border-color:#16a34a!important}html[data-sm=that] .lg-b{background:#059669!important;border-color:#064e3b!important}
 `);
 
+/* ===== ĐỒNG BỘ TỨC THÌ GIỮA CÁC MÁY, KHÔNG HỘP THOẠI =====
+   - Máy khác lưu: máy này lấy về ngay cả khi đang mở hộp thoại; dữ liệu được cập nhật TẠI CHỖ (giữ nguyên đối tượng)
+     nên biểu mẫu đang mở không bị mất liên kết, lưu tiếp vẫn đúng chỗ.
+   - Hai máy cùng lưu: tự gộp theo từng mục (3 chiều); trùng đúng một ô thì bản lưu sau thắng. Không còn hộp thoại hỏi. */
+const LIVE = {
+  ided: x => x && typeof x === 'object' && !Array.isArray(x) && x.id != null,
+  arr(a, b) {
+    if (a === b) return a;
+    if (a.every(LIVE.ided) && b.every(LIVE.ided)) { const M = new Map(a.map(x => [x.id, x])); const out = b.map(n => { const o = M.get(n.id); if (o && o !== n) { LIVE.obj(o, n); return o; } return n; }); a.splice(0, a.length, ...out); return a; }
+    a.splice(0, a.length, ...b); return a;
+  },
+  obj(o, n) {
+    if (o === n) return o;
+    Object.keys(o).forEach(k => { if (!(k in n)) delete o[k]; });
+    Object.keys(n).forEach(k => { const ov = o[k], nv = n[k]; if (ov === nv) return; if (ov && nv && typeof ov === 'object' && typeof nv === 'object' && Array.isArray(ov) === Array.isArray(nv)) { if (Array.isArray(ov)) LIVE.arr(ov, nv); else LIVE.obj(ov, nv); } else o[k] = nv; });
+    return o;
+  },
+  union(l, r) {        // gộp khi không có bản gốc chung: giữ mục của cả hai, trùng mã thì lấy bản máy này
+    if (Array.isArray(l) && Array.isArray(r)) { if (l.every(LIVE.ided) && r.every(LIVE.ided)) { const L = new Set(l.map(x => x.id)); return [...l, ...r.filter(x => !L.has(x.id))]; } return l; }
+    if (l && r && typeof l === 'object' && typeof r === 'object') { const o = { ...r }; Object.keys(l).forEach(k => { o[k] = k in r ? LIVE.union(l[k], r[k]) : l[k]; }); return o; }
+    return l === undefined ? r : l;
+  }
+};
+{
+  const ap = GS.apply;            // áp dữ liệu mới vào đúng các đối tượng đang dùng
+  GS.apply = function () {
+    const old = (typeof DB !== 'undefined') ? DB : null, r = ap.apply(this, arguments);
+    try { if (old && old !== DB && old.settings && DB && DB.settings) { const nw = DB; DB = old; LIVE.obj(old, nw); } } catch (e) { console.warn('LIVE.apply', e); }
+    return r;
+  };
+  const cf = GS.conflict;         // hai máy cùng lưu: tự gộp, không hỏi
+  GS.conflict = async function () {
+    try {
+      const j = await GS.call({ action: 'get' });
+      if (j && j.data) {
+        const loc = TK.core(), rem = JSON.parse(JSON.stringify(j.data)); delete rem.datve; delete rem.phoiIn; TK.EX.forEach(k => delete rem[k]); delete rem._meta;
+        const st = { conflict: false }, merged = GS._base ? TK.m3(GS._base, loc, rem, st) : LIVE.union(loc, rem);
+        merged._meta = Object.assign({}, DB._meta || {}); merged.datve = []; TK.EX.forEach(k => { merged[k] = []; });
+        GS.apply(merged, j.ver); GS._base = rem; GS._h = null; Store.dirty = true; GS.busy = false;
+        const y = window.scrollY; try { App.render(); } catch (e) { } window.scrollTo(0, y); GS.push(); return;
+      }
+    } catch (e) { console.warn('LIVE.merge', e); }
+    GS.busy = false; clearTimeout(GS.t); GS.t = setTimeout(() => GS.push(), 4000);   // lỗi mạng: tự thử lại, không hiện hộp thoại
+  };
+}
+
 /* ===== DỮ LIỆU CÁ NHÂN: mỗi người chỉ xem thông tin của chính mình =====
    Màn hình Nhân viên, Chấm công, Bảng lương, Thuế & bảo hiểm, Hợp đồng lao động: tài khoản không phải Admin chỉ thấy hồ sơ của mình.
    Admin xem tất cả. Vai trò cần xem của mọi người (kế toán, quản lý...) thì Admin tích cột "Xem tất cả" trong bảng phân quyền.
@@ -12974,7 +13020,7 @@ window.addEventListener('load', () => setTimeout(() => { try { FOLD.mount(); } c
    - Giao diện: khi mở app, khi quay lại tab và 5 phút/lần, app hỏi GitHub bản hiện tại (bỏ qua bộ nhớ đệm).
      Có bản mới: chưa có thay đổi đang lưu thì tự tải lại ngay; đang dở tay thì hiện nút "Cập nhật ngay".
    - Dữ liệu: khi quay lại tab hoặc có mạng lại, app kiểm tra Firebase và tải bản mới nhất nếu máy khác vừa sửa. */
-const APP_BUILD = '2026-11-05T00:05';
+const APP_BUILD = '2026-11-05T00:15';
 const UPD = {
   pub: () => /^https?:$/.test(location.protocol) && !/claude\.ai|claudeusercontent|anthropic|localhost|127\.0\.0\.1/i.test(location.hostname),
   busy: false, last: 0, shown: false,
