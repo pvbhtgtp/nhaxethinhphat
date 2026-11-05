@@ -9450,11 +9450,33 @@ const AIX = {
     throw AIX.err('http_' + r.status, msg);
   },
   // giống sample.json của Claude: trả về đối tượng JSON đọc được
-  async json(prompt, { images, signal } = {}) {
+  /* tự hỏi Google danh sách model còn dùng được (model cũ bị khai tử thì không phải sửa code); nhớ trên máy 1 ngày */
+  async discover(key, force) {
+    try { const o = JSON.parse(localStorage.getItem('aix.models') || 'null'); if (!force && o && Date.now() - o.t < 864e5 && o.l.length) return o.l; } catch (e) { }
+    let r; try { r = await fetch(`${AIX.URL}/models?pageSize=200`, { headers: { 'x-goog-api-key': key } }); if (!r.ok) r = await fetch(`${AIX.URL}/models?pageSize=200&key=${encodeURIComponent(key)}`); } catch (e) { return []; }
+    if (!r || !r.ok) return []; let j; try { j = await r.json(); } catch (e) { return []; }
+    const ver = n => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const l = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(n => /^gemini-[\d.]+-flash/.test(n) && !/image|tts|audio|live|thinking|exp/i.test(n))
+      .sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) - /lite/.test(b)) || (/preview/.test(a) - /preview/.test(b)) || a.length - b.length).slice(0, 6);
+    try { localStorage.setItem('aix.models', JSON.stringify({ t: Date.now(), l })); } catch (e) { }
+    return l;
+  },
+  async json(prompt, opt = {}) {
+    try { return await AIX.json0(prompt, opt); }
+    catch (e) {
+      if (e.code !== 'no_model') throw e;
+      const c = AIX.cfg(), l = await AIX.discover(c.key, true); if (!l.length) throw e;
+      if (c.model && !l.includes(c.model)) { try { DB.settings.ai.model = ''; } catch (x) { } }
+      AIX._good = l[0]; return AIX.json0(prompt, opt);
+    }
+  },
+  async json0(prompt, { images, signal } = {}) {
     const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
     const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
     for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
-    const list = [...new Set([c.model, AIX._good, ...AIX.MODELS].filter(Boolean))];
+    let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
+    const list = [...new Set([c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];
     let last;
     for (let round = 0; round < 3; round++) {
       if (round) await AIX.wait(round * 3000, signal);
@@ -13540,7 +13562,7 @@ ZB.autoLink = async function (quiet) {
 };
 setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 5 * 60000);
 { const zd0 = HUB.zDraw; HUB.zDraw = function () { const r = zd0.apply(this, arguments); ZB.autoLink(true).then(n => { if (n && HUB.el && HUB.tab === 'zalo') try { zd0.apply(HUB, []); } catch (e) { } }); return r; }; }
-const APP_BUILD = '2026-11-05T13:00';
+const APP_BUILD = '2026-11-05T13:15';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
