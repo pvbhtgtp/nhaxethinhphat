@@ -13582,15 +13582,16 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       soon(e.hdDen, 'Hợp đồng lao động');
       all.filter(l => l.ngay === today).forEach(l => { try { dhDocWarn(l).forEach(x => W.push(`<li class="bad">Chuyến ${esc(l.gio)}: ${esc(x)}</li>`)); dhTimeWarn(l).forEach(x => W.push(`<li class="warn">Chuyến ${esc(l.gio)}: ${esc(x)}</li>`)); } catch (x) { } });
       if (!e.zaloId) W.push('<li class="info">Chưa liên kết Zalo: nhắn mã nhân viên ' + esc(e.ma || '') + ' cho Zalo Bot của công ty để nhận phiếu lương, thông báo</li>');
-      const doc = (n, a, b, c) => `<tr><td><b>${n}</b></td><td>${a || '<span class="muted">—</span>'}</td><td>${b || ''}</td><td class="r">${c || ''}</td></tr>`;
+      const doc = (n, a, b, c, k) => `<tr class="me-row" data-me="${k}" title="Bấm để xem chi tiết"><td><b>${n}</b></td><td>${a || '<span class="muted">—</span>'}</td><td>${b || ''}</td><td class="r">${c || ''} <span class="me-go">›</span></td></tr>`;
       const rows = [
-        drv || e.bangSo || e.bangHang ? doc('Giấy phép lái xe', [e.bangSo && 'Số ' + esc(e.bangSo), e.bangHang && 'Hạng ' + esc(e.bangHang)].filter(Boolean).join(' · '), e.bangHetHan ? 'Hết hạn ' + F.date(e.bangHetHan) : '', e.bangHetHan ? st(e.bangHetHan) : '') : '',
-        doc('Căn cước công dân', e.cccd ? 'Số ' + esc(e.cccd) : '', e.cccdNgayCap ? 'Cấp ' + F.date(e.cccdNgayCap) + (e.cccdNoiCap ? ' · ' + esc(e.cccdNoiCap) : '') : ''),
-        drv ? doc('Giấy khám sức khỏe', sk ? 'Khám ' + F.date(sk.ngay) + (sk.noi ? ' · ' + esc(sk.noi) : '') : '', skH ? 'Hạn ' + F.date(skH) : '', st(skH)) : '',
-        drv ? doc('Tập huấn nghiệp vụ', th ? F.date(th.ngay) + (th.donVi ? ' · ' + esc(th.donVi) : '') : '', thH ? 'Hạn ' + F.date(thH) : '', thH ? st(thH) : '') : '',
-        doc('Hợp đồng lao động', [e.soHD && 'Số ' + esc(e.soHD), e.loaiHD && esc(e.loaiHD)].filter(Boolean).join(' · '), e.hdTu || e.hdDen ? (e.hdTu ? F.date(e.hdTu) : '…') + ' → ' + (e.hdDen ? F.date(e.hdDen) : 'không thời hạn') : '', e.hdDen ? st(e.hdDen) : ''),
-        doc('Bảo hiểm xã hội', e.soBHXH ? 'Sổ ' + esc(e.soBHXH) : '', e.bhxhNgayCap ? 'Cấp ' + F.date(e.bhxhNgayCap) : ''),
-        doc('Zalo nhận thông báo', e.zaloId ? 'Đã liên kết' : '', '', e.zaloId ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa</span>')
+        drv || e.bangSo || e.bangHang ? doc('Giấy phép lái xe', [e.bangSo && 'Số ' + esc(e.bangSo), e.bangHang && 'Hạng ' + esc(e.bangHang)].filter(Boolean).join(' · '), e.bangHetHan ? 'Hết hạn ' + F.date(e.bangHetHan) : '', e.bangHetHan ? st(e.bangHetHan) : '', 'gplx') : '',
+        drv || e.theNVTruoc ? doc('Thẻ nghiệp vụ lái xe', e.theNVTruoc ? 'Đã có ảnh thẻ' : '', '', e.theNVTruoc ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa có</span>', 'thenv') : '',
+        doc('Căn cước công dân', e.cccd ? 'Số ' + esc(e.cccd) : '', e.cccdNgayCap ? 'Cấp ' + F.date(e.cccdNgayCap) + (e.cccdNoiCap ? ' · ' + esc(e.cccdNoiCap) : '') : '', '', 'cccd'),
+        drv ? doc('Giấy khám sức khỏe', sk ? 'Khám ' + F.date(sk.ngay) + (sk.noi ? ' · ' + esc(sk.noi) : '') : '', skH ? 'Hạn ' + F.date(skH) : '', st(skH), 'sk') : '',
+        drv ? doc('Tập huấn nghiệp vụ', th ? F.date(th.ngay) + (th.donVi ? ' · ' + esc(th.donVi) : '') : '', thH ? 'Hạn ' + F.date(thH) : '', thH ? st(thH) : '', 'th') : '',
+        doc('Hợp đồng lao động', [e.soHD && 'Số ' + esc(e.soHD), e.loaiHD && esc(e.loaiHD)].filter(Boolean).join(' · '), e.hdTu || e.hdDen ? (e.hdTu ? F.date(e.hdTu) : '…') + ' → ' + (e.hdDen ? F.date(e.hdDen) : 'không thời hạn') : '', e.hdDen ? st(e.hdDen) : '', 'hd'),
+        doc('Bảo hiểm xã hội', e.soBHXH ? 'Sổ ' + esc(e.soBHXH) : '', e.bhxhNgayCap ? 'Cấp ' + F.date(e.bhxhNgayCap) : '', '', 'bh'),
+        doc('Zalo nhận thông báo', e.zaloId ? 'Đã liên kết' : '', '', e.zaloId ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa</span>', 'zalo')
       ].join('');
       const yr = today.slice(0, 4), cnt = k => { try { return llRecs(e.id, k).filter(x => String(x.ngay || '').startsWith(yr)).length; } catch (x) { return 0; } };
       const ny = e.ngayVao ? Math.max(0, (D.parse(today) - D.parse(e.ngayVao)) / 864e5 / 365.25) : null;
@@ -13605,14 +13606,41 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
         ${drv ? `<div class="card"><div class="card-h"><h3>Lý lịch hành nghề · năm ${yr}</h3></div><div class="card-b me-kv"><div><span>Vi phạm</span><b class="${cnt('vp') ? 'me-bad' : ''}">${cnt('vp')}</b></div><div><span>Tai nạn</span><b class="${cnt('tn') ? 'me-bad' : ''}">${cnt('tn')}</b></div><div><span>Lần tập huấn</span><b>${cnt('th')}</b></div><div><span>Lần khám sức khỏe</span><b>${cnt('sk')}</b></div></div></div>` : ''}
       </div>`;
       const kp = el.querySelector('.kpis'); kp ? kp.insertAdjacentHTML('afterend', html) : el.insertAdjacentHTML('beforeend', html);
+      el.querySelectorAll('[data-me]').forEach(tr => tr.onclick = () => MED.open(tr.dataset.me, e, { st, sk, skH, th, thH }));
     } catch (x) { console.warn('vMe+', x); }
     return r;
   };
 }
 addCSS(`.me-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 18px}.me-span{grid-column:1/-1}@media(max-width:820px){.me-grid{grid-template-columns:1fr}}
 .me-w{margin:0;padding-left:18px;line-height:1.75;font-size:13.5px}.me-w li.bad{color:#b91c1c;font-weight:600}.me-w li.warn{color:#b45309}.me-w li.info{color:#475569}
-.me-kv{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}.me-kv span{display:block;font-size:12px;color:#64748b}.me-kv b{font-size:14px}.me-kv .me-full{grid-column:1/-1}.me-bad{color:#b91c1c}`);
-const APP_BUILD = '2026-11-05T13:30';
+.me-kv{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}.me-kv>div>span{display:block;font-size:12px;color:#64748b}.me-kv b{font-size:14px}.me-kv .me-full{grid-column:1/-1}.me-bad{color:#b91c1c}`);
+
+/* ===== Chi tiết từng loại giấy tờ trong "Thông tin của tôi" ===== */
+const MED = {
+  open(k, e, x) {
+    const v = (lb, val) => `<div><span>${lb}</span><b>${val ? val : '<span class="muted">—</span>'}</b></div>`, d = t => t ? F.date(t) : '', m = n => +n ? F.money(+n) : '';
+    const img = (lb, u) => `<figure class="med-img"><figcaption>${lb}</figcaption>${u ? `<img src="${esc(u)}" alt="" data-zoom>` : '<div class="med-no">Chưa có ảnh</div>'}</figure>`;
+    const hist = (loai, cols) => { let L = []; try { L = llRecs(e.id, loai); } catch (z) { } return L.length ? `<div class="tbl-wrap free" style="margin-top:12px"><table class="tbl compact"><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${L.map(r => `<tr>${cols.map(c => `<td class="wrap">${c[2] === 'date' ? d(r[c[0]]) : esc(r[c[0]] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="muted" style="margin-top:12px">Chưa có bản ghi nào trong Lý lịch hành nghề.</div>'; };
+    const P = {
+      gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>`],
+      thenv: ['Thẻ nghiệp vụ lái xe', `<div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ nghiệp vụ (mặt trước)', e.theNVTruoc)}</div>`],
+      cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số CCCD', esc(e.cccd || ''))}${v('Họ và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Địa chỉ thường trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
+      sk: ['Giấy khám sức khỏe', `<div class="med-kv">${v('Lần khám gần nhất', x.sk ? d(x.sk.ngay) : '')}${v('Nơi khám', x.sk ? esc(x.sk.noi || '') : '')}${v('Tình trạng sức khỏe', x.sk ? esc(x.sk.tt || '') : '')}${v('Hạn giấy khám', x.skH ? d(x.skH) + ' ' + x.st(x.skH) : '')}</div><div class="med-h">Lịch sử khám sức khỏe</div>${hist('sk', [['ngay', 'Ngày khám', 'date'], ['noi', 'Nơi khám'], ['tt', 'Tình trạng'], ['hetHan', 'Hạn', 'date']])}`],
+      th: ['Tập huấn nghiệp vụ', `<div class="med-kv">${v('Lần gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-h">Lịch sử tập huấn</div>${hist('th', [['ngay', 'Thời gian', 'date'], ['noiDung', 'Nội dung'], ['donVi', 'Đơn vị'], ['hetHan', 'Hạn thẻ', 'date']])}`],
+      hd: ['Hợp đồng lao động', `<div class="med-kv">${v('Số hợp đồng', esc(e.soHD || ''))}${v('Loại hợp đồng', esc(e.loaiHD || ''))}${v('Từ ngày', d(e.hdTu))}${v('Đến ngày', e.hdDen ? d(e.hdDen) + ' ' + x.st(e.hdDen) : (e.hdTu ? 'Không thời hạn' : ''))}${v('Chức vụ', esc(e.chucVu || ''))}${v('Phòng ban', esc(e.phongBan || ''))}${v('Lương CK (tháng)', m(e.luongCB))}${v('Lương cố định', m(e.luongCoDinh))}${v('Hỗ trợ ăn trưa', m(e.hdAnTrua))}${v('Hỗ trợ xăng xe', m(e.hdXang))}${v('Hỗ trợ điện thoại', m(e.hdDienThoai))}${v('Hỗ trợ khác', m(e.hdKhac))}${e.moTaCV ? `<div class="med-full"><span>Mô tả công việc</span><b style="white-space:pre-line;font-weight:500">${esc(e.moTaCV)}</b></div>` : ''}</div>`],
+      bh: ['Bảo hiểm xã hội & thuế', `<div class="med-kv">${v('Số sổ BHXH', esc(e.soBHXH || ''))}${v('Ngày cấp sổ', d(e.bhxhNgayCap))}${v('Lương đóng bảo hiểm', m(e.luongBH))}${v('Mã số thuế cá nhân', esc(e.mst || ''))}${v('Số người phụ thuộc', String(+e.soNPT || 0))}${v('Phụ cấp chịu thuế', m(e.pcChiuThue))}${v('Phụ cấp không chịu thuế', m(e.pcKhongThue))}</div>`],
+      zalo: ['Zalo nhận thông báo', e.zaloId ? `<div class="med-kv">${v('Trạng thái', '<span class="badge b-green">Đã liên kết</span>')}${v('Zalo Chat ID', esc(e.zaloId))}</div><p class="muted small">Phiếu lương và thông báo của công ty sẽ được gửi vào Zalo này.</p>` : `<p>Chưa liên kết Zalo. Mở Zalo Bot của công ty và nhắn <b>${esc(e.ma || 'mã nhân viên')}</b> hoặc số điện thoại của bạn, app sẽ tự liên kết trong vài phút.</p>`]
+    }[k]; if (!P) return;
+    const md = Modal.open({ title: P[0] + ' · ' + esc(e.ten || ''), width: 720, body: `<div class="med">${P[1]}</div>` });
+    md.el.querySelectorAll('[data-zoom]').forEach(i => i.onclick = () => Modal.open({ title: P[0], width: 1000, body: `<img src="${i.src}" style="width:100%;border-radius:8px">` }));
+  }
+};
+addCSS(`.me-row{cursor:pointer}.me-row:hover td{background:#f5f8ff!important}.me-go{color:#94a3b8;font-size:18px;margin-left:6px;vertical-align:middle}
+.med-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px}.med-kv>div>span{display:block;font-size:12px;color:#64748b;margin-bottom:2px}.med-kv .badge{margin-left:6px;vertical-align:middle}.med-kv b{font-size:14.5px}.med-full{grid-column:1/-1}
+.med-imgs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:16px}.med-img{margin:0}.med-img figcaption{font-size:12px;color:#64748b;margin-bottom:4px}.med-img img{width:100%;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;aspect-ratio:85.6/54;object-fit:cover;background:#f8fafc}
+.med-no{aspect-ratio:85.6/54;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}.med-h{font-weight:700;font-size:13px;margin-top:16px;color:#334155}
+@media(max-width:600px){.med-kv{grid-template-columns:1fr}}`);
+const APP_BUILD = '2026-11-05T13:45';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
