@@ -13645,7 +13645,28 @@ addCSS(`.me-row{cursor:pointer}.me-row:hover td{background:#f5f8ff!important}.me
 .med-no{aspect-ratio:85.6/54;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}.med-h{font-weight:700;font-size:13px;margin-top:16px;color:#334155}
 @media(max-width:600px){.med-kv{grid-template-columns:1fr}}`);
 addCSS('.inp-bad{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;background:#fff5f5!important}');
-const APP_BUILD = '2026-11-05T14:25';
+
+/* ===== PHÂN QUYỀN TRUNG TÂM (PERM) =====
+   Một chỗ duy nhất quyết định quyền; mọi module (màn hình, nút data-act, thao tác) đều hỏi qua Auth.can / Auth.canView.
+   - Admin: toàn quyền mọi module, kể cả module thêm sau này (không phụ thuộc bảng quyền đã lưu).
+   - Thao tác chưa khai báo quyền: được gán quyền theo module của nó, không còn thao tác "lọt" không kiểm tra.
+   - Màn hình mở đầu: lấy theo đúng thứ tự menu, màn hình đầu tiên người đó được xem. */
+const PERM = {
+  admin: () => !!(Auth.user && Auth.user.role === 'admin'),
+  ACT: { gcSet: ['lichchay', 'edit'], gcGo: ['lichchay', 'view'], gcDo: ['lichchay', 'edit'], ltEdit: ['giochay', 'edit'], dvHuyLs: ['lichchay', 'view'], dvKQ: ['lichchay', 'view'], dvQK: ['lichchay', 'view'],
+    dvPkClear: ['lichchay', 'view'], dvPkMode: ['lichchay', 'view'], dvPkAll: ['lichchay', 'view'], dvPkPrint: ['lichchay', 'view'], dhDay: ['lichchay', 'view'], dhMon: ['lichchay', 'view'], dhSaveRange: ['hoso', 'add'],
+    atgOpen: ['lichchay', 'view'], atgPrint: ['lichchay', 'view'], zbOpen: ['users', 'edit'], zbSetup: ['users', 'edit'], saveFile: ['data', 'edit'], saveAs: ['data', 'edit'], draftDrop: ['data', 'edit'], brush: ['chamcong', 'edit'] },
+  audit() { const P = Auth.ACT_PERM || {}; return Object.keys(ACT).filter(a => !P[a] && !/^(nav|banner|view|hub)/.test(a)); }
+};
+{
+  const c1 = Auth.can; Auth.can = function (mod, act) { if (!Auth.user) return false; if (PERM.admin()) return true; return c1.apply(this, arguments); };
+  Object.entries(PERM.ACT).forEach(([k, v]) => { if (!Auth.ACT_PERM[k]) Auth.ACT_PERM[k] = v; });
+  /* thao tác của màn hình Điều hành xe theo quyền của chính module Điều hành (trước đây mượn quyền Đặt vé) */
+  Object.keys(Auth.ACT_PERM).forEach(k => { if (/^dh[A-Z]/.test(k) && Auth.ACT_PERM[k][0] === 'lichchay') Auth.ACT_PERM[k] = ['dieuhanh', Auth.ACT_PERM[k][1]]; });
+  const fv = Auth.firstView; Auth.firstView = function () { const r = fv.apply(this, arguments); if (r) return r; try { return CFG.nav.flatMap(g => g.items).find(id => CFG.views[id] && Auth.canView(id)) || null; } catch (e) { return null; } };
+  window.addEventListener('load', () => { setTimeout(() => { try { const m = PERM.audit(); if (m.length) console.warn('PERM: thao tác chưa khai báo quyền', m); } catch (e) { } }, 3000); });
+}
+const APP_BUILD = '2026-11-05T20:05';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
