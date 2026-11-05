@@ -2542,14 +2542,15 @@ const ZB = {
     const m = Modal.open({
       title: 'Gửi thông báo lương qua Zalo · ' + F.month(UI.m), width: 900,
       body: `<div class="row" style="margin-bottom:10px"><span class="small muted">${L.length} nhân viên${UI.pb ? ' · ' + esc(UI.pb) : ''} · ${L.filter(x => x.e.zaloId).length} người đã có Zalo</span><span class="grow"></span><button class="btn sm" data-link>${ic('users')} Ghép Zalo nhân viên</button><button class="btn sm" data-cfg>${ic('settings')} Cài đặt bot</button></div>
-        <div class="grid cols-21" style="gap:14px"><div class="tbl-wrap free" style="max-height:52vh"><table class="tbl compact"><thead><tr><th class="c"><input type="checkbox" data-all></th><th>Nhân viên</th><th class="r">Thực lĩnh</th><th>Zalo</th><th></th></tr></thead><tbody>${L.map((x, i) => `<tr class="click" data-row="${i}"><td class="c"><input type="checkbox" data-i="${i}" ${x.e.zaloId && !sent[x.id] ? 'checked' : ''} ${x.e.zaloId ? '' : 'disabled'}></td><td><b>${esc(x.ten)}</b><div class="small muted">${esc(x.ma)} · ${esc(x.phongBan || '')}</div></td><td class="r"><b>${F.money(x.thucLinh)}</b></td><td>${x.e.zaloId ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa có</span>'}</td><td data-st="${i}">${sent[x.id] ? `<span class="badge b-blue" title="${esc(sent[x.id])}">Đã gửi</span>` : ''}</td></tr>`).join('')}</tbody></table></div>
+        <div class="grid cols-21" style="gap:14px"><div class="tbl-wrap free" style="max-height:52vh"><table class="tbl compact"><thead><tr><th class="c"><input type="checkbox" data-all></th><th>Nhân viên</th><th class="r">Thực lĩnh</th><th>Zalo</th><th></th></tr></thead><tbody>${L.map((x, i) => `<tr class="click" data-row="${i}"><td class="c"><input type="checkbox" data-i="${i}" ${x.e.zaloId ? '' : 'disabled'}></td><td><b>${esc(x.ten)}</b><div class="small muted">${esc(x.ma)} · ${esc(x.phongBan || '')}</div></td><td class="r"><b>${F.money(x.thucLinh)}</b></td><td>${x.e.zaloId ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa có</span>'}</td><td data-st="${i}">${sent[x.id] ? `<span class="badge b-blue" title="${esc(sent[x.id])}">Đã gửi</span>` : ''}</td></tr>`).join('')}</tbody></table></div>
         <div><div class="small" style="font-weight:600;margin-bottom:6px">Xem trước tin nhắn <span class="muted" id="zbPvN" style="font-weight:500"></span></div><pre class="zb-pv" id="zbPv"></pre></div></div>`,
-      foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('send')} Gửi cho người đã chọn</button>`
+      foot: `<span class="small muted left" id="zbCnt">Chưa chọn ai · tích ô để chọn người cần gửi</span><button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('send')} Gửi cho người đã chọn</button>`
     });
     const pv = i => { m.el.querySelector('#zbPv').textContent = L[i] ? ZB.msg(L[i]) : 'Không có nhân viên'; m.el.querySelector('#zbPvN').textContent = L[i] ? ZB.tplName(ZB.tplKeyOf(L[i], c)) + ' · ' + L[i].ten : ''; m.el.querySelectorAll('[data-row]').forEach(r => r.classList.toggle('zb-on', +r.dataset.row === i)); };
     pv(Math.max(0, L.findIndex(x => x.e.zaloId)));
     m.el.querySelectorAll('[data-row]').forEach(r => r.addEventListener('click', e => { if (e.target.type !== 'checkbox') pv(+r.dataset.row); }));
     m.el.querySelector('[data-all]').onchange = e => m.el.querySelectorAll('input[data-i]:not(:disabled)').forEach(x => x.checked = e.target.checked);
+    const cnt = () => { const n = m.el.querySelectorAll('input[data-i]:checked').length; m.el.querySelector('#zbCnt').textContent = n ? `Đã chọn ${n} người` : 'Chưa chọn ai · tích ô để chọn người cần gửi'; }; m.el.addEventListener('change', e => { if (e.target.matches('input[data-i],[data-all]')) cnt(); });
     m.el.querySelector('[data-no]').onclick = () => m.close();
     m.el.querySelector('[data-cfg]').onclick = () => { m.close(); ZB.setup(); };
     m.el.querySelector('[data-link]').onclick = () => { m.close(); ZB.link(); };
@@ -2569,7 +2570,7 @@ const ZB = {
           else { bad++; cell.innerHTML = `<span class="badge b-red" title="${esc(r.error || '')}">Lỗi</span>`; } });
       }
       try { localStorage.setItem('zbot.sent.' + UI.m, JSON.stringify(sent)); } catch (err) { }
-      e.target.disabled = false;
+      e.target.disabled = false; cnt();
       toast(`Đã gửi ${ok} tin${bad ? `, ${bad} tin lỗi (di chuột vào chữ "Lỗi" để xem lý do)` : ''}`, bad ? 'err' : 'ok', 7000);
     };
   }
@@ -13528,7 +13529,7 @@ ZB.autoLink = async function (quiet) {
 };
 setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 5 * 60000);
 { const zd0 = HUB.zDraw; HUB.zDraw = function () { const r = zd0.apply(this, arguments); ZB.autoLink(true).then(n => { if (n && HUB.el && HUB.tab === 'zalo') try { zd0.apply(HUB, []); } catch (e) { } }); return r; }; }
-const APP_BUILD = '2026-11-05T12:35';
+const APP_BUILD = '2026-11-05T12:45';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
