@@ -13645,7 +13645,7 @@ addCSS(`.me-row{cursor:pointer}.me-row:hover td{background:#f5f8ff!important}.me
 .med-no{aspect-ratio:85.6/54;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}.med-h{font-weight:700;font-size:13px;margin-top:16px;color:#334155}
 @media(max-width:600px){.med-kv{grid-template-columns:1fr}}`);
 addCSS('.inp-bad{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;background:#fff5f5!important}');
-const APP_BUILD = '2026-11-05T14:00';
+const APP_BUILD = '2026-11-05T14:25';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
@@ -13694,6 +13694,35 @@ const UPD = {
     window.addEventListener('focus', wake); window.addEventListener('online', () => setTimeout(wake, 1500));
   }
 };
+
+/* ===== Cập nhật âm thầm, không làm phiền người đang thao tác =====
+   - Đang mở hộp thoại, đang gõ, hoặc vừa bấm/chạm trong 10 giây: không tải lại dữ liệu, không vẽ lại màn hình, không tải bản app mới.
+   - Người đó bấm Lưu: dữ liệu của họ được gửi lên và gộp với bản mới nhất ngay lúc lưu; xong thao tác thì màn hình tự hiện dữ liệu mới nhất.
+   - Có phiên bản app mới: chờ lúc rảnh rồi tự tải bản mới, không hiện thông báo. */
+const UX = {
+  t: Date.now(), pend: { pull: false, paint: false, upd: '' },
+  k: 0,
+  typing() { const a = document.activeElement; return Date.now() - UX.k < 20000 && !!(a && (a.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !/^(button|checkbox|radio|file|submit)$/i.test(a.type || '')))); },
+  busy() { return !!document.querySelector('.modal-wrap') || UX.typing() || Date.now() - UX.t < 10000; },
+  tick() {
+    if (UX.pend.paint && !document.querySelector('.modal-wrap') && !UX.typing()) { UX.pend.paint = false; try { TK.paint(); } catch (e) { } }
+    if (UX.busy()) return;
+    if (UX.pend.upd && !Store.dirty && !(GS && GS.busy)) { const b = UX.pend.upd; UX.pend.upd = ''; return UPD.reload(b); }
+    if (UX.pend.pull || (GS && GS.on && TK.latest > GS.ver)) { UX.pend.pull = false; try { TK.pullSoon(); } catch (e) { } }
+    if (UX.pend.paint && !document.querySelector('.modal-wrap') && !UX.typing()) { UX.pend.paint = false; try { TK.paint(); } catch (e) { } }
+  }
+};
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(t => window.addEventListener(t, () => { UX.t = Date.now(); }, { capture: true, passive: true }));
+['keydown', 'input'].forEach(t => window.addEventListener(t, () => { UX.k = Date.now(); }, { capture: true, passive: true }));
+setInterval(() => UX.tick(), 2000);
+{
+  const ps = TK.pullSoon; TK.pullSoon = function (n) { if (!Store.dirty && UX.busy()) { UX.pend.pull = true; return; } return ps.apply(this, arguments); };
+  const pt = TK.paint; TK.paint = function () { if (document.querySelector('.modal-wrap') || UX.typing()) { UX.pend.paint = true; return; } return pt.apply(this, arguments); };
+  const gp = GS.pull; GS.pull = function (quiet) { return gp.call(this, false); };   // không hiện thông báo "đã cập nhật"
+  UPD.banner = function (b) { UX.pend.upd = b; };                                        // không hiện thanh "có bản mới": chờ rảnh tự cập nhật
+  const ck = UPD.check; UPD.check = async function (force) { if (UX.busy() && !document.querySelector('.au-wrap')) { try { const b = await UPD.remote(); if (b && b > APP_BUILD) UX.pend.upd = b; } catch (e) { } return; } return ck.apply(this, arguments); };
+  try { const f0 = IMGX.fetch; IMGX.fetch = async function () { const r0 = App.render, self = this, a = arguments; let want = false; App.render = function () { if (UX.busy()) { want = true; return; } return r0.apply(this, arguments); }; try { return await f0.apply(self, a); } finally { App.render = r0; if (want) UX.pend.paint = true; } }; } catch (e) { }
+}
 addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
 window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
 
