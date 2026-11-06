@@ -3,6 +3,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Management · Nhà Xe Thịnh Phát</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#059669">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Thịnh Phát">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-180.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
@@ -5733,7 +5740,7 @@ const Auth = {
     const em = empOfUser(u), nm = (u.ten && u.ten !== 'Quản trị viên' ? u.ten : (em && em.ten) || u.ten || u.user);
     const ini = String(nm || '?').trim().split(/\s+/).slice(-1)[0].slice(0, 1).toUpperCase(), av = em && em.avatar;
     box.innerHTML = `<button class="au-btn" type="button" aria-haspopup="true">${av ? `<img src="${av}" alt="">` : `<span class="au-av">${esc(ini)}</span>`}<span class="au-nm"><b>${esc(nm)}</b><small>${esc(u.user)}</small></span>${ic('back')}</button>
-      <div class="au-dd"><div class="au-hd"><b>${esc(nm)}</b><small>${esc(u.user)}</small></div><button data-au="pass">${ic('lock')} Đổi mật khẩu</button><button data-au="out" class="out">${ic('x')} Đăng xuất</button></div>`;
+      <div class="au-dd"><div class="au-hd"><b>${esc(nm)}</b><small>${esc(u.user)}</small></div><button data-au="pass">${ic('lock')} Đổi mật khẩu</button>${PWA.can() ? `<button data-au="pwa">${ic('download')} Cài app vào máy</button>` : ''}<button data-au="out" class="out">${ic('x')} Đăng xuất</button></div>`;
     const btn = box.querySelector('.au-btn'); btn.onclick = e => { e.stopPropagation(); box.classList.toggle('open'); };
     if (!Auth._ddBound) { Auth._ddBound = true; document.addEventListener('click', e => { const b = $('#auMe'); if (b && !b.contains(e.target)) b.classList.remove('open'); }); }
   },
@@ -5761,7 +5768,7 @@ Object.entries(Auth.ACT_PERM).forEach(([k, [mod, act]]) => { const fn = ACT[k]; 
 document.addEventListener('change', e => { if (e.target.id === 'restoreFile' && !Auth.can('data', 'edit')) { e.stopImmediatePropagation(); e.target.value = ''; toast('Tài khoản của bạn không có quyền khôi phục dữ liệu', 'err'); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-au]'); if (!b) return;
-  if (b.dataset.au === 'pass') Auth.changePass(); else Auth.logout();
+  if (b.dataset.au === 'pass') Auth.changePass(); else if (b.dataset.au === 'out') Auth.logout();
 });
 // --- form nhân viên: mở ở chế độ chỉ xem nếu không có quyền sửa ---
 const empForm0 = empForm;
@@ -12214,7 +12221,23 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T09:55';
+const APP_BUILD = '2026-11-06T10:10';
+/* ===== APP CÀI ĐẶT (PWA): biểu tượng "Cài đặt" trên thanh địa chỉ / "Thêm vào màn hình chính"; mở cửa sổ riêng, không tab ===== */
+const PWA = {
+  ev: null,
+  standalone: () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true,
+  ios: () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+  can: () => !PWA.standalone() && (!!PWA.ev || PWA.ios()),
+  async install() {
+    if (PWA.ev) { const e = PWA.ev; PWA.ev = null; e.prompt(); const r = await e.userChoice.catch(() => ({})); if (r.outcome === 'accepted') toast(ic('check') + ' Đã cài app Nhà Xe Thịnh Phát', 'ok'); try { Auth.chip(); } catch (x) { } return; }
+    if (PWA.ios()) { const m = Modal.open({ title: 'Cài app trên iPhone / iPad', width: 420, body: `<ol style="line-height:1.9;padding-left:20px;margin:0"><li>Mở trang này bằng <b>Safari</b></li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b></li></ol><p class="small muted" style="margin:12px 0 0">Sau đó mở app từ biểu tượng "Thịnh Phát" ngoài màn hình: chạy toàn màn hình, không có thanh địa chỉ.</p>`, foot: `<button class="btn pri" data-ok>Đã hiểu</button>` }); m.el.querySelector('[data-ok]').onclick = () => m.close(); return; }
+    toast('Trình duyệt này chưa hỗ trợ cài app. Dùng Chrome hoặc Edge, bấm biểu tượng Cài đặt trên thanh địa chỉ.', 'err', 7000);
+  }
+};
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); PWA.ev = e; try { if (Auth.user) Auth.chip(); } catch (x) { } });
+window.addEventListener('appinstalled', () => { PWA.ev = null; try { if (Auth.user) Auth.chip(); } catch (x) { } });
+if ('serviceWorker' in navigator && location.protocol === 'https:') window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-au="pwa"]'); if (!b) return; const m = $('#auMe'); if (m) m.classList.remove('open'); PWA.install(); });
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
