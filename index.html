@@ -11981,7 +11981,97 @@ addCSS(`.dv-one{display:flex;flex-wrap:wrap;gap:6px;align-items:center;backgroun
   ACT.dvLocked = d => { const t = DV.trip || (dvCur && dvCur() || {}).id; if (PERM.admin() && t) return Lock.force(t, d.g); toast('Ghế ' + d.g + ' đang được ' + (d.n || 'nhân viên khác') + ' thao tác. Chờ khoảng 1 phút nếu người đó đã rời đi', 'err', 5000); };
   window.addEventListener('pagehide', () => { try { const L = [...Lock.mine.values()]; L.forEach(v => Lock.release(v.t, v.g)); } catch (e) { } });
 }
-const APP_BUILD = '2026-11-06T00:40';
+
+/* =====================================================================================
+   MỨC 2 · DỮ LIỆU CHIA PHẦN (PS) + SỔ ĐĂNG KÝ MODULE (MODL.reg)  —  phiên (a): mới có code, CHƯA BẬT (PS.on = false)
+   Mục tiêu: mỗi tài khoản chỉ tải về phần dữ liệu mình được phép; Firebase chặn theo từng phần.
+   - core    : dữ liệu chung mọi người cần (cài đặt, xe, giờ chạy, giá vé, tài khoản, danh bạ nhân viên rút gọn nvPub…)
+   - nhansu  : hồ sơ nhân viên đầy đủ (CCCD, lương cơ bản, hợp đồng, BHXH, tài khoản ngân hàng…)
+   - luong   : chấm công, phụ cấp/tạm ứng, bảng lương
+   - vanhanh : lịch chạy, điều hành, nhiên liệu, km, sửa chữa, gửi hàng, HĐ vận chuyển, lý lịch hành nghề
+   Vé, hồ sơ, lệnh vận chuyển, nghiệm thu vẫn đồng bộ từng tờ như cũ (TK).
+   Thêm module mới: MODL.reg('id', { title, icon, group, mod, parts: ['vanhanh'], desc }) → tự có menu, quyền, nạp file modules/id.js, biết cần phần dữ liệu nào.
+   Thêm loại dữ liệu mới: khai báo khóa vào PARTS.<phần>.keys (không khai báo thì mặc định nằm ở core).
+   ===================================================================================== */
+const PARTS = {
+  core: { label: 'Dữ liệu chung', keys: [] },
+  nhansu: { label: 'Hồ sơ nhân sự', keys: ['employees'] },
+  luong: { label: 'Chấm công & lương', keys: ['cham', 'extra'], match: /^(luong|tamUng|tamung|congNo|congno|thue|bangLuong)/ },
+  vanhanh: { label: 'Vận hành', keys: ['lichchay', 'suachua', 'nhienlieu', 'kmxe', 'guihang', 'hdvc', 'lylich', 'lcBo'] }
+};
+/* trường nhạy cảm của nhân viên: chỉ nằm ở phần nhansu; danh bạ rút gọn (nvPub) ở core bỏ các trường này */
+const NV_PRIV = /^(luong|hd(AnTrua|Xang|DienThoai|Khac|Tu|Den)$|pc[A-Z]|phuCap|mst$|soNPT|soBHXH|bhxh|cccd|diaChi|stk|nganHang|soHD$|loaiHD$|moTaCV|ketHon|conKetHon|trinhDo|pw$|matKhau|ghiChuRieng|khongLuong|thaiSan|kyLuat|nangLuong)/;
+const PS = {
+  on: false, VER: 1,
+  partOf(k) { for (const [p, d] of Object.entries(PARTS)) { if (p === 'core') continue; if (d.keys.includes(k) || (d.match && d.match.test(k))) return p; } return 'core'; },
+  pub: e => { const o = {}; Object.keys(e || {}).forEach(k => { if (!NV_PRIV.test(k)) o[k] = e[k]; }); return o; },
+  /* tách khối dữ liệu (đã bỏ vé/hồ sơ/lệnh) thành các phần */
+  split(data) {
+    const out = {}; Object.keys(PARTS).forEach(p => out[p] = {});
+    Object.keys(data || {}).forEach(k => { if (k === '_meta' || k === 'nvPub') return; out[PS.partOf(k)][k] = data[k]; });
+    out.core.nvPub = (data.employees || []).map(PS.pub);
+    return out;
+  },
+  /* ghép các phần đang có (thiếu phần nào thì dùng bản rút gọn) thành khối dữ liệu app dùng */
+  join(parts) {
+    const d = {}; ['core', 'vanhanh', 'luong', 'nhansu'].forEach(p => { if (parts[p]) Object.assign(d, parts[p]); });
+    if (!parts.nhansu || !Array.isArray(parts.nhansu.employees)) d.employees = (parts.core && parts.core.nvPub || []).map(x => Object.assign({}, x));
+    delete d.nvPub; return d;
+  },
+  /* phần nào vai trò đang đăng nhập được tải (đọc) — dựa trên quyền module trong PERM */
+  readable() {
+    if (PERM.admin()) return Object.keys(PARTS);
+    const can = m => Auth.can(m, 'view'), r = ['core'];
+    if (['dieuhanh', 'lichchay', 'nhienlieu', 'suachua', 'kmxe', 'lylich', 'hdvc', 'giochay'].some(can)) r.push('vanhanh');
+    if (['chamcong', 'bangluong', 'thue'].some(can)) r.push('luong');
+    if (Auth.can('nhanvien', 'all') || Auth.can('hopdong', 'view')) r.push('nhansu');
+    return r;
+  },
+  /* lưu / đọc một phần trên Firestore: cùng cách chia mảnh + chốt phiên bản như khối cũ, tài liệu riêng 'pm_<phần>' + 'p<phần>_…' */
+  async get(part) {
+    const meta = FB.col().doc('pm_' + part), s = await meta.get(); if (!s.exists || !s.data().n) return { ok: true, ver: 0, data: null };
+    const m = s.data(), docs = await Promise.all(Array.from({ length: m.n }, (_, i) => FB.col().doc(m.p + i).get()));
+    if (docs.some(x => !x.exists)) { const er = new Error('Phần ' + part + ' vừa được máy khác cập nhật'); er.code = 'aborted'; throw er; }
+    return { ok: true, ver: +m.ver || 0, data: JSON.parse(docs.map(x => x.data().d).join('')) };
+  },
+  async put(part, data, baseVer, who) {
+    const meta = FB.col().doc('pm_' + part), txt = JSON.stringify(data), n = Math.max(1, Math.ceil(txt.length / FB.CH)), pre = 'p' + part + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + '_';
+    let b = FB.db.batch(), cnt = 0; for (let i = 0; i < n; i++) { if (cnt >= 400) { await b.commit(); b = FB.db.batch(); cnt = 0; } b.set(FB.col().doc(pre + i), { d: txt.slice(i * FB.CH, (i + 1) * FB.CH) }); cnt++; } if (cnt) await b.commit();
+    let old = null;
+    const r = await FB.db.runTransaction(async t => {
+      const s = await t.get(meta), m = s.exists ? s.data() : {}, cur = +m.ver || 0;
+      if (s.exists && +baseVer !== cur) { const er = new Error('Phần ' + part + ' đã có bản mới hơn'); er.conflict = true; er.ver = cur; throw er; }
+      old = s.exists ? { p: m.p, n: +m.n } : null;
+      t.set(meta, { ver: cur + 1, n, p: pre, at: new Date().toISOString(), who: String(who || ''), size: txt.length, base: cur, app: APP_BUILD, part });
+      return { ok: true, ver: cur + 1 };
+    }).catch(async e => { const bb = FB.db.batch(); for (let i = 0; i < n; i++) bb.delete(FB.col().doc(pre + i)); await bb.commit().catch(() => { }); throw e; });
+    if (old && old.p) setTimeout(() => { const bb = FB.db.batch(); for (let i = 0; i < old.n; i++) bb.delete(FB.col().doc(old.p + i)); bb.commit().catch(() => { }); }, 8000);
+    return r;
+  },
+  /* kiểm tra tách-ghép không mất dữ liệu (dùng trước khi chuyển) */
+  selfTest(data) {
+    const src = JSON.parse(JSON.stringify(data)); delete src._meta; const P = PS.split(src), back = PS.join(P);
+    const a = JSON.stringify(Object.keys(src).sort().reduce((o, k) => (o[k] = src[k], o), {})), b = JSON.stringify(Object.keys(back).sort().reduce((o, k) => (o[k] = back[k], o), {}));
+    const size = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, JSON.stringify(v).length]));
+    const leak = JSON.stringify(P.core.nvPub).match(/"(luongCB|cccd|soBHXH|stk|mst)"/);
+    return { ok: a === b && !leak, same: a === b, leak: leak ? leak[1] : '', size };
+  }
+};
+/* Sổ đăng ký module: một lệnh khai báo là module có menu, quyền, file riêng và biết phần dữ liệu cần dùng */
+MODL.parts = {};
+MODL.reg = function (id, o) {
+  CFG.views[id] = MODL.stub(id, { title: o.title, label: o.label || o.title, icon: o.icon || 'file', desc: o.desc || '', print: !!o.print });
+  if (o.mod && o.mod !== id) Auth.VIEWMOD[id] = o.mod;
+  MODL.parts[id] = o.parts || ['core'];
+  if (o.group || o.after) { const g = CFG.nav.find(x => (o.after && x.items.includes(o.after)) || (o.group && (x.group === o.group || x.title === o.group))); if (g && !g.items.includes(id)) { const i = o.after ? g.items.indexOf(o.after) : -1; i >= 0 ? g.items.splice(i + 1, 0, id) : g.items.push(id); } }
+  return CFG.views[id];
+};
+/* khai báo phần dữ liệu cho các module đã có (để lớp dữ liệu biết module nào cần gì) */
+Object.assign(MODL.parts, { dashboard: ['core', 'vanhanh'], lichchay: ['core', 'vanhanh'], dieuhanh: ['core', 'vanhanh'], baocaovt: ['core', 'vanhanh'], giochay: ['core'], banggia: ['core'],
+  phuongtien: ['core', 'vanhanh'], nhienlieu: ['core', 'vanhanh'], suachua: ['core', 'vanhanh'], kmxe: ['core', 'vanhanh'], lylich: ['core', 'vanhanh'], hdvc: ['core', 'vanhanh'],
+  nhanvien: ['core', 'nhansu'], hopdong: ['core', 'nhansu'], chamcong: ['core', 'luong'], bangluong: ['core', 'luong', 'nhansu'], thue: ['core', 'luong', 'nhansu'],
+  cuatoi: ['core', 'vanhanh', 'luong'], hoso: ['core'], scan: ['core'], users: ['core'], caidat: ['core'], data: ['core'] });
+const APP_BUILD = '2026-11-06T07:20';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
