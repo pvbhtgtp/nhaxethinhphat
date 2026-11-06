@@ -12221,19 +12221,36 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T10:10';
+const APP_BUILD = '2026-11-06T10:25';
 /* ===== APP CÀI ĐẶT (PWA): biểu tượng "Cài đặt" trên thanh địa chỉ / "Thêm vào màn hình chính"; mở cửa sổ riêng, không tab ===== */
 const PWA = {
   ev: null,
   standalone: () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true,
   ios: () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
-  can: () => !PWA.standalone() && (!!PWA.ev || PWA.ios()),
+  can: () => !PWA.standalone(),
+  /* hướng dẫn cài vắn tắt (mở từ menu tài khoản hoặc màn hình đăng nhập) */
+  guide() {
+    const ios = PWA.ios(), and = /android/i.test(navigator.userAgent), row = (t, on, b) => `<div class="pwa-r${on ? ' on' : ''}"><div class="pwa-t">${t}</div><div>${b}</div></div>`;
+    const m = Modal.open({ title: 'Cài app Nhà Xe Thịnh Phát', width: 460, body: `<p class="small muted" style="margin:0 0 10px">Cài 1 lần: app có biểu tượng riêng, mở cửa sổ riêng (không tab, không thanh địa chỉ), tự cập nhật.</p>
+      ${row('💻 Máy tính (Chrome / Edge)', !ios && !and, 'Bấm biểu tượng <b>Cài đặt</b> ở cuối thanh địa chỉ → <b>Cài đặt</b>.')}
+      ${row('🤖 Android (Chrome)', and, 'Menu <b>⋮</b> → <b>Cài đặt ứng dụng</b> (hoặc Thêm vào màn hình chính) → <b>Cài đặt</b>.')}
+      ${row('🍎 iPhone / iPad (Safari)', ios, 'Nút <b>Chia sẻ</b> (ô vuông mũi tên lên) → <b>Thêm vào MH chính</b> → <b>Thêm</b>.')}
+      <p class="small muted" style="margin:10px 0 0">Sau đó mở app bằng biểu tượng <b>Thịnh Phát</b> trên màn hình.</p>`,
+      foot: `<button class="btn" data-x>Đóng</button>${PWA.ev ? `<button class="btn pri" data-go>${ic('download')} Cài ngay</button>` : ''}` });
+    m.el.style.zIndex = 900;
+    m.el.querySelector('[data-x]').onclick = () => m.close();
+    const g = m.el.querySelector('[data-go]'); if (g) g.onclick = () => { m.close(); PWA.install(); };
+  },
   async install() {
-    if (PWA.ev) { const e = PWA.ev; PWA.ev = null; e.prompt(); const r = await e.userChoice.catch(() => ({})); if (r.outcome === 'accepted') toast(ic('check') + ' Đã cài app Nhà Xe Thịnh Phát', 'ok'); try { Auth.chip(); } catch (x) { } return; }
-    if (PWA.ios()) { const m = Modal.open({ title: 'Cài app trên iPhone / iPad', width: 420, body: `<ol style="line-height:1.9;padding-left:20px;margin:0"><li>Mở trang này bằng <b>Safari</b></li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b></li></ol><p class="small muted" style="margin:12px 0 0">Sau đó mở app từ biểu tượng "Thịnh Phát" ngoài màn hình: chạy toàn màn hình, không có thanh địa chỉ.</p>`, foot: `<button class="btn pri" data-ok>Đã hiểu</button>` }); m.el.querySelector('[data-ok]').onclick = () => m.close(); return; }
-    toast('Trình duyệt này chưa hỗ trợ cài app. Dùng Chrome hoặc Edge, bấm biểu tượng Cài đặt trên thanh địa chỉ.', 'err', 7000);
-  }
+    if (!PWA.ev) return PWA.guide();
+    const e = PWA.ev; PWA.ev = null; e.prompt(); const r = await e.userChoice.catch(() => ({})); if (r.outcome === 'accepted') toast(ic('check') + ' Đã cài app Nhà Xe Thịnh Phát', 'ok'); try { Auth.chip(); } catch (x) { }
+  },
+  /* màn hình đăng nhập: thêm dòng "Cài app vào máy" */
+  login() { if (PWA.standalone()) return; document.querySelectorAll('.au-box').forEach(b => { if (b.querySelector('.pwa-l')) return; b.insertAdjacentHTML('beforeend', `<button type="button" class="pwa-l">${ic('download')} Hướng dẫn cài app vào máy</button>`); b.querySelector('.pwa-l').onclick = () => PWA.guide(); }); }
 };
+addCSS(`.pwa-r{border:1px solid #e2e8f0;border-radius:12px;padding:9px 12px;margin-top:8px;font-size:13px;line-height:1.55}.pwa-t{font-weight:700;font-size:13.5px;margin-bottom:2px}.pwa-r.on{border-color:var(--p);background:var(--p-50,#ecfdf5)}
+.pwa-l{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:10px;border:0;background:none;color:var(--p-d,#047857);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}.pwa-l svg{width:14px;height:14px}`);
+{ let t = 0; new MutationObserver(() => { if (t) return; t = setTimeout(() => { t = 0; try { PWA.login(); } catch (e) { } }, 200); }).observe(document.body, { childList: true }); setTimeout(() => { try { PWA.login(); } catch (e) { } }, 500); }
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); PWA.ev = e; try { if (Auth.user) Auth.chip(); } catch (x) { } });
 window.addEventListener('appinstalled', () => { PWA.ev = null; try { if (Auth.user) Auth.chip(); } catch (x) { } });
 if ('serviceWorker' in navigator && location.protocol === 'https:') window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
