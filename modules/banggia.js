@@ -49,14 +49,7 @@ function bgForm(b, preset) {
   };
   return m;
 }
-addCSS(`.bg-eh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 8px}.bg-gen{margin-bottom:8px}.bg-gen[hidden]{display:none}
-.bg-rows{display:flex;flex-direction:column;gap:6px}.bg-r{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 120px 34px;gap:6px;align-items:center}.bg-ar{text-align:center;color:#64748b}
-.bg-hint{display:block;color:var(--vt-a2,#0369a1);font-weight:600;margin-top:2px}
-.bgc{background:#fff;border:1px solid var(--vt-b,#d4ebfa);border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 2px rgba(12,74,110,.05)}
-.bgc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--vt-s,#eaf6fe);border-bottom:1px solid var(--vt-b,#d4ebfa)}.bgc-h b{font-size:15px}.bgc-h .rg{color:#475569;font-size:13px}
-.bgc table{width:100%;border-collapse:collapse;font-size:13.5px}.bgc td,.bgc th{padding:8px 14px;border-bottom:1px solid #eef2f6;text-align:left}.bgc th{font-size:11.5px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;background:#fafcfe}.bgc td.r,.bgc th.r{text-align:right;font-variant-numeric:tabular-nums}.bgc tr:last-child td{border-bottom:0}
-.bgc .all td{color:#0369a1;font-weight:600}
-@media(max-width:900px){.bg-r{grid-template-columns:minmax(0,1fr) 110px 30px;padding:8px 0;border-bottom:1px dashed #cfe3f1}.bg-r>[data-k=don]{grid-column:1/-1}.bg-ar{display:none}.bgc-h{padding:8px 10px}.bgc td,.bgc th{padding:7px 10px}}`);
+
 const vBG = {
   title: 'Bảng giá vé', icon: 'tag', desc: 'Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi',
   tools: () => `<button class="btn pri" data-act="bgAdd">${ic('plus')} Thêm bảng giá</button>`,
