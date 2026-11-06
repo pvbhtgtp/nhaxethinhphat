@@ -54,7 +54,7 @@ const CT = {
   one(el, t) {
     const s = CT.sum(t), gone = CT.mins(t) < -20, now = Date.now();
     const row = p => { const st = CT.st(p), due = CT.due(p, st), nw = CT.fresh[p.id] > now; return `<div class="ct-p${st.len ? ' on' : ''}${nw ? ' new' : ''}">
-      <div class="ct-pt"><span class="ct-seat">${esc(p.ghe)}</span><div class="grow"><b>${esc(p.ten || 'Khách')}</b>${p.gc ? `<div class="ct-gc">${esc(p.gc)}</div>` : ''}<div class="ct-pm">${CT.tab === 'don' ? (p.tra ? 'Xuống: ' + esc(p.tra) : '') : (p.don ? 'Đón: ' + esc(p.don) : '')}</div></div>
+      <div class="ct-pt"><span class="ct-seat">${esc(p.ghe)}</span><div class="grow"><b>${esc(p.ten || 'Khách')}</b>${p.gc ? `<div class="ct-gc">${esc(p.gc)}</div>` : ''}<div class="ct-pm">${CT.tab === 'don' ? (p.tra ? 'Trả: ' + esc(p.tra) : '') : 'Trả: ' + esc(p.tra || 'chưa ghi điểm trả')}</div></div>
         <div class="ct-money">${st.tt === 'tra' ? `<span class="ok">Đã thu${st.httt === 'ck' ? ' CK' : ''}</span>` : `<b>${F.money(due)}</b><small>${p.coc ? 'đã cọc ' + F.money(p.coc) : 'cần thu'}</small>`}</div></div>
       <div class="ct-acts">${p.sdt ? `<a class="ct-b call" href="tel:${esc(p.sdt)}">${ic('phone')} Gọi</a>` : '<span></span>'}<button class="ct-b ${st.len ? 'done' : ''}" data-len="${esc(p.id)}">${ic('check')} ${st.len ? 'Đã lên' : 'Lên xe'}</button><button class="ct-b ${st.tt === 'tra' ? 'done' : 'pay'}" data-pay="${esc(p.id)}">${ic('wallet')} ${st.tt === 'tra' ? 'Đã thu' : 'Thu tiền'}</button></div></div>`; };
     const grp = key => { const G = {}; t.pax.forEach(p => { const k = p[key] || '(Chưa ghi điểm)'; (G[k] = G[k] || []).push(p); }); return Object.entries(G).sort((a, b) => CT.idx(t, a[0]) - CT.idx(t, b[0]) || a[0].localeCompare(b[0], 'vi'))
