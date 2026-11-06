@@ -493,7 +493,8 @@ function toast(msg, type = '', ms = 3200) {
   const t = document.createElement('div');
   t.className = 'toast ' + type; t.innerHTML = msg;
   rootEl('toasts').appendChild(t);
-  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = 0; setTimeout(() => t.remove(), 300); }, ms);
+  const bye = () => { t.style.transition = 'opacity .3s'; t.style.opacity = 0; setTimeout(() => t.remove(), 300); };
+  t.onclick = bye; setTimeout(bye, ms);   // chạm vào để tắt ngay
 }
 (function tipInit() {
   document.addEventListener('mouseover', e => {
@@ -9160,10 +9161,14 @@ const FO = {
   paint() {
     let b = document.getElementById('foBar');
     if (!FO.on) { if (b) b.remove(); document.body.classList.remove('fo-on'); return; }
+    const key = [FO.reason, FO.since, !!FO.rec].join('|');
+    if (b && b._k === key) return;            // đã báo trạng thái này rồi: không hiện lại
     if (!b) { b = document.createElement('div'); b.id = 'foBar'; b.dataset.runtime = '1'; document.body.appendChild(b); }
+    b._k = key; b.style.display = ''; clearTimeout(b._t); b._t = setTimeout(() => { b.style.display = 'none'; document.body.classList.remove('fo-on'); }, 8000);   // báo xong tự ẩn sau 8 giây
     document.body.classList.add('fo-on');
     b.innerHTML = `${ic('alert')}<span><b>Đang dùng ${FO.tname()} dự phòng</b> · Firebase ${FO.reason === 'quota' ? 'hết dung lượng / hạn mức' : 'mất kết nối'} từ ${new Date(FO.since).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} · ${FO.rec ? 'Firebase đã có lại, đang đưa dữ liệu về…' : 'tự quay về Firebase khi có lại'}</span><button class="btn sm" data-fo="probe">${ic('refresh')} Thử Firebase</button>`;
     b.querySelector('[data-fo]').onclick = () => { toast('Đang thử kết nối Firebase…', '', 2500); FO.probe(); };
+    b.insertAdjacentHTML('beforeend', `<button class="fo-x" title="Đóng">${ic('x')}</button>`); b.querySelector('.fo-x').onclick = () => { clearTimeout(b._t); b.style.display = 'none'; document.body.classList.remove('fo-on'); };
   },
   mount() {
     FO.call0 = GS.call;    // gồm cả nhánh Apps Script và Firebase
@@ -9190,7 +9195,7 @@ const FO = {
     };
   }
 };
-addCSS(`#foBar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:250;display:flex;align-items:center;gap:10px;background:#7c2d12;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}#foBar svg{width:16px;height:16px;flex:none}#foBar .btn{background:#fff;color:#7c2d12;border-color:#fff;flex:none}@media(max-width:700px){#foBar{bottom:8px;flex-wrap:wrap}}`);
+addCSS(`#foBar .fo-x{background:none;border:0;color:#fff;opacity:.8;padding:4px;cursor:pointer;display:flex}#foBar .fo-x svg{width:16px;height:16px}#foBar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:250;display:flex;align-items:center;gap:10px;background:#7c2d12;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}#foBar svg{width:16px;height:16px;flex:none}#foBar .btn{background:#fff;color:#7c2d12;border-color:#fff;flex:none}@media(max-width:700px){#foBar{bottom:8px;flex-wrap:wrap}}`);
 try { FO.mount(); } catch (e) { console.warn('FO', e); }
 
 /* ===== Nút Lưu: máy đã cài dữ liệu dùng chung nhưng đang chưa kết nối thì hỏi trước, không lặng lẽ tải file về máy ===== */
@@ -12455,7 +12460,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T17:10';
+const APP_BUILD = '2026-11-06T17:15';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
