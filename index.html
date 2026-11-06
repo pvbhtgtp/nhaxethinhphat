@@ -13143,7 +13143,95 @@ const TX = {
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
-const APP_BUILD = '2026-11-06T20:50';
+/* ===== TÌNH TRẠNG HỆ THỐNG: gom lỗi của mọi module, mọi máy về một chỗ (nút khiên trên thanh trên cùng).
+   Máy nào gặp lỗi (lỗi chương trình, không tải được màn hình, không lưu được, thông báo lỗi đỏ) tự ghi vào 'hf_err_<tài khoản>' (chỉ chữ).
+   Admin xem lỗi của tất cả máy, mỗi dòng có cách xử lý; nút "Sao chép báo cáo" gửi cho hỗ trợ khỏi phải mò. ===== */
+const SYS = {
+  L: [], R: {}, key: () => 'hf_err_' + ((Auth.user || {}).id || 'x'),
+  db: () => !!(Auth.user && typeof FB !== 'undefined' && FB.db && FB.col && GS.on && !(typeof FO !== 'undefined' && FO.on)),
+  NOISE: /ResizeObserver|^Script error\.?$|Failed to load resource|ERR_BLOCKED|AbortError|The play\(\) request|NotAllowedError|Load failed$/i,
+  add(src, m) {
+    try {
+      m = String((m && (m.message || (typeof m === 'string' ? m : JSON.stringify(m)))) || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (!m || SYS.NOISE.test(m)) return;
+      const k = src + '|' + m, o = SYS.L.find(x => x.k === k);
+      if (o) { o.n++; o.at = Date.now(); } else { SYS.L.unshift({ k, src, m, at: Date.now(), n: 1, v: App.cur || '' }); if (SYS.L.length > 30) SYS.L.length = 30; }
+      SYS.paint(); clearTimeout(SYS._t); SYS._t = setTimeout(SYS.flush, 8000);
+    } catch (e) { }
+  },
+  flush() {
+    try { if (!SYS.db()) return; FB.col().doc(SYS.key()).set({ t: 'e', u: String(Auth.user.id), ten: Auth.user.ten || Auth.user.user || '', build: APP_BUILD, ua: navigator.userAgent.slice(0, 140), at: Date.now(), list: SYS.L.slice(0, 30).map(({ k, ...x }) => x) }).catch(() => { }); } catch (e) { }
+  },
+  /* kiểm tra nhanh máy này */
+  checks() {
+    const R = [], add = (ok, t, fix) => R.push({ ok: !!ok, t, fix: fix || '' }); let c = {};
+    try { c = GS.cfg(); } catch (e) { }
+    add(navigator.onLine, 'Có mạng internet', 'Kiểm tra wifi hoặc 4G');
+    add(GS.on, 'Đã nối máy chủ dữ liệu', 'Máy này chưa nối Firebase: Cài đặt › Dữ liệu');
+    try { add(GS.ok(c), 'Cấu hình Firebase đủ', 'Thiếu cấu hình hoặc chưa đăng nhập 1 lần: đăng xuất rồi đăng nhập lại tài khoản app'); } catch (e) { }
+    add(!(typeof FO !== 'undefined' && FO.on), 'Đang dùng Firebase', 'Firebase tạm lỗi hoặc hết hạn mức ghi trong ngày: app đang lưu tạm sang Drive và tự quay về khi Firebase ổn');
+    add(!GS.err, 'Lưu lên máy chủ' + (GS.err ? ': ' + GS.err : ' bình thường'), /Rules|từ chối/i.test(GS.err || '') ? 'Dán lại Rules Firestore (Cài đặt › Dữ liệu › Cập nhật Rules)' : /cấu hình/i.test(GS.err || '') ? 'Đăng xuất rồi đăng nhập lại tài khoản app' : /hạn mức|quota/i.test(GS.err || '') ? 'Firebase hết hạn mức ghi hôm nay, 15:00 tự mở lại' : 'Bấm "Lưu lên Firebase"; vẫn lỗi thì gửi báo cáo cho hỗ trợ');
+    add(!Store.dirty || GS.busy, Store.dirty ? 'Còn thay đổi chưa lưu (đã giữ trong máy, F5 không mất)' : 'Không còn thay đổi chờ lưu', 'Chờ vài giây hoặc bấm "Lưu lên Firebase"');
+    try { if (PERM.admin() && typeof RULES !== 'undefined' && c.mode === 'fb') add(S().rulesSig === RULES.sig(), 'Rules Firestore là bản mới nhất', 'Cài đặt › Dữ liệu › Cập nhật Rules, dán vào Firebase rồi bấm Publish'); } catch (e) { }
+    return R;
+  },
+  async remote() {
+    if (!PERM.admin() || !SYS.db()) return SYS.R;
+    const ids = (DB.users || []).filter(u => u.active !== false).map(u => String(u.id));
+    await Promise.all(ids.map(id => FB.col().doc('hf_err_' + id).get().then(s => { if (s.exists) SYS.R[id] = s.data(); else delete SYS.R[id]; }).catch(() => { })));
+    SYS._rAt = Date.now(); SYS.paint(); return SYS.R;
+  },
+  others() { const me = String((Auth.user || {}).id), d = Date.now() - 86400000; return Object.entries(SYS.R).filter(([id]) => id !== me).map(([id, o]) => ({ id, ...o, list: (o.list || []).filter(x => x.at > d) })).filter(o => o.list.length); },
+  count() { let n = SYS.checks().filter(x => !x.ok).length + SYS.L.filter(x => x.at > Date.now() - 86400000).length; if (PERM.admin()) n += SYS.others().reduce((a, o) => a + o.list.length, 0); return n; },
+  paint() {
+    try {
+      const host = $('#tbRight') || $('.topbar'); if (!host || !Auth.user) return;
+      let b = $('#sysBtn');
+      if (!b) { const h = '<button class="nt-bell sys-btn" id="sysBtn" type="button" title="Tình trạng hệ thống: lỗi của các module, các máy">' + ic('shield') + '<em></em></button>', bl = $('#ntBell') || $('#auMe'); bl && bl.parentNode === host ? bl.insertAdjacentHTML('beforebegin', h) : host.insertAdjacentHTML('beforeend', h); b = $('#sysBtn'); if (!b) return; b.onclick = e => { e.stopPropagation(); SYS.open(); }; }
+      const n = SYS.count(), em = b.querySelector('em'); em.textContent = n > 99 ? '99+' : n || ''; em.hidden = !n; b.classList.toggle('bad', !!n); b.hidden = !n && !PERM.admin();
+    } catch (e) { }
+  },
+  tm(t) { const d = new Date(t); return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + (d.toDateString() === new Date().toDateString() ? '' : ' ' + d.toLocaleDateString('vi-VN')); },
+  hint(m) {
+    const H = [[/Rules|từ chối|permission/i, 'Dán lại Rules Firestore'], [/cấu hình Firebase|đăng nhập lại|need-login/i, 'Đăng xuất, đăng nhập lại tài khoản app'], [/hạn mức|quota|exhausted/i, 'Firebase hết hạn mức ghi, 15:00 tự mở lại'],
+      [/mạng|network|Failed to fetch|offline|quá lâu/i, 'Mạng yếu: kiểm tra wifi / 4G'], [/Không tải được màn hình|chưa khởi tạo/i, 'Nhấn Ctrl + Shift + R để tải bản mới'], [/is not defined|Cannot read|undefined|null|is not a function/i, 'Lỗi chương trình: bấm "Sao chép báo cáo" gửi hỗ trợ']];
+    const h = H.find(([r]) => r.test(m)); return h ? h[1] : '';
+  },
+  report() {
+    const u = Auth.user || {}, L = [`NXTP ${APP_BUILD} · ${u.ten || u.user || ''} (${u.role || ''}) · màn hình ${App.cur || ''} · ${new Date().toLocaleString('vi-VN')}`, navigator.userAgent.slice(0, 120)];
+    SYS.checks().forEach(c => L.push((c.ok ? '[OK] ' : '[LỖI] ') + c.t));
+    if (SYS.L.length) { L.push('— Lỗi máy này:'); SYS.L.slice(0, 15).forEach(x => L.push(`${SYS.tm(x.at)} [${x.src}${x.v ? ' · ' + x.v : ''}] ${x.m}${x.n > 1 ? ' (x' + x.n + ')' : ''}`)); }
+    SYS.others().forEach(o => { L.push(`— ${o.ten} (bản ${o.build || '?'}):`); o.list.slice(0, 8).forEach(x => L.push(`${SYS.tm(x.at)} [${x.src}${x.v ? ' · ' + x.v : ''}] ${x.m}${x.n > 1 ? ' (x' + x.n + ')' : ''}`)); });
+    return L.join('\n');
+  },
+  async open() {
+    if (PERM.admin() && Date.now() - (SYS._rAt || 0) > 30000) await SYS.remote();
+    const C = SYS.checks(), O = PERM.admin() ? SYS.others() : [], row = x => `<div class="sys-e"><div><b>${esc(x.src)}</b>${x.v ? ` · <span class="muted">${esc(x.v)}</span>` : ''}<span class="muted" style="float:right">${esc(SYS.tm(x.at))}${x.n > 1 ? ' · ' + x.n + ' lần' : ''}</span></div><div>${esc(x.m)}</div>${SYS.hint(x.m) ? `<div class="sys-fix">→ ${esc(SYS.hint(x.m))}</div>` : ''}</div>`;
+    const m = Modal.open({ title: 'Tình trạng hệ thống', width: 640, body: `
+      <h4 class="sys-h">Máy này · bản ${esc(APP_BUILD)}</h4><div class="sys-c">${C.map(c => `<div class="${c.ok ? 'ok' : 'bad'}"><span>${c.ok ? '✔' : '✖'}</span><div>${esc(c.t)}${!c.ok && c.fix ? `<div class="sys-fix">→ ${esc(c.fix)}</div>` : ''}</div></div>`).join('')}</div>
+      <h4 class="sys-h">Lỗi trên máy này (${SYS.L.length})</h4>${SYS.L.length ? SYS.L.map(row).join('') : '<p class="muted small">Không có lỗi.</p>'}
+      ${PERM.admin() ? `<h4 class="sys-h">Lỗi trên máy nhân viên, 24 giờ qua (${O.reduce((a, o) => a + o.list.length, 0)})</h4>${O.length ? O.map(o => `<div class="sys-u"><b>${esc(o.ten || o.id)}</b> <span class="muted small">bản ${esc(o.build || '?')}${o.build && o.build !== APP_BUILD ? ' · <b style="color:#b45309">chưa cập nhật bản mới</b>' : ''}</span>${o.list.map(row).join('')}</div>`).join('') : '<p class="muted small">Không có máy nào báo lỗi.</p>'}` : ''}`,
+      foot: `<button class="btn" data-sysclr>Xóa lỗi máy này</button><button class="btn pri" data-syscp>${ic('copy')} Sao chép báo cáo gửi hỗ trợ</button>` });
+    m.el.querySelector('[data-syscp]').onclick = () => { const t = SYS.report(); try { navigator.clipboard.writeText(t).then(() => toast('Đã sao chép báo cáo, dán vào tin nhắn gửi hỗ trợ', 'ok'), () => prompt('Sao chép báo cáo:', t)); } catch (e) { prompt('Sao chép báo cáo:', t); } };
+    m.el.querySelector('[data-sysclr]').onclick = () => { SYS.L = []; SYS.flush(); SYS.paint(); m.close(); toast('Đã xóa danh sách lỗi của máy này', 'ok'); };
+  }
+};
+ICONS.shield = ICONS.shield || '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>';
+addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:14px 0 6px;font-size:14px}.sys-h:first-child{margin-top:0}.sys-c>div{display:flex;gap:8px;padding:5px 0;font-size:13.5px;border-bottom:1px dashed #eaecf0}.sys-c .ok span{color:#16a34a}.sys-c .bad span{color:#dc2626}.sys-c .bad{color:#991b1b}
+.sys-e{border:1px solid #fee4e2;background:#fffbfa;border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13px;word-break:break-word}.sys-fix{color:#047857;font-weight:600;margin-top:3px;font-size:12.5px}.sys-u{margin:8px 0 12px}`);
+{
+  window.addEventListener('error', e => { if (e && e.message) SYS.add('Lỗi chương trình', e.message + (e.filename ? ' @' + String(e.filename).split('/').pop().split('?')[0] + ':' + e.lineno : '')); });
+  window.addEventListener('unhandledrejection', e => SYS.add('Lỗi xử lý', e && e.reason));
+  const cw = console.warn, ce = console.error;
+  console.warn = function () { try { const a = [...arguments], er = a.find(x => x instanceof Error); if (er && typeof a[0] === 'string') SYS.add('Module ' + a[0].split(/[\s:]/)[0], er); } catch (e) { } return cw.apply(console, arguments); };
+  console.error = function () { try { const a = [...arguments], er = a.find(x => x instanceof Error); if (er) SYS.add('Lỗi', (typeof a[0] === 'string' ? a[0] + ': ' : '') + er.message); } catch (e) { } return ce.apply(console, arguments); };
+  const t0 = toast; toast = function (msg, type) { try { if (type === 'err' && !/Uncaught|dòng \d+\)$/.test(String(msg)) && /lỗi|không (lưu|tải|kết nối|đọc|gửi|mở)|chưa lưu được|từ chối|Firebase|Drive|hạn mức|thất bại|error|failed/i.test(String(msg))) SYS.add('Báo lỗi trên màn hình', msg); } catch (e) { } return t0.apply(this, arguments); };
+  const ld = MODL.load; MODL.load = function (id) { return ld.apply(this, arguments).catch(e => { SYS.add('Module ' + id, e); throw e; }); };
+  const ss = Store.status; Store.status = function () { const r = ss.apply(this, arguments); try { if (GS.err && GS.err !== SYS._ge) SYS.add('Lưu máy chủ', GS.err); SYS._ge = GS.err; SYS.paint(); } catch (e) { } return r; };
+  setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); }, 15000);
+  setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
+}
+const APP_BUILD = '2026-11-06T21:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
