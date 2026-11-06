@@ -3398,10 +3398,20 @@ const VEH_AUTO = {
 };
 VEH_AUTO.phuHieuF = { label: 'phù hiệu', fill: ['hhPhuHieu'], only: [], ask: `Đây là phù hiệu xe (xe chạy tuyến cố định / xe hợp đồng / xe du lịch…) hoặc biển hiệu do Sở Giao thông vận tải / Sở Xây dựng Việt Nam cấp. Trả về JSON một object: "bks": biển số xe; "hhPhuHieu": ngày hết hạn phù hiệu (có giá trị đến ngày), định dạng YYYY-MM-DD.` };
 const VEH_AUTO_LBL = { dkSo: 'Giấy đăng ký xe', dkNgay: 'Ngày cấp', dkNoi: 'Nơi cấp', nuocSX: 'Nước sản xuất', kdSo: 'Số GCN kiểm định', hhDangKiem: 'Hạn đăng kiểm', hhBHDS: 'Hạn BHDS', hhBHVC: 'Hạn BHVC', hhPhuHieu: 'Hạn phù hiệu', loai: 'Loại xe', khung: 'Số khung', may: 'Số máy', namSX: 'Năm SX', soCho: 'Số chỗ' };
+/* PDF nhiều trang (giấy khám sức khỏe, giấy chứng nhận…): kết luận, con dấu, ngày ký thường ở trang cuối → AI phải đọc mọi trang */
+async function pdfPages(dataUrl, max = 6) {
+  await vehPdfToBlob(null);
+  const bin = atob(dataUrl.split(',')[1]), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const pdf = await pdfjsLib.getDocument({ data: u8 }).promise, n = pdf.numPages, pick = n <= max ? [...Array(n).keys()].map(i => i + 1) : [1, ...[...Array(max - 1).keys()].map(i => n - max + 2 + i)], out = [];   // quá nhiều trang: trang đầu + các trang cuối
+  for (const i of pick) { const pg = await pdf.getPage(i), vp = pg.getViewport({ scale: 1.6 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise; out.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85))); }
+  return out;
+}
+const aiImgs = async url => fileIsPdf(url) ? pdfPages(url) : [await (await fetch(url)).blob()];
 async function vehPdfToBlob(dataUrl) {
   if (!window.pdfjsLib) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
   const wsrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  try { pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await (await fetch(wsrc)).text()], { type: 'text/javascript' })); } catch (e) { pdfjsLib.GlobalWorkerOptions.workerSrc = wsrc; }
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) try { pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await (await fetch(wsrc)).text()], { type: 'text/javascript' })); } catch (e) { pdfjsLib.GlobalWorkerOptions.workerSrc = wsrc; }
+  if (!dataUrl) return null;
   const bin = atob(dataUrl.split(',')[1]), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   const pdf = await pdfjsLib.getDocument({ data: u8 }).promise, pg = await pdf.getPage(1), vp = pg.getViewport({ scale: 1.8 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
   await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
@@ -3415,8 +3425,7 @@ async function vehAuto(key, url, root) {
   toast('Đang đọc ' + cfg.label + ' để tự điền thông tin…', '', 15000);
   let res;
   try {
-    const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob();
-    res = await sample.json(cfg.ask + '\nChỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng. Ngày đúng định dạng YYYY-MM-DD.', { images: [blob], modelTier: 'default', cache: false });
+    res = await sample.json(cfg.ask + '\nChỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng. Ngày đúng định dạng YYYY-MM-DD.', { images: await aiImgs(url), modelTier: 'default', cache: false });
   } catch (e) { return toast(sample.gemini && e && e.code && e.code !== 'invalid_json' ? AIX.msg(e) : e && e.code === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không tự điền được' : fileIsPdf(url) ? 'Không đọc được file PDF này, hãy tải ảnh chụp giấy tờ để tự điền' : 'Không đọc được giấy tờ, bạn nhập tay các trường nhé', 'err', 6000); }
   if (!res || typeof res !== 'object') return toast('Không đọc được thông tin trên giấy tờ', 'err');
   const el = n => root.querySelector(`[name="${n}"]`), got = [], isDate = k => /^(dkNgay|hh)/.test(k), okDate = x => /^\d{4}-\d{2}-\d{2}$/.test(x);
@@ -12365,7 +12374,7 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
     const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
     if (!sample || !lim || !lim.images) { if (!quiet) AIX.need('Đọc thẻ tập huấn'); return 'noai'; }
     if (!bg) toast('Đang đọc thẻ tập huấn…', '', 12000); const tw = bg ? null : rootEl('toasts').lastElementChild, tOff = () => { try { tw && tw.remove(); } catch (z) { } };
-    let r; try { const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob(); r = await sample.json(THR.ask, { images: [blob], modelTier: 'default', cache: false }); }
+    let r; try { r = await sample.json(THR.ask, { images: await aiImgs(url), modelTier: 'default', cache: false }); }
     catch (x) { tOff(); if (bg) return false; toast('Không đọc được ảnh thẻ tập huấn' + (x && x.code && sample.gemini ? ': ' + AIX.msg(x) : ''), 'err', 6000); return false; }
     tOff(); const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
     r = r || {}; const tu = dt(r.tuNgay), den = dt(r.denNgay), ngay = tu || den || dt(r.ngayCap), han = dt(r.hetHan);
@@ -12394,11 +12403,11 @@ setTimeout(() => THR.auto(), 120000); setInterval(() => THR.auto(), 30 * 60000);
 /* ===== AI đọc tệp đính kèm khi nhập Lý lịch hành nghề (giấy khám sức khỏe, giấy chứng nhận tập huấn) → điền sẵn các ô ===== */
 const LLAI = {
   ask: {
-    sk: `Đây là ảnh / bản scan Giấy khám sức khỏe của người lái xe (Việt Nam). Trả về JSON một object:
-- "ngay": ngày khám / ngày kết luận, YYYY-MM-DD;
-- "noi": tên cơ sở khám sức khỏe (bệnh viện, phòng khám…);
-- "tt": kết luận sức khỏe (ví dụ "Đủ điều kiện sức khỏe lái xe hạng D");
-- "hetHan": ngày hết giá trị nếu giấy có ghi, YYYY-MM-DD; không ghi thì để rỗng.
+    sk: `Các ảnh đính kèm là MỘT Giấy khám sức khỏe của người lái xe (Việt Nam), có thể nhiều trang (bản scan, nhiều chỗ bác sĩ viết tay hoặc đóng dấu chữ). Đọc hết mọi trang, đặc biệt trang cuối. Trả về JSON một object:
+- "ngay": ngày ký kết luận ở cuối giấy (dòng "…, ngày … tháng … năm …", số thường viết tay; năm có thể chỉ viết tay 2 số cuối như "20 26"), YYYY-MM-DD;
+- "noi": tên cơ sở khám (tiêu đề giấy hoặc con dấu tròn, ví dụ "Phòng khám đa khoa Y Đức");
+- "tt": KẾT LUẬN chung ở mục "IV. KẾT LUẬN" — thường là con dấu chữ nhật như "Đủ điều kiện sức khỏe lái xe hạng: E" với hạng viết tay; ghi đầy đủ cả hạng (ví dụ "Đủ điều kiện sức khỏe lái xe hạng E"). Nếu có xét nghiệm ma túy thì thêm " · Ma túy: Âm tính/Dương tính";
+- "hetHan": nếu giấy ghi "có giá trị sử dụng trong vòng 12 tháng kể từ ngày ký kết luận" thì tính = ngày ký kết luận + 12 tháng (YYYY-MM-DD); giấy ghi rõ ngày hết hạn thì lấy ngày đó; không có thì để rỗng.
 Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng.`,
     th: null
   },
@@ -12408,18 +12417,17 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
     if (!sample || !lim || !lim.images) { toast('Đã tải tệp. Muốn app tự đọc và điền: cài AI đọc ảnh (khóa Gemini) trong menu tài khoản', '', 6000); return null; }
     toast('Đang đọc ' + (loai === 'th' ? 'giấy chứng nhận tập huấn' : 'giấy khám sức khỏe') + '…', '', 12000); const tw = rootEl('toasts').lastElementChild;
     try {
-      const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob();
-      const r = await sample.json(ask, { images: [blob], modelTier: 'default', cache: false }) || {};
+      const r = await sample.json(ask, { images: await aiImgs(url), modelTier: 'default', cache: false }) || {};
       const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
       if (loai === 'th') { const tu = dt(r.tuNgay), den = dt(r.denNgay); return { ngay: tu || den || dt(r.ngayCap), donVi: String(r.donVi || '').trim(), hetHan: dt(r.hetHan), noiDung: String(r.noiDung || '').trim() || ('Tập huấn nghiệp vụ' + (tu && den ? ` từ ${F.date(tu)} đến ${F.date(den)}` : '') + (r.so ? ` · GCN số ${String(r.so).trim()}` : '')) }; }
       return { ngay: dt(r.ngay), noi: String(r.noi || '').trim(), tt: String(r.tt || '').trim(), hetHan: dt(r.hetHan) };
     } catch (e) { toast('Không đọc được tệp này, bạn nhập tay nhé', 'err', 5000); return null; }
     finally { try { tw && tw.remove(); } catch (z) { } }
   },
-  /* điền vào form: chỉ ghi đè ô đang trống hoặc ô ngày khám đang để mặc định hôm nay */
+  /* điền vào form theo giấy vừa tải (tô vàng để kiểm tra) */
   fill(root, d, today) {
     if (!d) return 0; let n = 0;
-    Object.entries(d).forEach(([k, v]) => { const el = root.querySelector(`[data-k="${k}"]`); if (!el || !v) return; if (el.value && !(k === 'ngay' && el.value === today) && !(k === 'hetHan' && el.dataset.auto)) return;
+    Object.entries(d).forEach(([k, v]) => { const el = root.querySelector(`[data-k="${k}"]`); if (!el || !v || el.value === v) return;   // giấy vừa tải là nguồn đúng: ô nào đọc được thì điền theo giấy
       el.value = v; el.style.background = '#fef9c3'; if (k === 'hetHan') el.dataset.auto = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); n++; });
     toast(n ? 'Đã tự điền ' + n + ' ô từ tệp (tô vàng), kiểm tra rồi bấm Lưu' : 'Không đọc thêm được thông tin nào từ tệp', n ? 'ok' : '', 6000); return n;
   }
@@ -12656,7 +12664,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T18:15';
+const APP_BUILD = '2026-11-06T18:25';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
