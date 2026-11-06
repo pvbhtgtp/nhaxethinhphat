@@ -5295,7 +5295,14 @@ const dhScan = {
     const m = Modal.open({ title: 'Quét ảnh điều hành xe · ' + F.date(day), width: 820, body: `<div class="sc-drop" data-pick>${ic('upload')} <b>Bấm để chọn ảnh từ máy / thư viện ảnh (hoặc kéo thả, dán Ctrl+V)</b><div class="small" style="margin-top:4px">Ảnh rõ nét, nên cắt riêng phần bảng. Phần mềm sẽ đọc tuyến, giờ, biển số xe, lái xe rồi điền vào lịch ngày đang chọn.</div><input type="file" accept="${lim.images.mediaTypes.join(',')},image/*" data-file class="sc-in" aria-label="Chọn ảnh"></div><div style="margin-top:8px"><label class="btn sc-cam" style="position:relative;overflow:hidden;cursor:pointer">${ic('upload')} Chụp ảnh bằng điện thoại<input type="file" accept="image/*" capture="environment" data-cam class="sc-in" aria-label="Chụp ảnh"></label></div><img class="sc-prev" data-prev hidden><div data-out></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn" data-stop hidden>Dừng</button><button class="btn pri" data-go disabled>Quét ảnh</button><button class="btn pri" data-apply hidden>Áp dụng vào lịch</button>` });
     const q = s => m.el.querySelector(s), out = q('[data-out]'), go = q('[data-go]'), ap = q('[data-apply]'), stop = q('[data-stop]'), fi = q('[data-file]'), drop = q('[data-pick]'), prev = q('[data-prev]');
     const shrink = async f => {   // ảnh điện thoại thường rất lớn hoặc HEIC: thu về JPEG tối đa 2200px cho nhẹ và dễ đọc
-      try { const bm = await createImageBitmap(f); const k = Math.min(1, 1800 / Math.max(bm.width, bm.height)), c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); const bl = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); return bl || f; } catch (e) { return f; }
+      try { const bm = await createImageBitmap(f);
+        self.tiles = null;
+        if (bm.height > bm.width * 2.2) {   // ảnh chụp màn hình dài: cắt thành nhiều đoạn (chồng mép 8%) để chữ không bị thu quá nhỏ
+          const W = Math.min(1200, bm.width), k1 = W / bm.width, H = Math.round(bm.width * 1.5), step = Math.round(H * 0.92), T = [];
+          for (let y = 0; y < bm.height && T.length < 8; y += step) { const h = Math.min(H, bm.height - y), c = document.createElement('canvas'); c.width = W; c.height = Math.round(h * k1); c.getContext('2d').drawImage(bm, 0, y, bm.width, h, 0, 0, c.width, c.height); T.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9))); if (y + h >= bm.height) break; }
+          self.tiles = T.filter(Boolean);
+        }
+        const k = Math.min(1, 1800 / Math.max(bm.width, bm.height)), c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); const bl = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); return bl || f; } catch (e) { return f; }
     };
     const setFile = async f => {
       if (!f) return;
@@ -5327,7 +5334,7 @@ Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung
 Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e => e.ten).filter(Boolean))}`;
       self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh… <b data-sec>0</b> giây <span class="small">(thường 5–15 giây)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
-      try { res = await sample.json(prompt, { images: self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }).finally(() => clearInterval(tick)); toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây`, 'ok', 3000); }
+      try { res = await sample.json(prompt + (self.tiles && self.tiles.length > 1 ? `\nẢnh dài đã được cắt thành ${self.tiles.length} đoạn liên tiếp từ trên xuống (các đoạn chồng mép nhau một chút): gộp lại thành một danh sách, không lặp chuyến ở chỗ chồng mép.` : ''), { images: self.tiles && self.tiles.length > 1 ? self.tiles : self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }).finally(() => clearInterval(tick)); toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây`, 'ok', 3000); }
       catch (e) { const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
@@ -8305,7 +8312,7 @@ const AIX = {
     }
     if (r.ok) return r.json();
     let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) { }
-    if (r.status === 400 && /thinking|budget/i.test(msg) && body.generationConfig && body.generationConfig.thinkingConfig) { const b2 = JSON.parse(JSON.stringify(body)); delete b2.generationConfig.thinkingConfig; AIX.noThink = AIX.noThink || {}; AIX.noThink[model] = 1; return AIX.call(model, b2, key, signal); }
+    if (r.status === 400 && body.generationConfig && body.generationConfig.thinkingConfig && !AIX.noThink?.[model]) { const b2 = JSON.parse(JSON.stringify(body)); delete b2.generationConfig.thinkingConfig; AIX.noThink = AIX.noThink || {}; AIX.noThink[model] = 1; return AIX.call(model, b2, key, signal); }
     if (r.status === 404) throw AIX.err('no_model', msg);
     if (r.status === 429) throw AIX.err('rate_limited', msg);
     if (r.status === 400 && /api key|API_KEY/i.test(msg)) throw AIX.err('bad_key', msg);
@@ -8353,7 +8360,11 @@ const AIX = {
     try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), m })); } catch (e) { } return m;
   },
   async json(prompt, opt = {}) {
-    if (!(opt.deep || opt.modelTier === 'pro')) return AIX.json1(prompt, opt);
+    if (!(opt.deep || opt.modelTier === 'pro')) {
+      const P = AIX.provs(); let last;
+      for (const p of P) { try { return await AIX.one(p, prompt, opt); } catch (e) { last = e; if (e.code === 'cancelled' || P.length === 1) throw e; } }
+      throw last || AIX.err('no_key');
+    }
     const P = AIX.provs(); if (!P.length) throw AIX.err('no_key');
     opt = { ...opt, deep: true };
     if (P.length >= 2 && AIX.cfg().cross !== false) {   // đọc song song 2 AI và đối chiếu
@@ -8392,7 +8403,7 @@ const AIX = {
         const txt = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(p => p.text || '').join('') : '';
         if (!txt) throw AIX.err((j.promptFeedback && j.promptFeedback.blockReason) ? 'image_rejected' : 'invalid_json');
         return AIX.parse(txt);
-      } catch (e) { last = e; if (e.code === 'no_model' || (deep && AIX.PRO.includes(md) && e.code !== 'bad_key' && e.code !== 'cancelled')) continue; if (AIX.transient(e.code)) { again = true; continue; } throw e; }
+      } catch (e) { last = e; if (e.code === 'no_model' || e.code === 'http_400' || (deep && AIX.PRO.includes(md) && e.code !== 'bad_key' && e.code !== 'cancelled')) continue; if (AIX.transient(e.code)) { again = true; continue; } throw e; }
       }
       if (!again) break;
     }
@@ -8441,6 +8452,7 @@ const AIX = {
       : c === 'no_model' ? 'Không tìm thấy model AI. Vào AI đọc ảnh, để trống ô Model hoặc nhập tên model khác.'
       : c === 'network' ? 'Không kết nối được dịch vụ AI, kiểm tra mạng.'
       : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.'
+      : c === 'http_400' ? 'AI không nhận yêu cầu này (ảnh quá dài / quá lớn hoặc model không hỗ trợ). App đã thử các model khác nhưng chưa được — thử cắt ảnh thành 2 nửa rồi quét từng phần.'
       : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.'
       : /^http_5\d\d$/.test(c || '') ? 'Dịch vụ AI của Google đang quá tải. App đã tự đổi model và thử lại nhiều lần nhưng chưa được, bạn chờ vài phút rồi quét lại.'
       : c === 'cancelled' ? 'Đã dừng.' : 'Lỗi AI: ' + ((e && e.message) || c || '');
@@ -12711,7 +12723,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T18:30';
+const APP_BUILD = '2026-11-06T18:35';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
