@@ -6602,7 +6602,7 @@ const FBU = {
       await sec.auth().signOut().catch(() => { });
     } finally { sec.delete().catch(() => { }); }
     const b = FB.db.batch();
-    b.set(FB.db.collection('nhaxe_acl').doc(nu.uid), { phone: normUser(u.user), uid: nu.uid, role: u.role === 'admin' ? 'admin' : 'member', active: u.active !== false, at: new Date().toISOString() });
+    b.set(FB.db.collection('nhaxe_acl').doc(nu.uid), Object.assign({ phone: normUser(u.user), uid: nu.uid, role: u.role === 'admin' ? 'admin' : 'member', active: u.active !== false, at: new Date().toISOString() }, FBU.aclX(u)));
     if (cur.uid && cur.uid !== nu.uid) b.delete(FB.db.collection('nhaxe_acl').doc(cur.uid));
     b.set(ref, { v, uid: nu.uid });
     await b.commit();
@@ -6642,9 +6642,11 @@ const FBU = {
     } catch (e) { if (typeof FO !== 'undefined' && (FO.on || FO.entering)) return; toast('Đã đăng nhập app nhưng chưa vào được dữ liệu dùng chung: ' + esc(FB.err(e).message), 'err', 8000); }
   },
   /* đồng bộ vai trò / khóa / xóa tài khoản sang danh sách quyền Firebase (chỉ phiên admin) */
+  /* phần dữ liệu tài khoản được đọc (theo vai trò) + mã nhân viên → quy tắc Firebase chặn đọc phần không liên quan */
+  aclX(u) { let parts = ['core']; try { parts = PS.readableFor(u); } catch (e) { } let emp = ''; try { const e = PQ.emp(u); emp = e ? String(e.id) : ''; } catch (e) { } return { parts, emp }; },
   async syncAcl() {
     if (!FBU.on() || !GS.on || !FB.db) return;
-    const sig = JSON.stringify((DB.users || []).map(u => [u.id, u.role, u.active, u.fb && u.fb.uid])); if (sig === FBU._sig) return;
+    const sig = JSON.stringify([(DB.users || []).map(u => [u.id, u.role, u.active, u.fb && u.fb.uid, u.empId]), DB.roles, (DB.employees || []).length]); if (sig === FBU._sig) return;
     if (!(await FBU.isAdmin())) return;
     const col = FB.db.collection('nhaxe_acl'); let all; try { all = await col.get(); } catch (e) { return; }
     const have = new Map(); all.forEach(d => have.set(d.id, d.data() || {}));
@@ -6652,7 +6654,8 @@ const FBU = {
     /* 1) ghi / sửa quyền cho mọi tài khoản đã cấp (kể cả khi bản ghi quyền bị mất thì tạo lại) */
     (DB.users || []).forEach(u => {
       if (!u.fb || !u.fb.uid) return; const role = u.role === 'admin' ? 'admin' : 'member', active = u.active !== false, cur = have.get(u.fb.uid);
-      if (!cur || cur.role !== role || cur.active !== active) { bt.set(col.doc(u.fb.uid), { phone: normUser(u.user), uid: u.fb.uid, role, active, at: (cur && cur.at) || new Date().toISOString() }, { merge: true }); n++; }
+      const x = FBU.aclX(u);
+      if (!cur || cur.role !== role || cur.active !== active || String(cur.parts || '') !== String(x.parts) || (cur.emp || '') !== x.emp) { bt.set(col.doc(u.fb.uid), Object.assign({ phone: normUser(u.user), uid: u.fb.uid, role, active, at: (cur && cur.at) || new Date().toISOString() }, x), { merge: true }); n++; }
       if (u.fb.role !== role || u.fb.active !== active) { u.fb.role = role; u.fb.active = active; dataCh = true; }
     });
     /* 2) chỉ xóa quyền của người đã bị xóa khỏi app / đã được cấp lại bản mới, và bản ghi phải cũ hơn 10 phút (tránh xóa nhầm tài khoản vừa cấp) */
@@ -6785,10 +6788,23 @@ service cloud.firestore {
       return resource == null
         || (request.resource.data.ver == resource.data.ver + 1 && request.resource.data.base == resource.data.ver);
     }
+    // Mức 2: mỗi tài khoản chỉ đọc phần dữ liệu đúng vai trò (acl.parts) và phiếu cá nhân của chính mình (acl.emp)
+    function has(p) { return admin() || (member() && p in acl().get('parts', ['core'])); }
+    function okDoc(doc) {
+      return doc.matches('^me_.+') ? (admin() || (member() && doc == 'me_' + acl().get('emp', '-')))
+        : doc.matches('^pa_lc_.+') ? has('vanhanh')
+        : doc.matches('^p(m_)?nhansu(_.*)?$') ? has('nhansu')
+        : doc.matches('^p(m_)?luong(_.*)?$') ? has('luong')
+        : doc.matches('^p(m_)?vanhanh(_.*)?$') ? has('vanhanh')
+        : user();
+    }
+    function okWrite(doc) { return doc.matches('^me_.+') ? (has('nhansu') && has('luong') && has('vanhanh')) : okDoc(doc); }
+    function versioned(doc) { return doc == 'meta' || doc.matches('^pm_.+'); }
     match /nhaxe/{doc} {
-      allow read: if user();
-      allow create, update: if admin() || (user() && (doc != 'meta' || metaOk()));
-      allow delete: if admin() || (user() && doc != 'meta');
+      allow get: if user() && okDoc(doc);
+      allow list: if user() && resource.data.t in ['v', 'p', 'f', 'h', 'o', 'a', 'l'];
+      allow create, update: if admin() || (user() && okWrite(doc) && (!versioned(doc) || metaOk()));
+      allow delete: if admin() || (user() && okWrite(doc) && !versioned(doc));
     }
     match /nhaxe_acl/{uid} { allow read: if request.auth != null && (request.auth.uid == uid || admin()); allow write: if admin(); }
     match /nhaxe_dir/{id} { allow get: if true; allow list: if false; allow write: if admin(); }
@@ -12027,6 +12043,7 @@ const PS = {
     if (Auth.can('nhanvien', 'all') || Auth.can('hopdong', 'view')) r.push('nhansu');
     return r;
   },
+  readableFor(u) { if (!u) return ['core']; if (u.role === 'admin') return Object.keys(PARTS); const o = Auth.user; try { Auth.user = u; return PS.readable(); } finally { Auth.user = o; } },
   /* lưu / đọc một phần trên Firestore: cùng cách chia mảnh + chốt phiên bản như khối cũ, tài liệu riêng 'pm_<phần>' + 'p<phần>_…' */
   async get(part) {
     const meta = FB.col().doc('pm_' + part), s = await meta.get(); if (!s.exists || !s.data().n) return { ok: true, ver: 0, data: null };
@@ -12108,7 +12125,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T07:35';
+const APP_BUILD = '2026-11-06T09:10';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
