@@ -12230,7 +12230,25 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T12:00';
+const APP_BUILD = '2026-11-06T12:15';
+/* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
+const MEAV = {
+  paint() {
+    let img = ''; try { const e = Auth.user && DRV.me(); img = (e && e.avatar) || ''; } catch (x) { }
+    document.querySelectorAll('a[data-nav="cuatoi"]').forEach(a => {
+      const sv = a.querySelector('svg'), old = a.querySelector('.nav-av');
+      if (!img) { if (old) old.remove(); if (sv) sv.style.display = ''; return; }
+      if (old && old.dataset.src === img) return; if (old) old.remove();
+      const im = document.createElement('img'); im.className = 'nav-av'; im.alt = ''; im.dataset.src = img; im.src = img;
+      im.onerror = () => { im.remove(); if (sv) sv.style.display = ''; };
+      if (sv) { sv.style.display = 'none'; sv.insertAdjacentElement('afterend', im); } else a.prepend(im);
+    });
+  }
+};
+addCSS(`.nav a .nav-av{flex:none;width:24px;height:24px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 2px #fff,0 2px 6px rgba(15,23,42,.2)}
+.sidebar .nav a .nav-av{width:32px;height:32px;border-radius:10px;box-shadow:0 4px 10px rgba(15,23,42,.18)}
+.sidebar .nav a.on .nav-av{box-shadow:0 0 0 2px rgba(255,255,255,.95),0 4px 12px rgba(0,0,0,.25)}`);
+{ const n0 = Auth.nav, c0 = Auth.chip; Auth.nav = function () { const r = n0.apply(this, arguments); try { MEAV.paint(); } catch (e) { } return r; }; Auth.chip = function () { const r = c0.apply(this, arguments); try { MEAV.paint(); } catch (e) { } return r; }; }
 /* ===== APP CÀI ĐẶT (PWA): biểu tượng "Cài đặt" trên thanh địa chỉ / "Thêm vào màn hình chính"; mở cửa sổ riêng, không tab ===== */
 const PWA = {
   ev: null,
