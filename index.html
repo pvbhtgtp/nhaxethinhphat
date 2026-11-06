@@ -10338,7 +10338,7 @@ const LVC = {
     return `<div class="hd lvc-a4" style="font-family:'Times New Roman',Times,serif;font-size:14px;line-height:1.35;color:#000">
       <table style="width:100%;border:0;border-collapse:collapse"><tr><td style="width:45%;text-align:center;vertical-align:top;border:0"><b>${esc(co1)}${co2 ? '<br>' + esc(co2) : ''}</b><div style="margin-top:4px"><b>Số:</b> ${esc(String(o.so || '').replace(/^LVC-/, ''))}/LVC-CT</div></td><td style="text-align:center;vertical-align:top;border:0"><b>CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br>Độc Lập - Tự Do - Hạnh Phúc<br>---oOo---</td></tr></table>
       <table style="width:100%;border:0;border-collapse:collapse;margin-top:6px"><tr><td style="border:0;width:45%"></td><td style="border:0;text-align:right"><b>Ngày</b> ${ln(d[2], 34)} <b>Tháng</b> ${ln(d[1], 34)} <b>Năm</b> ${ln(d[0], 50)}</td></tr></table>
-      <div style="text-align:center;margin:10px 0 0;font-size:22px;letter-spacing:.5px"><b>LỆNH VẬN CHUYỂN</b></div>
+      <div style="text-align:center;margin:10px 0 0;font-size:22px;letter-spacing:.5px;position:relative"><b>LỆNH VẬN CHUYỂN</b>${o.id ? `<div style="position:absolute;right:0;top:0;font-size:14px;letter-spacing:0">${QR.block('lvc', o.id, 'Lệnh điện tử', 17)}</div>` : ''}</div>
       <div style="text-align:center;font-size:15px"><b>Dùng cho xe otô vận chuyển hành khách tuyến cố định</b></div>
       <div style="text-align:center;margin:4px 0 10px">Có giá trị từ ngày ${ln(F.date(o.ngay), 120)} đến ngày ${ln(F.date(ret && ret.ngay > D.add(o.ngay, 1) ? ret.ngay : D.add(o.ngay, 1)), 120)}</div>
       <table style="width:100%;border-collapse:collapse;border:1.5px solid #000;table-layout:fixed;text-align:left"><colgroup><col style="width:12%"><col style="width:24%"><col style="width:28%"><col style="width:10%"><col style="width:26%"></colgroup>
@@ -10355,10 +10355,14 @@ const LVC = {
         ${leg('Lượt về', benDen, benDi, ret ? gn(ret.gio, ret.ngay) : gn('', ''), gn('', ''))}
         <tr><td colspan="5" style="padding:0;border:0"><table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>${sg('LÁI XE 1', l1.id ? l1 : null)}${sg('LÁI XE 2', l2)}${sg('CÁN BỘ ĐIỀU HÀNH', dh)}</tr></table></td></tr>
       </table>
-      <div style="font-size:13px;margin-top:6px;display:flex;gap:10px;align-items:flex-start"><div style="flex:1"><b>Lưu ý:</b> Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, đúng tốc độ cho phép.<br><span style="padding-left:44px">Nộp trả lệnh vận chuyển có đủ xác nhận của bến đi và bến đến.</span></div>${o.id ? QR.block('lvc', o.id, 'Quét để xem lệnh điện tử') : ''}</div>
+      <div style="font-size:13px;margin-top:6px"><b>Lưu ý:</b> Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, đúng tốc độ cho phép.<br><span style="padding-left:44px">Nộp trả lệnh vận chuyển có đủ xác nhận của bến đi và bến đến.</span></div>
       </div>`;
   },
-  print(o) { GP.show(LVC.html(o), 'Lenh van chuyen ' + o.so); },
+  print(o) {   // lệnh vừa 1 trang A4: lề hẹp riêng cho lệnh (8 mm), không đổi lề mặc định của văn bản khác
+    const k = PRN.key; let prev = null; try { prev = localStorage.getItem(k); localStorage.setItem(k, 'preview'); } catch (e) { }
+    try { Print.preview(`<div class="pd-doc">${LVC.html(o)}</div>`, { title: 'Lenh van chuyen ' + o.so, m4: [8, 9, 8, 9] }); }
+    finally { try { prev == null ? localStorage.removeItem(k) : localStorage.setItem(k, prev); } catch (e) { } }
+  },
   async archive(o) {
     return HS.saveDoc({ path: [String(o.ngay).slice(0, 4), 'Hợp đồng vận chuyển', 'Lệnh vận chuyển điện tử', String(o.ngay).slice(5, 7) + '-' + String(o.ngay).slice(0, 4)], ten: 'Lệnh vận chuyển ' + o.so, tenFile: o.so + '.pdf', html: LVC.html(o), ref: 'lvc:' + o.id, ghiChu: o.tuyen + ' · ' + o.gio + ' · ' + F.date(o.ngay) });
   },
@@ -12241,7 +12245,36 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T13:55';
+const APP_BUILD = '2026-11-06T14:10';
+/* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại) → trả về lõi */
+addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);display:flex;align-items:center;justify-content:center;padding:2vh 2vw;animation:fade .15s}
+.gp{display:flex;width:100%;max-width:1180px;height:100%;max-height:900px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);font-family:'Be Vietnam Pro','Segoe UI',Roboto,Arial,sans-serif}
+.gp-view{flex:1;min-width:0;background:#f1f3f4;overflow:auto;padding:20px 16px}
+.gp-pages{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}.gp-pg{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:12px}.gp-pn{font-size:12px;color:#5f6368}.gp-paper{overflow:hidden}.gp-clip{overflow:hidden}.gp-cut{position:absolute;left:-12mm;right:-12mm;border-top:2px dashed #ef4444;height:0}
+.gp-paper{background:#fff;box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px 3px rgba(60,64,67,.15);box-sizing:border-box;color:#111;flex:none}
+.gp-paper.roll{min-height:120mm}
+.gp-side{width:340px;flex:none;display:flex;flex-direction:column;border-left:1px solid #dadce0;color:#202124}
+.gp-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 20px 14px}
+.gp-head h2{margin:0;font-size:22px;font-weight:500}
+.gp-count{font-size:13px;color:#5f6368}
+.gp-opts{flex:1;overflow:auto;padding:0 20px}
+.gp-row{display:grid;grid-template-columns:96px minmax(0,1fr);align-items:center;gap:12px;margin:0 0 16px;font-size:13px}
+.gp-row>span:first-child{color:#202124}
+.gp-in{height:34px;border:1px solid #dadce0;border-radius:4px;padding:0 8px;background:#fff;font-size:13px;color:#202124;outline:none;width:100%}
+.gp-in:focus{border-color:#1a73e8;box-shadow:0 0 0 1px #1a73e8}
+.gp-in:disabled{background:#f1f3f4;color:#9aa0a6}
+.gp-chk input{width:16px;height:16px;vertical-align:-3px;margin-right:6px;accent-color:#1a73e8}
+.gp-note{font-size:12px;color:#5f6368;line-height:1.5;padding:4px 0 16px;border-top:1px solid #f1f3f4;margin-top:4px}
+.gp-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #dadce0}
+.gp-btn{height:36px;min-width:84px;padding:0 20px;border-radius:18px;border:1px solid #dadce0;background:#fff;color:#1a73e8;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit}
+.gp-btn:hover{background:#f6fafe}
+.gp-btn.pri{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.gp-btn.pri:hover{background:#1765cc}
+.gp-paper .pagebreak{border:0;margin:0;height:0}
+@media(max-width:760px){#pv{padding:0}.gp{flex-direction:column;border-radius:0;max-height:none}.gp-view{flex:1 1 50%}.gp-side{width:auto;border-left:0;border-top:1px solid #dadce0;max-height:55%}.gp-head{padding:12px 16px 8px}.gp-opts{padding:0 16px}.gp-row{margin-bottom:10px}.gp-foot{padding:10px 16px}.gp-btn{flex:1}}
+.pv-bar{display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid #cbd5e1;flex-wrap:wrap}.pv-t{font-size:15px;color:#0f172a;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pv-body{flex:1;overflow:auto;padding:12px 8px;-webkit-overflow-scrolling:touch}.pv-paper{background:#fff;margin:0 auto;padding:11mm 10mm;box-shadow:0 4px 24px rgba(0,0,0,.35);box-sizing:border-box;color:#111}
+@media(max-width:600px){.pv-t{display:none}.pv-bar .btn{flex:1;justify-content:center;padding:0 8px;font-size:13px}}`);
+addCSS(`@media(max-width:900px){.topbar{position:static;flex-wrap:wrap;padding:12px 14px 10px;row-gap:8px}.top-actions{position:static;order:3;flex:0 0 100%;width:100%;bottom:auto;left:auto;right:auto;padding:0;margin:0;gap:8px;flex-wrap:wrap;overflow:visible;background:none;backdrop-filter:none;border-top:0}.top-actions>*{flex:1 1 auto;justify-content:center}.content{padding-bottom:84px}}`);
 /* Màn hình mở đầu: Admin và phòng Điều hành vào Điều hành xe; mọi người khác vào Đặt vé (lái xe: Chuyến của tôi) */
 Auth.homeView = function () {
   const u = Auth.user; if (!u) return null; const r = (DB.roles || {})[u.role] || {};
@@ -12254,7 +12287,7 @@ const QR = {
   load() { if (window.qrcode) return Promise.resolve(); return QR._p || (QR._p = new Promise((ok, no) => { const s = document.createElement('script'); s.src = QR.src; s.dataset.runtime = '1'; s.onload = ok; s.onerror = () => { QR._p = null; s.remove(); no(new Error('Không tải được thư viện mã QR')); }; document.head.appendChild(s); })); },
   link: (k, id) => location.origin + location.pathname + '#' + k + ':' + id,
   svg(text, mm) { if (!window.qrcode) return ''; try { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 2, margin: 0, scalable: true }).replace('<svg', `<svg style="width:${mm}mm;height:${mm}mm;display:block"`); } catch (e) { return ''; } },
-  block(k, id, cap) { const s = QR.svg(QR.link(k, id), 20); return s ? `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:9.5px;line-height:1.2;text-align:center;flex:none">${s}<span>${cap}</span></div>` : ''; }
+  block(k, id, cap, mm) { const s = QR.svg(QR.link(k, id), mm || 20); return s ? `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:9.5px;line-height:1.2;text-align:center;flex:none">${s}<span>${cap}</span></div>` : ''; }
 };
 setTimeout(() => QR.load().catch(() => { }), 2500);
 const DL = {
