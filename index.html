@@ -6554,7 +6554,7 @@ service cloud.firestore {
       <div class="hub-card">
         <p class="hub-p">Dán vào <b>Firestore Database → Rules</b> rồi bấm <b>Publish</b>. Chỉ tài khoản email ở bước 1 mới đọc, ghi được dữ liệu.</p>
         <pre class="gs-rules" data-rules>${esc(FB.rules(c.email))}</pre>
-        <div class="hub-btns"><button class="btn" data-g="rules">${ic('copy')} Sao chép Rules</button></div>
+        <div class="hub-btns"><button class="btn pri" data-act="rulesGo">${ic('upload')} Sao chép & mở trang Rules để Publish</button><button class="btn" data-g="rules">${ic('copy')} Chỉ sao chép</button></div>
       </div>
       <div class="hub-h">3 · Dữ liệu</div>
       <div class="hub-card">
@@ -12908,7 +12908,25 @@ setInterval(() => { try { if (NOTI.can()) NOTI.prev = NOTI.snap(); else NOTI.pre
 setInterval(() => { try { NOTI.listen(); NOTI.bell(); NOTI.remind(); } catch (e) { } }, 30000); setTimeout(() => { try { NOTI.listen(); NOTI.bell(); } catch (e) { } }, 4000);
 ['pointerdown', 'keydown'].forEach(t => window.addEventListener(t, () => NOTI.unlock(), { once: true, capture: true }));
 { const ch3 = Auth.chip; Auth.chip = function () { const r = ch3.apply(this, arguments); try { NOTI.bell(); } catch (e) { } return r; }; }
-const APP_BUILD = '2026-11-06T19:00';
+/* Luật bảo mật (Rules): app đổi luật thì máy Admin tự báo; 1 nút = sao chép + mở đúng trang Rules của dự án, chỉ cần dán và bấm Publish */
+const RULES = {
+  txt: () => FB.rules(GS.cfg().email || ''),
+  sig: () => PM.h(RULES.txt()),
+  url() { const p = ((GS.cfg().fb || {}).projectId) || ''; return p ? `https://console.firebase.google.com/project/${encodeURIComponent(p)}/firestore/rules` : 'https://console.firebase.google.com/'; },
+  async go() {
+    const t = RULES.txt(); let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch (e) { }
+    window.open(RULES.url(), '_blank', 'noopener');
+    if (ok) { try { S().rulesSig = RULES.sig(); App.changed(); } catch (e) { } toast('Đã sao chép luật mới. Trên trang Firebase vừa mở: xóa hết nội dung cũ → dán (Ctrl+V) → bấm Publish', 'ok', 9000); }
+    else { toast('Máy không cho sao chép tự động: vào Management → Firebase → mục 2 để chép tay', 'err', 8000); }
+  },
+  check() {
+    try { if (!PERM.admin() || !(GS.cfg().mode === 'fb') || !GS.cfg().email) return; if (S().rulesSig === RULES.sig()) return;
+      toast(`Có bản luật bảo mật mới cho Firebase. <button class="btn sm" data-act="rulesGo" style="margin-left:6px">Cập nhật ngay</button>`, '', 15000); } catch (e) { }
+  }
+};
+ACT.rulesGo = () => { if (!PERM.admin()) return toast('Chỉ Admin cập nhật được luật bảo mật', 'err'); RULES.go(); };
+setTimeout(() => RULES.check(), 15000);
+const APP_BUILD = '2026-11-06T19:05';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
