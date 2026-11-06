@@ -3355,7 +3355,7 @@ const vehExp = d => {
 };
 const vehExpCell = d => { const [t, c] = vehExp(d); return d ? `${F.date(d)}<br><span class="badge ${c}">${t}</span>` : `<span class="badge ${c}">${t}</span>`; };
 const vehById = id => DB.vehicles.find(x => x.id === id);
-const VEH_DOCS = [['cavet', 'Cà vẹt', null], ['dangKiem', 'Đăng kiểm', 'hhDangKiem'], ['bhds', 'Bảo hiểm dân sự (BHDS)', 'hhBHDS'], ['bhvc', 'Bảo hiểm vật chất (BHVC)', 'hhBHVC']];
+const VEH_DOCS = [['cavet', 'Cà vẹt', null], ['dangKiem', 'Đăng kiểm', 'hhDangKiem'], ['bhds', 'Bảo hiểm dân sự (BHDS)', 'hhBHDS'], ['bhvc', 'Bảo hiểm vật chất (BHVC)', 'hhBHVC'], ['phuHieuF', 'Phù hiệu / biển hiệu', 'hhPhuHieu']];
 const VEH_FIELDS = () => [
   { type: 'section', label: 'Thông tin xe' },
   { key: 'icon', label: 'Icon xe', type: 'vicon', hint: 'Chọn kiểu xe và màu. Nếu bỏ trống, hệ thống tự chọn theo loại xe và số chỗ' }, { key: 'iconImg', label: 'Hoặc tải ảnh icon riêng', type: 'image', max: 96, hint: 'Có ảnh riêng thì dùng ảnh thay cho icon' },
@@ -3373,7 +3373,7 @@ const VEH_FIELDS = () => [
   { key: 'nuocSX', label: 'Nước sản xuất', list: [...new Set(['Việt Nam', ...DB.vehicles.map(x => x.nuocSX).filter(Boolean)])], hint: 'Mặc định Việt Nam. Gõ nước khác thì lần sau sẽ có trong danh sách' }, { key: 'taiTrong', label: 'Tải trọng cho phép chở (kg)', type: 'number' },
   { key: 'loaiHinh', label: 'Loại hình kinh doanh vận tải', type: 'select', options: [{ value: '', label: '— Chưa chọn —' }, ...['Tuyến cố định', 'Xe buýt', 'Xe taxi', 'Xe hợp đồng', 'Xe du lịch', 'Tuyến cố định + Xe hợp đồng'].map(x => ({ value: x, label: x }))] },
   { key: 'dkSo', label: 'Giấy đăng ký xe: số' }, { key: 'dkNgay', label: 'Ngày cấp giấy đăng ký', type: 'date' }, { key: 'dkNoi', label: 'Nơi cấp giấy đăng ký' }, { key: 'kdSo', label: 'Số giấy chứng nhận kiểm định' },
-  { key: 'gpsModel', label: 'GPS: nhãn hiệu / model' }, { key: 'gpsNcc', label: 'GPS: nhà cung cấp dịch vụ', list: [...new Set(['Công ty Cổ phần Công nghệ Trực tuyến Skysoft', ...DB.vehicles.map(x => x.gpsNcc).filter(Boolean)])], hint: 'Chọn trong danh sách hoặc gõ tên nhà cung cấp khác' }, { key: 'gpsTk', label: 'GPS: tài khoản truy cập' }, { key: 'hhPhuHieu', label: 'Hạn phù hiệu / biển hiệu', type: 'date' },
+  { key: 'gpsModel', label: 'GPS: nhãn hiệu / model' }, { key: 'gpsNcc', label: 'GPS: nhà cung cấp dịch vụ', list: [...new Set(['Công ty Cổ phần Công nghệ Trực tuyến Skysoft', ...DB.vehicles.map(x => x.gpsNcc).filter(Boolean)])], hint: 'Chọn trong danh sách hoặc gõ tên nhà cung cấp khác' }, { key: 'gpsTk', label: 'GPS: tài khoản truy cập' }, { key: 'hhPhuHieu', label: 'Hạn phù hiệu / biển hiệu', type: 'date' }, { key: 'phuHieuF', label: 'Phù hiệu / biển hiệu (ảnh hoặc PDF)', type: 'file' },
   { key: 'ngayHD', label: 'Ngày đưa xe vào hoạt động', type: 'date' }, { key: 'ngayNgung', label: 'Ngày ngừng hoạt động / thanh lý', type: 'date' },
   { type: 'section', label: 'Sơ đồ ghế (thiết kế theo từng xe)' },
   { key: 'soDo', label: 'Sơ đồ ghế', type: 'sodo', hint: 'Chọn công cụ rồi bấm vào ô để đặt ghế, tài xế, cửa hoặc để trống làm lối đi. Kéo một ô thả vào ô khác để đổi chỗ, bấm đúp vào ô để xóa thành ô trống. Sơ đồ này dùng cho đặt vé và in sơ đồ xe' },
@@ -3481,18 +3481,20 @@ function vehForm(v) {
     const c = m.el.querySelector('[data-cancel]'); if (c) c.textContent = 'Đóng';
   }
 }
+function docPrev(f, urls, h = 520) {
+  if (!f) return '<div class="muted small">Chưa tải lên</div>';
+  if (fileIsPdf(f)) { try { const b = atob(f.split(',')[1]), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); const u = URL.createObjectURL(new Blob([a], { type: 'application/pdf' })); urls.push(u); return `<iframe src="${u}" style="width:100%;height:${h}px;border:1px solid #bae6fd;border-radius:8px"></iframe>`; } catch (e) { return '<div class="muted small">Không hiển thị được file PDF</div>'; } }
+  return `<img src="${f}" style="max-width:100%;border:1px solid #bae6fd;border-radius:8px">`;
+}
 function vehDocs(v) {
   const urls = [];
-  const body = VEH_DOCS.map(([k, label, hk]) => {
-    const f = v[k]; let inner = '<div class="muted small">Chưa tải lên</div>';
-    if (f) {
-      if (fileIsPdf(f)) {
-        try { const b = atob(f.split(',')[1]), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); const u = URL.createObjectURL(new Blob([a], { type: 'application/pdf' })); urls.push(u); inner = `<iframe src="${u}" style="width:100%;height:520px;border:1px solid #bae6fd;border-radius:8px"></iframe>`; } catch (e) { inner = '<div class="muted small">Không hiển thị được file PDF</div>'; }
-      } else inner = `<img src="${f}" style="max-width:100%;border:1px solid #bae6fd;border-radius:8px">`;
-    }
-    return `<div style="margin-bottom:16px"><div class="row" style="justify-content:space-between;margin-bottom:6px"><b>${label}</b>${hk ? vehExpCell(v[hk]).replace('<br>', ' ') : ''}</div>${inner}</div>`;
+  const build = () => VEH_DOCS.map(([k, label, hk]) => {
+    const t = DOCH.byKey[k];
+    return `<div style="margin-bottom:16px"><div class="row" style="justify-content:space-between;margin-bottom:6px;gap:8px"><b>${label}</b><span class="row" style="gap:8px">${hk ? vehExpCell(v[hk]).replace('<br>', ' ') : ''}${t && DOCH.can(t) ? `<button class="btn sm" data-dn="${t}">${ic('plus')} Thêm giấy mới</button>` : ''}</span></div>${docPrev(v[k], urls)}${t ? DOCH.hist(v, t, urls) : ''}</div>`;
   }).join('') + (v.hinhAnh ? `<div><b>Hình ảnh xe</b><br><img src="${v.hinhAnh}" style="max-width:100%;border-radius:8px;margin-top:6px"></div>` : '');
-  Modal.open({ title: 'Giấy tờ xe ' + esc(v.bks), width: 820, body, foot: '<button class="btn" data-no>Đóng</button>', onClose: () => urls.forEach(u => URL.revokeObjectURL(u)) }).el.querySelector('[data-no]').onclick = e => e.target.closest('.modal-wrap').querySelector('[data-x]').click();
+  const m = Modal.open({ title: 'Giấy tờ xe ' + esc(v.bks), width: 820, body: build(), foot: '<button class="btn" data-no>Đóng</button>', onClose: () => urls.forEach(u => URL.revokeObjectURL(u)) });
+  m.el.querySelector('[data-no]').onclick = () => m.close();
+  DOCH.bind(m.el, v, () => { m.body.innerHTML = build(); });
 }
 addCSS('.sd-bar{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.sd-grid{display:grid;gap:4px;max-width:520px;margin:6px 0}.sd-c{height:34px;border:1px dashed #cbd5e1;background:#fff;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;padding:0;color:#111827}.sd-c.s{border:1px solid #38a3e8;background:#e0f2fe}.sd-c.d{border:1px solid #475467;background:#e5e7eb;font-size:10px}.sd-c.o{border:1px solid #d97706;background:#fef3c7;font-size:10px}.sd-c[draggable=true]{cursor:grab}.sd-c.sd-over{outline:2px solid #2563eb;background:#dbeafe}');
 addCSS('tr.veh-off td{opacity:.55;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(100,116,139,.07) 6px 12px)}tr.veh-off td:last-child{opacity:1}');
@@ -3572,6 +3574,7 @@ function vlPrint(v) {
   const sc = DB.suachua.filter(p => p.xe === v.bks).sort((a, b) => String(a.ngay).localeCompare(String(b.ngay)));
   const srows = sc.map(p => `<tr><td style="${td}">${F.date(p.ngay)}</td><td style="${td};text-align:right">${p.km ? F.money(p.km) + ' km' : ''}</td><td style="${td}">${esc((p.items || []).map(i => i.nd + (i.sl > 1 ? ' (x' + i.sl + ')' : '')).join('; '))}</td><td style="${td}">${esc(p.donVi || '')}</td><td style="${td};text-align:right">${F.money(scTong(p))}</td><td style="${td}"></td></tr>`);
   const dk = (v.dkLan || []).slice(), hasCur = v.hhDangKiem && !dk.some(x => x.het === v.hhDangKiem); if (hasCur) dk.push({ het: v.hhDangKiem, so: v.kdSo || '', kq: 'Đạt' });
+  DOCH.shown(v, 'dangKiem').forEach(r => { if (r.han && !dk.some(x => x.het === r.han)) dk.push({ het: r.han, so: (r.x || {}).kdSo || '', kq: 'Đạt' }); });   // giấy đăng kiểm cũ không ẩn thì in kèm
   dk.sort((a, b) => String(a.het || a.ngay).localeCompare(String(b.het || b.ngay)));
   const drows = dk.map((x, i) => `<tr><td style="${td}">Lần ${i + 1}</td><td style="${td}">${x.ngay ? F.date(x.ngay) : ''}</td><td style="${td}">${x.het ? F.date(x.het) : ''}</td><td style="${td}">${esc(x.so || '')}</td><td style="${td}">${esc(x.kq || '')}</td></tr>`);
   const trows = (v.suCo || []).map(x => `<tr><td style="${td}">${x.ngay ? F.date(x.ngay) : ''}</td><td style="${td}">${esc(x.diaDiem || '')}</td><td style="${td}">${esc(x.tomTat || '')}</td><td style="${td}">${esc(x.thietHai || '')}</td><td style="${td}">${esc(x.xuLy || '')}</td></tr>`);
@@ -9734,7 +9737,8 @@ const HS = {
   years: () => HS.F().filter(HS.isYear).sort((a, b) => String(b.ten).localeCompare(String(a.ten))),
   others: () => HS.F().filter(f => !f.cha && !HS.isYear(f)).sort(HS.cmp),
   kids: id => id === '__o' ? HS.others() : HS.F().filter(f => (f.cha || '') === (id || '')).sort(HS.cmp),
-  items: id => id === '__o' ? [] : HS.H().filter(h => (h.folder || '') === (id || '')).sort(HS.cmp),
+  items: id => id === '__o' ? [] : HS.H().filter(h => (h.folder || '') === (id || '') && (!h.an || HS.showAn)).sort(HS.cmp),
+  anCount: id => HS.H().filter(h => (h.folder || '') === (id || '') && h.an).length,
   rootReal: () => (HS.yr && HS.yr !== '__o' && HS.by(HS.yr)) ? HS.yr : '',
   defYear() { const c = String(new Date().getFullYear()), y = HS.years(); return (y.find(f => f.ten === c) || y[0] || {}).id || (HS.others().length ? '__o' : ''); },
   dcfg: () => (S().hsDrive || {}),
@@ -9775,18 +9779,18 @@ const HS = {
     if (!HS._opened) { HS._opened = true; if (!HS.sel && !HS.q && HS.rootReal()) HS.sel = HS.rootReal(); }   // mở module: vào thẳng năm hiện tại
     const q = HS.q.trim().toLowerCase(), cur = HS.sel, live = typeof TK !== 'undefined' && TK.live;
     const crumbs = `<a data-hs="sel" data-id="" data-drop="">Tất cả hồ sơ</a>` + HS.path(cur).map(f => ` <span>›</span> <a data-hs="sel" data-id="${f.id}" data-drop="${f.id}">${esc(f.ten)}</a>`).join('');
-    const rowH = (h, showPath) => `<tr draggable="true" data-drag="h:${h.id}"><td class="hs-ic">${HS.ico(h)}</td><td><a class="hs-nm" data-hs="view" data-id="${h.id}"><b>${esc(h.ten)}</b></a>${h.tenFile && h.tenFile !== h.ten ? `<div class="muted small">${esc(h.tenFile)}</div>` : ''}${h.url ? `<div class="muted small hs-url">${esc(h.url)}</div>` : ''}${showPath ? `<div class="muted small">${ic('folder')} ${esc(HS.ptxt(h.folder))}</div>` : ''}</td><td class="r nw">${h.loai === 'link' ? 'Liên kết' : HS.size(h.size)}</td><td>${HS.hanBadge(h)}</td><td class="hs-note">${esc(h.ghiChu || '')}</td><td class="nw small muted">${esc(h.nguoi || '')}<br>${esc(dvLog.fmt(h.tg))}</td>
-      <td class="nw r"><button class="ibtn" data-hs="view" data-id="${h.id}" title="${h.loai === 'link' ? 'Mở liên kết' : 'Xem / tải xuống'}">${ic(h.loai === 'link' ? 'link' : 'download')}</button>${h.link ? `<button class="ibtn" data-hs="drv" data-id="${h.id}" title="Mở trong Google Drive">${ic('link')}</button>` : ''}<button class="ibtn" data-hs="editH" data-id="${h.id}" title="Sửa thông tin">${ic('edit')}</button><button class="ibtn" data-hs="moveH" data-id="${h.id}" title="Chuyển thư mục">${ic('folder')}</button><button class="ibtn del" data-hs="delH" data-id="${h.id}" title="Xóa">${ic('trash')}</button></td></tr>`;
+    const rowH = (h, showPath) => `<tr draggable="true" data-drag="h:${h.id}"><td class="hs-ic">${HS.ico(h)}</td><td><a class="hs-nm" data-hs="view" data-id="${h.id}"><b>${esc(h.ten)}</b></a>${h.thay ? ` <span class="badge b-gray">Bản cũ</span> <label class="dh-chk" style="margin-left:6px"><input type="checkbox" data-hs="anH" data-id="${h.id}" ${h.an ? 'checked' : ''}> Ẩn</label>` : ''}${h.tenFile && h.tenFile !== h.ten ? `<div class="muted small">${esc(h.tenFile)}</div>` : ''}${h.url ? `<div class="muted small hs-url">${esc(h.url)}</div>` : ''}${showPath ? `<div class="muted small">${ic('folder')} ${esc(HS.ptxt(h.folder))}</div>` : ''}</td><td class="r nw">${h.loai === 'link' ? 'Liên kết' : HS.size(h.size)}</td><td>${HS.hanBadge(h)}</td><td class="hs-note">${esc(h.ghiChu || '')}</td><td class="nw small muted">${esc(h.nguoi || '')}<br>${esc(dvLog.fmt(h.tg))}</td>
+      <td class="nw r"><button class="ibtn" data-hs="view" data-id="${h.id}" title="${h.loai === 'link' ? 'Mở liên kết' : 'Xem / tải xuống'}">${ic(h.loai === 'link' ? 'link' : 'download')}</button>${h.link ? `<button class="ibtn" data-hs="drv" data-id="${h.id}" title="Mở trong Google Drive">${ic('link')}</button>` : ''}${h.hetHan && !h.thay && h.loai !== 'link' ? `<button class="ibtn" data-hs="renewH" data-id="${h.id}" title="Tải bản mới (bản này chuyển thành bản cũ, tự ẩn)">${ic('refresh')}</button>` : ''}<button class="ibtn" data-hs="editH" data-id="${h.id}" title="Sửa thông tin">${ic('edit')}</button><button class="ibtn" data-hs="moveH" data-id="${h.id}" title="Chuyển thư mục">${ic('folder')}</button><button class="ibtn del" data-hs="delH" data-id="${h.id}" title="Xóa">${ic('trash')}</button></td></tr>`;
     let main;
     if (q) {
-      const R = HS.H().filter(h => HS.vis(h.folder) && [h.ten, h.tenFile, h.ghiChu, h.url, HS.ptxt(h.folder)].join(' ').toLowerCase().includes(q)).sort(HS.cmp);
+      const R = HS.H().filter(h => HS.vis(h.folder) && (!h.an || HS.showAn) && [h.ten, h.tenFile, h.ghiChu, h.url, HS.ptxt(h.folder)].join(' ').toLowerCase().includes(q)).sort(HS.cmp);
       const RF = HS.F().filter(f => HS.vis(f.id) && [f.ten, f.ghiChu].join(' ').toLowerCase().includes(q)).sort(HS.cmp);
       main = `<div class="card"><div class="card-h"><h3>Kết quả tìm “${esc(HS.q)}”</h3><span class="sub">${RF.length} thư mục · ${R.length} hồ sơ</span></div><div class="card-b">
         ${RF.length ? `<div class="hs-fg">${RF.map(f => `<div class="hs-fc" data-hs="sel" data-id="${f.id}">${ic('folder')}<div><b>${esc(f.ten)}</b><div class="muted small">${esc(HS.ptxt(f.cha))}</div></div></div>`).join('')}</div>` : ''}
         ${R.length ? `<div class="tbl-wrap free"><table class="tbl compact hs-tbl"><tbody>${R.map(h => rowH(h, true)).join('')}</tbody></table></div>` : (RF.length ? '' : '<div class="empty">Không tìm thấy.</div>')}</div></div>`;
     } else {
       const sub = HS.kids(cur), its = HS.items(cur), f = HS.by(cur);
-      main = `<div class="card"><div class="card-h"><div class="hs-bc">${crumbs}</div><span class="sub">${sub.length} thư mục con · ${its.length} hồ sơ</span></div><div class="card-b">
+      main = `<div class="card"><div class="card-h"><div class="hs-bc">${crumbs}</div><span class="sub">${sub.length} thư mục con · ${its.length} hồ sơ${HS.anCount(cur) ? ` · <a class="hs-an" data-hs="showAn">${HS.showAn ? 'Giấu' : 'Hiện'} ${HS.anCount(cur)} bản cũ đã ẩn</a>` : ''}</span></div><div class="card-b">
         ${f && f.ghiChu ? `<div class="hs-nt">${esc(f.ghiChu)}</div>` : ''}
         ${sub.length ? `<div class="hs-fg">${sub.map(s => `<div class="hs-fc" data-hs="sel" data-id="${s.id}" data-drop="${s.id}" draggable="true" data-drag="f:${s.id}">${ic('folder')}<div class="grow"><b>${esc(s.ten)}</b><div class="muted small">${HS.kids(s.id).length ? HS.kids(s.id).length + ' thư mục · ' : ''}${HS.count(s.id)} hồ sơ</div></div></div>`).join('')}</div>` : ''}
         ${its.length ? `<div class="tbl-wrap free"><table class="tbl compact hs-tbl"><thead><tr><th></th><th>Tên hồ sơ</th><th class="r">Dung lượng</th><th>Hạn</th><th>Ghi chú</th><th>Tải lên</th><th></th></tr></thead><tbody>${its.map(h => rowH(h, false)).join('')}</tbody></table></div>` : (sub.length ? '' : `<div class="empty hs-drop">${ic('folder')}<br>Thư mục trống.<br><span class="muted small">Kéo tệp vào đây, hoặc bấm “Tải hồ sơ lên”.</span></div>`)}</div></div>`;
@@ -9822,6 +9826,9 @@ const HS = {
       if (drv && !HS.google()) return toast('Lưu trữ hồ sơ chỉ lưu trên Google Drive. Hãy kết nối Google Drive trong module Management (mục Kho hồ sơ) trước khi thao tác.', 'err', 7000);
       if (del && !(typeof TK !== 'undefined' && TK.live)) return toast('Chưa có kết nối đồng bộ trực tiếp nên chưa thể xóa (tránh lệch dữ liệu giữa các máy). Bấm “Thử kết nối lại” rồi thử lại.', 'err', 7000);
     }
+    if (a === 'showAn') { HS.showAn = !HS.showAn; return App.render(); }
+    if (a === 'anH') { const h = H(); if (h) { h.an = b.checked; HS.commit(); setTimeout(() => App.render(), 0); } return; }
+    if (a === 'renewH') { const h = H(); return h && HS.renew(h); }
     if (a === 'tg') { e.stopPropagation(); HS.open.has(id) ? HS.open.delete(id) : HS.open.add(id); return App.render(); }
     if (a === 'sel') { HS.sel = id || ''; HS.q = ''; HS._fq = false; if (id) HS.open.add(id); return App.render(); }
     if (a === 'yr') { HS.yr = id; HS.sel = id === '__o' ? '' : id; HS.q = ''; return App.render(); }
@@ -9877,6 +9884,21 @@ const HS = {
   /* ---------- tệp ---------- */
   pick() { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.onchange = () => HS.upload([...i.files], HS.sel); i.click(); },
   readB64: f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => no(r.error); r.readAsDataURL(f); }),
+  renew(h) {      // giấy có hạn hết hạn: tải bản mới cùng tên, cùng thư mục; bản cũ giữ lại, tự ẩn
+    const m = Modal.open({ title: 'Tải bản mới · ' + esc(h.ten), width: 480, body: `<div class="form"><div class="field"><label>Tệp bản mới</label><input type="file" class="inp" id="rnF"></div><div class="field"><label>Ngày hết hạn của bản mới</label><input type="date" class="inp" id="rnH"></div><p class="small muted" style="margin:0">Bản hiện tại (${HS.hanBadge(h) || 'không ghi hạn'}) chuyển thành bản cũ và tự ẩn, không xóa.</p></div>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-ok>${ic('upload')} Lưu bản mới</button>` });
+    const q = x => m.el.querySelector(x); q('[data-no]').onclick = () => m.close();
+    q('[data-ok]').onclick = async () => {
+      const f = q('#rnF').files[0], han = q('#rnH').value;
+      if (!f) return toast('Chọn tệp bản mới', 'err'); if (!han) return toast('Nhập ngày hết hạn của bản mới', 'err');
+      if (f.size > HS.MAX) return toast(`Tệp lớn ${HS.size(f.size)} (tối đa ${HS.size(HS.MAX)})`, 'err');
+      q('[data-ok]').disabled = true;
+      try {
+        const id = await HS.store(await HS.readB64(f), { folder: h.folder || '', ten: h.ten, tenFile: f.name, mime: f.type || '', size: f.size, hetHan: han, ghiChu: h.ghiChu || '' });
+        h.an = true; h.thay = id || true; HS.commit(); m.close(); App.render(); toast('Đã lưu bản mới, bản cũ đã ẩn', 'ok');
+      } catch (e) { q('[data-ok]').disabled = false; toast('Không tải được: ' + esc(e.message || e), 'err', 6000); }
+    };
+  },
   async upload(files, folder, ex = {}) {
     if (!Auth.can('hoso', 'add')) return toast('Bạn chưa được cấp quyền thêm hồ sơ', 'err');
     if (!HS.google()) return toast('Cần kết nối Google Drive (module Management → Kho hồ sơ) để lưu tệp. Bạn vẫn có thể dùng “Thêm liên kết”.', 'err', 7000);
@@ -9938,7 +9960,7 @@ document.addEventListener('drop', e => { if (App.cur === 'hoso') HS.drop(e); });
 /* ---------- nút "Lưu hồ sơ" ở các màn hình liên quan ---------- */
 Object.assign(HS, {
   /* quyền cần cho từng thao tác trong module (mặc định: xem) */
-  NEED: { newYear: 'add', newF: 'add', seed: 'add', bulk: 'add', veh: 'add', up: 'add', link: 'add', addFrom: 'add', renF: 'edit', movF: 'edit', editH: 'edit', moveH: 'edit', delF: 'del', delH: 'del' },
+  NEED: { renewH: 'add', anH: 'edit', newYear: 'add', newF: 'add', seed: 'add', bulk: 'add', veh: 'add', up: 'add', link: 'add', addFrom: 'add', renF: 'edit', movF: 'edit', editH: 'edit', moveH: 'edit', delF: 'del', delH: 'del' },
   perm() { ['add', 'edit', 'del'].forEach(a => document.body.classList.toggle('hs-no' + a, !Auth.can('hoso', a))); },
   /* chọn loại hồ sơ rồi lưu vào đúng thư mục chuẩn (thay cho các nút "Lưu hồ sơ" ở từng màn hình) */
   addDlg() {
@@ -9962,8 +9984,9 @@ Object.assign(HS, {
   },
   norm: s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase().replace(/^\s*\d+\s*[.)\-]*\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim(),
   ypre(segs) { return segs.length && /^\d{4}$/.test(String(segs[0])) ? segs : [String(new Date().getFullYear()), ...segs]; },
-  find(segs) { segs = HS.ypre(segs); let cur = ''; for (const s of segs) { const f = HS.kids(cur).find(k => HS.norm(k.ten) === HS.norm(s)); if (!f) return null; cur = f.id; } return cur; },
-  ensure(segs) { segs = HS.ypre(segs.length ? segs : []); let cur = ''; for (const s of segs) { const f = HS.kids(cur).find(k => HS.norm(k.ten) === HS.norm(s)); cur = f ? f.id : HS.newFolder(cur, s).id; } return cur; },
+  kid(cur, s) { const K = HS.kids(cur), n = HS.norm(s), bare = x => HS.norm(x).replace(/^\d+\.\s*/, ''); return K.find(k => HS.norm(k.ten) === n) || K.find(k => bare(k.ten) === bare(s)); },   // khớp cả thư mục có số thứ tự đầu ("02. Nhân sự")
+  find(segs) { segs = HS.ypre(segs); let cur = ''; for (const s of segs) { const f = HS.kid(cur, s); if (!f) return null; cur = f.id; } return cur; },
+  ensure(segs) { segs = HS.ypre(segs.length ? segs : []); let cur = ''; for (const s of segs) { const f = HS.kid(cur, s); cur = f ? f.id : HS.newFolder(cur, s).id; } return cur; },
   ents(k) { return k === 'emp' ? (DB.employees || []).map(e => ({ value: e.id, label: e.ten + (e.ma ? ' (' + e.ma + ')' : ''), name: e.ten })) : k === 'veh' ? (DB.vehicles || []).map(v => ({ value: v.id, label: v.bks || '(chưa có biển số)', name: v.bks || '' })) : []; },
   saveBtn(id) {
     if (!HS.adm()) return ''; const c = HS.SAVE[id]; if (!c) return '';
@@ -10194,7 +10217,7 @@ Object.assign(HS, {
         if (old && old.sig === sig && old.mime === 'application/pdf') { skip++; continue; }               // hợp đồng không đổi: không tạo lại
         const bytes = await HS.hdPdf(e), b64 = HS.b64bytes(bytes);
         if (b64.length > HS.MAX * 1.34) { toast('PDF hợp đồng của ' + esc(e.ten) + ' quá lớn (' + HS.size(bytes.length) + '), không lưu được', 'err', 6000); fail++; continue; }
-        const folder = HS.ensure(['Nhân sự', 'Hợp đồng lao động', e.ten]), lan = old ? (old.lan || 1) + 1 : 1;
+        const folder = HS.ensure([String(info.tu || hdYear()).slice(0, 4), 'Nhân sự', 'Hợp đồng lao động', e.ten]), lan = old ? (old.lan || 1) + 1 : 1;
         const id = await HS.store(b64, { folder, ten: 'Hợp đồng lao động - ' + e.ten + (so ? ' (' + so + ')' : ''), tenFile: `HĐLĐ${so ? ' ' + so : ''} - ${e.ten}.pdf`, mime: 'application/pdf', size: bytes.length, ref, ghiChu: `Tự tạo PDF khi lưu/in · lần ${lan} · ${dvLog.fmt(dvLog.now())} · ${HS.who()}` });
         const it = HS.H().find(x => x.id === id); if (it) { it.sig = sig; Store.changed(); }
         n++; where = HS.ptxt(folder);
@@ -10214,12 +10237,23 @@ Object.assign(HS, {
     finally { t.remove(); }
     toast(`Xong: tạo ${n} PDF${skip ? ', bỏ qua ' + skip + ' (không đổi)' : ''}${fail ? ', lỗi ' + fail : ''}`, fail ? 'err' : 'ok', 6000); App.render();
   },
+  /* Sang năm mới: hợp đồng tự sang số / năm mới — tự tạo PDF hợp đồng năm mới cho mọi nhân viên vào thư mục lưu trữ năm mới (1 lần/năm, máy admin) */
+  hdNewYear() {
+    try {
+      const y = D.today().slice(0, 4);
+      if (!Auth.user || Auth.user.role !== 'admin' || !HS.google() || String(hdYear()) !== y || S().hdAutoY === y || HS._hdy) return;
+      const L = (DB.employees || []).filter(e => e.ten && (typeof hdActive !== 'function' || hdActive(e))); if (!L.length) return;
+      HS._hdy = 1; S().hdAutoY = y; App.changed();
+      (async () => { for (const e of L) { try { await HS.archiveHD([e], { quiet: true }); } catch (x) { } } HS._hdy = 0; })();
+    } catch (e) { console.warn('hdNewYear', e); }
+  },
   afterEmpSave(e) {          // bấm Lưu trong form nhân viên: tự tạo PDF hợp đồng cho nhân viên đó
     if (!e || !e.ten) return;
     toast('Đang tạo PDF hợp đồng của ' + esc(e.ten) + '…', '', 2500);
     setTimeout(async () => { const r = await HS.archiveHD([e]); if (r && !r.n && r.skip && !r.fail) toast('PDF hợp đồng của ' + esc(e.ten) + ' đã có trong hồ sơ (nội dung không đổi)', 'ok', 4000); }, 300);
   }
 });
+setTimeout(() => HS.hdNewYear(), 90000); setInterval(() => HS.hdNewYear(), 3600000);
 {
   const open0 = PrintDlg.open;           // mọi đường in hợp đồng (danh sách, xem trước, in tất cả, form nhân viên) đều tự lưu
   PrintDlg.open = function (o) {
@@ -12210,6 +12244,11 @@ addCSS(`.me-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:
 
 /* ===== Chi tiết từng loại giấy tờ trong "Thông tin của tôi" ===== */
 const MED = {
+  ctx(e) {
+    const today = D.today(), st = d => { if (!d) return '<span class="badge b-gray">Chưa có</span>'; const n = Math.round((D.parse(d) - D.parse(today)) / 864e5); return n < 0 ? '<span class="badge b-red">Đã hết hạn</span>' : n <= 30 ? `<span class="badge b-amber">Còn ${n} ngày</span>` : '<span class="badge b-green">Còn hạn</span>'; };
+    let sk = null, th = null; try { sk = llLatest(e.id, 'sk'); th = llLatest(e.id, 'th'); } catch (z) { }
+    return { st, sk, skH: sk ? llHan(sk) : '', th, thH: th ? (th.hetHan || '') : '' };
+  },
   open(k, e, x) {
     const v = (lb, val) => `<div><span>${lb}</span><b>${val ? val : '<span class="muted">—</span>'}</b></div>`, d = t => t ? F.date(t) : '', m = n => +n ? F.money(+n) : '';
     const img = (lb, u) => `<figure class="med-img"><figcaption>${lb}</figcaption>${u ? `<img src="${esc(u)}" alt="" data-zoom>` : '<div class="med-no">Chưa có ảnh</div>'}</figure>`;
@@ -12224,11 +12263,59 @@ const MED = {
       bh: ['Bảo hiểm xã hội & thuế', `<div class="med-kv">${v('Số sổ BHXH', esc(e.soBHXH || ''))}${v('Ngày cấp sổ', d(e.bhxhNgayCap))}${v('Lương đóng bảo hiểm', m(e.luongBH))}${v('Mã số thuế cá nhân', esc(e.mst || ''))}${v('Số người phụ thuộc', String(+e.soNPT || 0))}${v('Phụ cấp chịu thuế', m(e.pcChiuThue))}${v('Phụ cấp không chịu thuế', m(e.pcKhongThue))}</div>`],
       zalo: ['Zalo nhận thông báo', e.zaloId ? `<div class="med-kv">${v('Trạng thái', '<span class="badge b-green">Đã liên kết</span>')}${v('Zalo Chat ID', esc(e.zaloId))}</div><p class="muted small">Phiếu lương và thông báo của công ty sẽ được gửi vào Zalo này.</p>` : `<p>Chưa liên kết Zalo. Mở Zalo Bot của công ty và nhắn <b>${esc(e.ma || 'mã nhân viên')}</b> hoặc số điện thoại của bạn, app sẽ tự liên kết trong vài phút.</p>`]
     }[k]; if (!P) return;
-    const md = Modal.open({ title: P[0] + ' · ' + esc(e.ten || ''), width: 720, body: `<div class="med">${P[1]}</div>` });
+    const urls = [], gx = k === 'gplx' ? ['gplx', 'theNV'].map(t => `${DOCH.can(t) ? `<div class="med-sec">${ic('refresh')} ${DOCH.T[t].label}: thay giấy mới <button class="btn sm" style="margin-left:auto" data-dn="${t}">${ic('plus')} Thêm giấy mới</button></div>` : ''}${DOCH.hist(e, t, urls)}`).join('') : '';
+    const md = Modal.open({ title: P[0] + ' · ' + esc(e.ten || ''), width: 720, body: `<div class="med">${P[1]}${gx}</div>`, onClose: () => urls.forEach(u => URL.revokeObjectURL(u)) });
+    if (k === 'gplx') DOCH.bind(md.el, e, () => { md.close(); MED.open(k, e, MED.ctx(e)); });
     md.el.querySelectorAll('[data-zoom]').forEach(i => i.onclick = () => Modal.open({ title: P[0], width: 1000, body: `<img src="${i.src}" style="width:100%;border-radius:8px">` }));
     const hb = md.el.querySelector('[data-hdv]'); if (hb) hb.onclick = () => HDV.open(e);
   }
 };
+/* ===== Giấy tờ có hạn: thêm giấy mới, giữ giấy cũ làm lịch sử =====
+   Giấy mới ghi vào đúng các trường hiện hành (mọi cảnh báo, lệnh, bản in dùng như cũ); giấy cũ chuyển vào o.giayLS[loại], không xóa,
+   tự đánh dấu Ẩn (an: true) → không hiện ở màn hình xem và không in. Bỏ tích Ẩn thì hiện lại và được in kèm (vd. Lý lịch xe). */
+const DOCH = {
+  T: {
+    dangKiem: { label: 'Đăng kiểm', f: [['dangKiem', 'Giấy chứng nhận đăng kiểm (ảnh hoặc PDF)', 'file']], han: 'hhDangKiem', x: [['kdSo', 'Số giấy chứng nhận kiểm định']], perm: 'phuongtien' },
+    bhds: { label: 'Bảo hiểm dân sự (BHDS)', f: [['bhds', 'Giấy BHDS (ảnh hoặc PDF)', 'file']], han: 'hhBHDS', perm: 'phuongtien' },
+    bhvc: { label: 'Bảo hiểm vật chất (BHVC)', f: [['bhvc', 'Giấy BHVC (ảnh hoặc PDF)', 'file']], han: 'hhBHVC', perm: 'phuongtien' },
+    phuHieu: { label: 'Phù hiệu / biển hiệu', f: [['phuHieuF', 'Phù hiệu (ảnh hoặc PDF)', 'file']], han: 'hhPhuHieu', perm: 'phuongtien' },
+    gplx: { label: 'Giấy phép lái xe', f: [['bangTruoc', 'Ảnh mặt trước', 'image'], ['bangSau', 'Ảnh mặt sau', 'image']], han: 'bangHetHan', x: [['bangSo', 'Số GPLX'], ['bangHang', 'Hạng'], ['bangNgayCap', 'Ngày cấp', 'date'], ['bangNoiCap', 'Nơi cấp']], perm: 'nhanvien' },
+    theNV: { label: 'Thẻ tập huấn', f: [['theNVTruoc', 'Ảnh thẻ tập huấn (mặt trước)', 'image']], han: '', perm: 'nhanvien' }
+  },
+  byKey: { dangKiem: 'dangKiem', bhds: 'bhds', bhvc: 'bhvc', phuHieuF: 'phuHieu' },
+  can: t => Auth.can(DOCH.T[t].perm, 'edit'),
+  ls: (o, t) => { o.giayLS = o.giayLS || {}; return (o.giayLS[t] = o.giayLS[t] || []); },
+  shown: (o, t) => (((o && o.giayLS) || {})[t] || []).filter(r => !r.an),
+  hanOf(o, t) { const T = DOCH.T[t]; if (T.han) return o[T.han] || ''; try { const th = llLatest(o.id, 'th'); return th ? th.hetHan || '' : ''; } catch (e) { return ''; } },
+  renew(o, t, done) {
+    const T = DOCH.T[t];
+    const fields = [...T.f.map(([k, l, ty]) => ({ key: k, label: l, type: ty, max: ty === 'image' ? 1000 : undefined, full: true })),
+      ...(T.han ? [{ key: T.han, label: 'Ngày hết hạn của giấy mới', type: 'date', required: true }] : []), ...(T.x || []).map(([k, l, ty]) => ({ key: k, label: l, type: ty || 'text' }))];
+    Form.open({ title: 'Thêm giấy mới · ' + T.label, width: 600, cols: 2, fields, value: Object.fromEntries((T.x || []).map(([k]) => [k, o[k] || ''])),
+      extra: `<p class="small muted" style="margin:10px 0 0">Giấy hiện tại được chuyển vào lịch sử (không xóa) và tự ẩn; giấy mới dùng cho cảnh báo và bản in.${t === 'theNV' ? ' Nhớ cập nhật lần tập huấn mới trong Lý lịch hành nghề.' : ''}</p>`,
+      saveText: 'Lưu giấy mới',
+      onSave: v => {
+        if (!T.f.some(([k]) => v[k])) { toast('Chọn ảnh / file giấy mới', 'err'); return false; }
+        const old = { id: uid(), at: D.today(), an: true, han: DOCH.hanOf(o, t), f: {}, x: {} };
+        T.f.forEach(([k]) => { if (o[k]) old.f[k] = o[k]; }); (T.x || []).forEach(([k]) => { if (o[k]) old.x[k] = o[k]; });
+        if (Object.keys(old.f).length || old.han) DOCH.ls(o, t).unshift(old);
+        T.f.forEach(([k]) => { o[k] = v[k] || ''; }); if (T.han) o[T.han] = v[T.han]; (T.x || []).forEach(([k]) => { o[k] = v[k] || ''; });
+        App.changed(); toast('Đã lưu giấy mới, giấy cũ chuyển vào lịch sử', 'ok'); done && done();
+      } });
+  },
+  hist(o, t, urls) {
+    const L = (((o && o.giayLS) || {})[t] || []); if (!L.length) return '';
+    const ed = DOCH.can(t);
+    return `<div class="dh-ls"><div class="dh-h">Giấy cũ (${L.length})</div>${L.map(r => `<div class="dh-r${r.an ? ' an' : ''}"><div class="dh-t"><span>${r.han ? 'Hết hạn ' + F.date(r.han) : 'Không ghi hạn'}${r.x && Object.keys(r.x).length ? ' · ' + esc(Object.values(r.x).join(' · ')) : ''} <span class="muted small">· thay ngày ${F.date(r.at)}</span></span>
+      <label class="dh-chk"><input type="checkbox" data-dh="${t}" data-id="${r.id}" ${r.an ? 'checked' : ''} ${ed ? '' : 'disabled'}> Ẩn</label></div>${r.an ? '' : `<div class="dh-f">${Object.values(r.f || {}).map(f => docPrev(f, urls || [], 320)).join('')}</div>`}</div>`).join('')}</div>`;
+  },
+  bind(el, o, redraw) {
+    el.addEventListener('click', ev => { const b = ev.target.closest('[data-dn]'); if (b) DOCH.renew(o, b.dataset.dn, redraw); });
+    el.addEventListener('change', ev => { const c = ev.target.closest('[data-dh]'); if (!c) return; const r = DOCH.ls(o, c.dataset.dh).find(x => x.id === c.dataset.id); if (r) { r.an = c.checked; App.changed(); redraw(); } });
+  }
+};
+addCSS(`.hs-an{cursor:pointer;color:var(--p);text-decoration:underline}.dh-ls{margin-top:10px;border-top:1px dashed #cbd5e1;padding-top:8px}.dh-h{font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px}.dh-r{border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;margin-bottom:6px}.dh-r.an{opacity:.7}
+.dh-t{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}.dh-chk{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;white-space:nowrap}.dh-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}`);
 /* ===== Xem bản hợp đồng dạng trang giấy (bảo mật) =====
    Trình duyệt không thể chặn tuyệt đối việc chụp màn hình (nút cứng điện thoại, máy ảnh khác) — chỉ làm khó và truy vết:
    in chìm tên + SĐT người xem + giờ xem, chặn chọn chữ/sao chép/chuột phải/in/lưu, làm mờ khi phím PrintScreen,
@@ -12461,7 +12548,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T17:30';
+const APP_BUILD = '2026-11-06T17:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

@@ -46,7 +46,7 @@ function llProfile(id, tab) {
     const sk = llLatest(id, 'sk'), th = llLatest(id, 'th'), n = k => llRecs(id, k).length;
     body.innerHTML = `<div class="ll-head"><div class="ll-info"><b style="font-size:16px">${esc(e.ten)}</b> <span class="badge ${e.trangThai === 'Nghỉ việc' ? 'b-red' : 'b-green'}">${esc(e.trangThai || '')}</span>
       <div class="muted small">${e.ngaySinh ? 'Sinh ' + F.date(e.ngaySinh) + ' · ' : ''}CCCD ${esc(e.cccd || '—')} · ${esc(e.sdt || '')}</div>
-      <div class="small" style="margin-top:4px">Bằng lái hạng <b>${esc(e.bangHang || '—')}</b> · Số ${esc(e.bangSo || '—')} · Hết hạn ${e.bangHetHan ? F.date(e.bangHetHan) : '—'} ${gplxBadge(e)}</div></div>
+      <div class="small" style="margin-top:4px">Bằng lái hạng <b>${esc(e.bangHang || '—')}</b> · Số ${esc(e.bangSo || '—')} · Hết hạn ${e.bangHetHan ? F.date(e.bangHetHan) : '—'} ${gplxBadge(e)} <button class="btn sm" data-gplx style="margin-left:6px">${ic('file')} Giấy tờ GPLX & thẻ tập huấn</button></div></div>
       <div class="ll-xe"><div class="field"><label>Loại xe đảm nhận</label><input class="inp" id="llXe" list="llXeL" value="${esc(e.llXe || '')}" ${canE ? '' : 'readonly'}><datalist id="llXeL">${xes.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div><div class="field"><label>Sức chứa</label><input class="inp" id="llCho" value="${esc(e.llCho || '')}" placeholder="VD: 16 CHỖ" ${canE ? '' : 'readonly'}></div></div></div>
       <div class="ll-sum"><span>Khám SK: ${sk ? llBadge(llHan(sk)).replace('<br>', ' ') : '<span class="badge b-red">Chưa khám</span>'}</span><span>Thẻ tập huấn: ${th && th.hetHan ? llBadge(th.hetHan).replace('<br>', ' ') : '<span class="badge b-p">Chưa có</span>'}</span></div>
       <div class="ll-tabs">${LL.order.map(k => `<button class="${k === LL_TAB.tab ? 'on' : ''}" data-tab="${k}">${LL[k].label} <em>${n(k)}</em></button>`).join('')}</div>
@@ -54,6 +54,7 @@ function llProfile(id, tab) {
   };
   LL.refresh = draw; draw();
   m.el.addEventListener('click', ev => {
+    if (ev.target.closest('[data-gplx]')) return MED.open('gplx', e, MED.ctx(e));
     const t = ev.target.closest('[data-tab]'); if (t) { LL_TAB.tab = t.dataset.tab; return draw(); }
     const b = ev.target.closest('[data-ll]'); if (!b) return; const r = (DB.lylich || []).find(x => x.id === b.dataset.id);
     if (b.dataset.ll === 'add') llEntry(e, LL_TAB.tab);
