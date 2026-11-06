@@ -29,4 +29,16 @@ const vDH = {
   },
 };
 { const r0 = vDH.render; vDH.render = function (el) { r0.call(this, el); const tok = el._kmTok = {}; MODL.load('kmxe').then(() => { if (el._kmTok === tok && el.isConnected && App.cur === 'dieuhanh') kmPanel(el); }).catch(() => { }); }; }
+/* vào màn hình hôm nay: cuộn tới cột giờ chạy kế tiếp và tô sáng cột đó */
+vDH.goNext = function (el) {
+  const day = LC.ngay || D.today(); if (day !== D.today()) return;
+  const w = el.querySelector('.dx-wrap'), hs = w ? [...w.querySelectorAll('thead th')].slice(1, -1) : []; if (!hs.length) return;
+  const n = new Date(), now = String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
+  const th = hs.find(h => h.textContent.trim() >= now) || hs[hs.length - 1]; th.classList.add('dx-next');
+  const rt = w.querySelector('thead th.rt'), d = th.getBoundingClientRect().left - w.getBoundingClientRect().left - (rt ? rt.getBoundingClientRect().width : 0) - 8; w.scrollLeft = Math.max(0, w.scrollLeft + d);
+};
+{ const r1 = vDH.render; vDH.render = function (el) { r1.call(this, el); if (vDH._enter) { vDH._enter = false; requestAnimationFrame(() => { try { vDH.goNext(el); } catch (e) { } }); } }; }
+{ const g0 = App.go; App.go = function (id) { if (id === 'dieuhanh' && App.cur !== 'dieuhanh') vDH._enter = true; return g0.apply(this, arguments); }; }
+vDH._enter = App.cur !== 'dieuhanh' || true;
+addCSS(`.dx thead th.dx-next{background:var(--p)!important;color:#fff!important;border-radius:8px 8px 0 0}`);
 MODL.def('dieuhanh', vDH);
