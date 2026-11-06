@@ -3616,10 +3616,14 @@ const vcXe = c => DB.vehicles.find(v => v.id === c.xeId) || {};
 const vcDrivers = () => { const a = DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'); const d = a.filter(e => /lái\s*xe/i.test(String(e.chucVu || ''))); return d.length ? d : a.filter(e => e.bangHang); };
 /* Chữ ký giám đốc + dấu công ty dùng chung cho mọi văn bản: dấu nằm trên, chữ ký nằm dưới. Bật/tắt: Cài đặt › Công ty › "Chèn chữ ký giám đốc và con dấu" */
 const SIGN = {
-  on() { const c = S().company || {}; return c.chenKy !== false && !!(c.chuKyGD || c.conDau); },
+  /* bật riêng từng thứ: Cài đặt › Công ty › "In chữ ký giám đốc" / "In con dấu công ty" */
+  useSig() { const c = S().company || {}; return c.chenKy !== false && c.inChuKy !== false && !!c.chuKyGD; },
+  useDau() { const c = S().company || {}; return c.chenKy !== false && c.inDau !== false && !!c.conDau; },
+  on() { return SIGN.useSig() || SIGN.useDau(); },
   gd(h = 96) {
     if (!SIGN.on()) return ''; const c = S().company || {};
-    return `<div class="sig-gd" style="position:relative;height:${h}px;margin:4px auto 0;width:100%">${c.chuKyGD ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:calc(50% + ${Math.round(h * .22)}px);top:${Math.round(h * .14)}px;transform:translateX(-50%);height:${Math.round(h * .74)}px;max-width:60%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}${c.conDau ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:calc(50% - ${Math.round(h * .22)}px);top:0;transform:translateX(-50%);height:${Math.round(h * .96)}px;max-width:50%;object-fit:contain;opacity:.88;mix-blend-mode:multiply;z-index:2">` : ''}</div>`;
+    const sg = SIGN.useSig(), dd = SIGN.useDau();
+    return `<div class="sig-gd" style="position:relative;height:${h}px;margin:4px auto 0;width:100%">${sg ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:calc(50% + ${Math.round(h * .22)}px);top:${Math.round(h * .14)}px;transform:translateX(-50%);height:${Math.round(h * .74)}px;max-width:60%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}${dd ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:calc(50% - ${Math.round(h * .22)}px);top:0;transform:translateX(-50%);height:${Math.round(h * .96)}px;max-width:50%;object-fit:contain;opacity:.88;mix-blend-mode:multiply;z-index:2">` : ''}</div>`;
   }
 };
 const vcSign = () => { const co = S().company || {}; return SIGN.on() ? SIGN.gd() + `<b>${esc(co.daiDien || '')}</b>` : ''; };
@@ -12245,7 +12249,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T14:20';
+const APP_BUILD = '2026-11-06T14:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại) → trả về lõi */
 addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);display:flex;align-items:center;justify-content:center;padding:2vh 2vw;animation:fade .15s}
 .gp{display:flex;width:100%;max-width:1180px;height:100%;max-height:900px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);font-family:'Be Vietnam Pro','Segoe UI',Roboto,Arial,sans-serif}

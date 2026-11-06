@@ -42,7 +42,7 @@ const LEGAL_FIELDS = [
       { key: 'cccdGDSo', label: 'Số CCCD giám đốc' }, { key: 'gpkdSo', label: 'Số GPKD vận tải' }, { key: 'gpkdNgay', label: 'Ngày cấp GPKD vận tải', type: 'date' }, { key: 'gpkdNoiCap', label: 'Nơi cấp GPKD vận tải' },
       { key: 'gpkdImg', label: 'Giấy phép kinh doanh', type: 'image', max: 2400, full: true, hint: 'Tải ảnh chụp hoặc quét giấy phép' },
       { key: 'cccdGDTruoc', label: 'CCCD giám đốc (mặt trước)', type: 'image', max: 2400 }, { key: 'cccdGDSau', label: 'CCCD giám đốc (mặt sau)', type: 'image', max: 2400 },
-      { key: 'chenKy', label: 'Thêm chữ ký giám đốc và dấu công ty vào toàn bộ văn bản (dấu nằm trên chữ ký)', type: 'checkbox', def: true, full: true },
+      { key: 'inChuKy', label: 'In chữ ký giám đốc vào toàn bộ văn bản', type: 'checkbox', def: true }, { key: 'inDau', label: 'In con dấu công ty vào toàn bộ văn bản (dấu nằm trên chữ ký)', type: 'checkbox', def: true },
       { key: 'chuKyGD', label: 'Chữ ký giám đốc', type: 'image', max: 400, hint: 'Chụp trên giấy trắng, app tự tách nền, tự in vào hợp đồng' }, { key: 'conDau', label: 'Con dấu công ty', type: 'image', max: 400, hint: 'Chụp hoặc quét con dấu, app tự tách nền trắng' }];
 const vSet = {
   title: 'Cài đặt', icon: 'settings', desc: 'Thông tin công ty, công chuẩn, tỷ lệ bảo hiểm, biểu thuế TNCN', print: false,
