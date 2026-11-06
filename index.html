@@ -3648,6 +3648,7 @@ function vcHTML(c) {
   <p><b>BÊN VẬN TẢI (BÊN A):</b></p>
   <p>Tên đơn vị: <b>${esc(co.ten || '')}</b></p><p>Địa chỉ trụ sở: ${hv(String(co.diaChi || '').toUpperCase())}</p><p>Mã số thuế: ${hv(co.mst)}</p>
   <p>Điện thoại: ${hv(co.sdt)} &nbsp; Email: ${hv(co.email, '………………………')}</p>
+  <p>Số điện thoại tiếp nhận phản ánh của hành khách: ${hv((S().niemYet || {}).hotline || co.sdt)}</p>
   <p>Người đại diện: <b>${esc(String(co.daiDien || '').toUpperCase()) || '............'}</b> &nbsp; Chức vụ: ${esc(String(co.chucVuDD || '').toUpperCase()) || '............'}</p>
   <p>Số định danh cá nhân (CCCD/ĐDCN): ${hv(co.cccdGDSo)}</p>
   <p>Số GPKD vận tải: ${hv(co.gpkdSo)} &nbsp; Cấp ngày: ${dShort(co.gpkdNgay)} &nbsp; Bởi: ${hv(String(co.gpkdNoiCap || '').toUpperCase())}</p>
@@ -12238,7 +12239,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T13:10';
+const APP_BUILD = '2026-11-06T13:20';
 /* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
 const MEAV = {
   paint() {
