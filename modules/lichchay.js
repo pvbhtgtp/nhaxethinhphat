@@ -165,3 +165,4 @@ const dvPaxCols = [{ key: 'ghe', label: 'Ghế' }, { key: 'ma', label: 'Mã vé'
 Object.defineProperty(vLC, 'title', { configurable: true, get: () => DRV.on() ? 'Chuyến của tôi' : 'Đặt vé', set() { } });
 Object.defineProperty(vLC, 'desc', { configurable: true, get: () => DRV.on() ? 'Các chuyến được phân cho bạn, kèm danh sách khách để gọi' : 'Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe', set() { } });
 MODL.def('lichchay', vLC);
+MODL.load('dvplus').catch(e => console.warn('dvplus', e));   // Đặt vé+: khách chờ, gửi xác nhận, phím tắt, cọc vé đoàn
