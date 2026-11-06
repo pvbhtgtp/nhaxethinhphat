@@ -5328,7 +5328,7 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         return { tuyen, gio, v, e, trip, rb: r.bks || '', rl: r.laiXe || '', st, ok };
       });
       const cell = (m, raw) => m ? `<span class="sc-ok">${esc(m)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
-      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chữ đỏ là chỗ không khớp danh sách nên sẽ không được điền.</span></div>${Auth.can('lichchay', 'del') ? `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-delun checked> Sau khi áp dụng, xóa các chuyến không có xe và lái xe (của những tuyến có trong ảnh; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại)</label>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}</td></tr>`).join('')}</tbody></table></div>`;
+      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chữ đỏ là chỗ không khớp danh sách nên sẽ không được điền.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}</td></tr>`).join('')}</tbody></table></div>`;
       ap.hidden = !self.rows.some(r => r.ok);
     };
     ap.onclick = () => {
@@ -5336,19 +5336,20 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
       m.el.querySelectorAll('[data-i]:checked').forEach(cb => {
         const r = self.rows[+cb.dataset.i]; if (!r || !r.ok) return;
         if (r.trip) { if (!lcCan(r.trip)) return; if (r.v) r.trip.xeId = r.v.id; if (r.e) r.trip.laiXe = r.e.id; up++; }
-        else { DB.lichchay.push({ id: uid(), ngay: day, tuyen: r.tuyen, gio: r.gio, xeId: r.v ? r.v.id : '', laiXe: r.e ? r.e.id : '', soChuyen: 1, tienCong: 0 }); nw++; }
+        else { if (!r.e && Auth.can('lichchay', 'del')) return;   // giờ không có lái xe: không tạo (sẽ bị xóa ngay)
+          DB.lichchay.push({ id: uid(), ngay: day, tuyen: r.tuyen, gio: r.gio, xeId: r.v ? r.v.id : '', laiXe: r.e ? r.e.id : '', soChuyen: 1, tienCong: 0 }); nw++; }
       });
-      if (!up && !nw) return toast('Chưa chọn dòng nào để áp dụng', 'err');
-      let dl = 0, kp = 0; const dc = m.el.querySelector('[data-delun]');
-      if (dc && dc.checked && Auth.can('lichchay', 'del')) {
+      if (!up && !nw && !Auth.can('lichchay', 'del')) return toast('Chưa chọn dòng nào để áp dụng', 'err');
+      let dl = 0, kp = 0;
+      if (Auth.can('lichchay', 'del')) {   // tự xóa giờ không có tên lái xe, không hỏi
         const rs = new Set(self.rows.filter(r => r.tuyen).map(r => r.tuyen));
         const busy = l => { try { return (typeof dvBook === 'function' ? dvBook(l.id).length : DB.datve.filter(x => x.chuyen === l.id).length) || (typeof GH !== 'undefined' && GH.list ? GH.list(l.id).length : 0); } catch (e) { return 1; } };
-        const del = DB.lichchay.filter(l => l.ngay === day && rs.has(l.tuyen) && !l.xeId && !l.laiXe && (!lcGone(l) || lcAdmin()));
+        const del = DB.lichchay.filter(l => l.ngay === day && rs.has(l.tuyen) && !l.laiXe && (!lcGone(l) || lcAdmin()));
         const gone = new Set(del.filter(l => { if (busy(l)) { kp++; return false; } return true; }));
         dl = gone.size; if (dl) { gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); }
       }
       setTimeout(() => dhScan.archive(day), 300);
-      App.changed(); m.close(); toast(`Đã điền từ ảnh: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${dl ? `, xóa ${dl} chuyến không có thông tin` : ''}${kp ? ` (giữ ${kp} chuyến còn vé / hàng)` : ''}`);
+      App.changed(); m.close(); toast(`Đã điền từ ảnh: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${dl ? `, xóa ${dl} giờ không có lái xe` : ''}${kp ? ` (giữ ${kp} chuyến còn vé / hàng)` : ''}`);
     };
   }
 };
@@ -12460,7 +12461,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T17:25';
+const APP_BUILD = '2026-11-06T17:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
