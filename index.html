@@ -6849,13 +6849,14 @@ service cloud.firestore {
       return doc.matches('^me_.+') ? (admin() || (member() && doc == 'me_' + acl().get('emp', '-')))
         : doc.matches('^(v[0-9a-z]+_[0-9]+|c[0-9]+)$') ? admin()
         : doc.matches('^hf_.+') ? (admin() || (member() && acl().get('hs', true) == true))
+        : doc.matches('^nt_.+') ? (admin() || (member() && doc == 'nt_' + acl().get('emp', '-')))
         : doc.matches('^pa_lc_.+') ? has('vanhanh')
         : doc.matches('^p(m_)?nhansu(_.*)?$') ? has('nhansu')
         : doc.matches('^p(m_)?luong(_.*)?$') ? has('luong')
         : doc.matches('^p(m_)?vanhanh(_.*)?$') ? has('vanhanh')
         : user();
     }
-    function okWrite(doc) { return doc.matches('^me_.+') ? (has('nhansu') && has('luong') && has('vanhanh')) : doc.matches('^hf_.+') ? user() : okDoc(doc); }
+    function okWrite(doc) { return doc.matches('^me_.+') ? (has('nhansu') && has('luong') && has('vanhanh')) : doc.matches('^(hf|nt)_.+') ? user() : okDoc(doc); }
     function versioned(doc) { return doc == 'meta' || doc.matches('^pm_.+'); }
     match /nhaxe/{doc} {
       allow get: if user() && okDoc(doc);
@@ -8007,6 +8008,14 @@ ${z !== 1 ? `.shell,.modal{zoom:${z.toFixed(3)}}` : ''}`;
       <section class="ux-2"><div><h4>Mật độ</h4>${seg('den', [['compact', 'Gọn'], ['std', 'Chuẩn'], ['roomy', 'Thoáng']])}</div><div><h4>Bo góc</h4>${seg('rad', [['sm', 'Vuông'], ['md', 'Vừa'], ['lg', 'Tròn']])}</div></section>
       <section class="ux-2"><div><h4>Menu bên trái (máy tính)</h4>${seg('menu', [['pin', 'Luôn mở'], ['auto', 'Tự thu gọn']])}</div>
         <div><h4>Dùng ngoài trời</h4><label class="ux-sw"><input type="checkbox" data-out ${c.out ? 'checked' : ''}><span></span>Tương phản cao, chữ to hơn khi xem dưới nắng</label></div></section>
+      ${NOTI.me() ? (() => { const v = NOTI.cfg(); return `<section class="ux-vo"><h4>${ic('bell')} Thông báo giọng nói (Đặt vé, điều hành)</h4>
+        <label class="ux-sw"><input type="checkbox" data-vo="on" ${v.on ? 'checked' : ''}><span></span>Đọc to thông báo chuyến của tôi</label>
+        <div class="ux-2" style="margin-top:10px"><div><h4>Giọng đọc</h4><div class="ux-seg" data-vk="g"><button type="button" data-v="nam" class="${v.g === 'nam' ? 'on' : ''}">Giọng Nam</button><button type="button" data-v="nu" class="${v.g !== 'nam' ? 'on' : ''}">Giọng Nữ</button></div></div>
+          <div><h4>Tốc độ</h4><div class="ux-seg" data-vk="rate">${[[.85, 'Chậm'], [1, 'Vừa'], [1.2, 'Nhanh']].map(([x, t]) => `<button type="button" data-v="${x}" class="${v.rate === x ? 'on' : ''}">${t}</button>`).join('')}</div></div></div>
+        <div class="ux-2" style="margin-top:10px"><div><h4>Âm lượng</h4><input type="range" min="0.2" max="1" step="0.1" value="${v.vol}" data-vo="vol" style="width:100%"></div>
+          <div><h4>Giờ yên lặng (chỉ rung)</h4><div class="row" style="gap:6px"><input type="time" class="inp" data-vo="qs" value="${esc(v.qs)}"><span>→</span><input type="time" class="inp" data-vo="qe" value="${esc(v.qe)}"></div></div></div>
+        <h4 style="margin-top:10px">Loại thông báo muốn nghe</h4><div class="ux-vev">${NOTI.EV.map(([k, t]) => `<label><input type="checkbox" data-vev="${k}" ${v.ev[k] ? 'checked' : ''}> ${t}</label>`).join('')}</div>
+        <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button type="button" class="btn sm" data-votest>${ic('sparkle')} Nghe thử</button>${'Notification' in window && Notification.permission !== 'granted' ? `<button type="button" class="btn sm" data-voperm>${ic('bell')} Cho phép thông báo trên điện thoại</button>` : ''}</div></section>`; })() : ''}
       <p class="small muted" style="margin:4px 0 0">Lưu riêng cho tài khoản ${Auth.user ? '<b>' + esc(Auth.user.user) + '</b>' : 'này'}, đổi máy vẫn giữ. Không ảnh hưởng người khác; bản in luôn nền trắng.</p></div>`;
     const m = Modal.open({ title: 'Giao diện của tôi', width: 640, body, foot: `<button class="btn left" data-reset>${ic('refresh')} Khôi phục mặc định</button><button class="btn pri" data-done>${ic('check')} Xong</button>` });
     m.el.classList.add('ux-modal');
@@ -8022,6 +8031,16 @@ ${z !== 1 ? `.shell,.modal{zoom:${z.toFixed(3)}}` : ''}`;
     m.el.querySelector('.ux-cust input').addEventListener('input', e => { set({ acc: 'custom', custom: e.target.value }); mark(); });
     m.el.querySelector('[data-font]').onchange = e => set({ font: e.target.value });
     m.el.querySelector('[data-out]').onchange = e => set({ out: e.target.checked });
+    const setv = o => set({ vo: Object.assign({}, c.vo || {}, o) });
+    m.el.addEventListener('click', e => {
+      const sb = e.target.closest('[data-vk] button'); if (sb) { const k = sb.closest('[data-vk]').dataset.vk; setv({ [k]: k === 'rate' ? +sb.dataset.v : sb.dataset.v }); sb.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === sb)); return; }
+      if (e.target.closest('[data-votest]')) { NOTI.unlock(); const cf = NOTI.cfg(); return NOTI.speak(`Xin chào, đây là giọng ${cf.g === 'nam' ? 'nam' : 'nữ'}. Chuyến 5 giờ 30 Biên Hòa đi Vũng Tàu, thêm 2 khách, đón tại Ngã tư Vũng Tàu. Tổng 12 khách.`, true); }
+      if (e.target.closest('[data-voperm]')) { try { Notification.requestPermission().then(r => toast(r === 'granted' ? 'Đã bật thông báo trên điện thoại' : 'Chưa được phép hiện thông báo', r === 'granted' ? 'ok' : 'err')); } catch (x) { } }
+    });
+    m.el.addEventListener('change', e => {
+      const i = e.target.closest('[data-vo]'); if (i) setv({ [i.dataset.vo]: i.type === 'checkbox' ? i.checked : i.type === 'range' ? +i.value : i.value });
+      const ev = e.target.closest('[data-vev]'); if (ev) setv({ ev: Object.assign({}, NOTI.cfg().ev, { [ev.dataset.vev]: ev.checked }) });
+    });
     m.el.querySelector('[data-reset]').onclick = () => { Object.keys(c).forEach(k => delete c[k]); Object.assign(c, THM.DEF); set({}, true); mark(); };
     m.el.querySelector('[data-done]').onclick = () => { m.close(); THM.saveSync(); };
     const c0 = m.close; m.close = function () { THM.saveSync(); return c0.apply(this, arguments); };
@@ -8032,7 +8051,7 @@ try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () =
 addCSS = (orig => function (t) { orig(t); const s = document.head.lastElementChild; if (s && s.tagName === 'STYLE') { s._o = t; if (THM._t) s.textContent = THM.tx(t); } })(addCSS);
 addCSS(`/* ---- bảng Giao diện của tôi ---- */
 .ux-dlg{display:flex;flex-direction:column;gap:16px}.ux-dlg h4{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;font-weight:700}
-.ux-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ux-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.ux-vo h4 svg{width:14px;height:14px;vertical-align:-2px}.ux-vev{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13px}.ux-vev label{display:flex;gap:6px;align-items:center;cursor:pointer}@media(max-width:560px){.ux-vev{grid-template-columns:1fr}}
 .ux-seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;background:#f1f5f9;border-radius:12px}.ux-seg button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:#475467;padding:7px 12px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}.ux-seg button svg{width:15px;height:15px}
 .ux-seg button.on{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(15,23,42,.12)}
 .ux-pres{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.ux-pre{border:1.5px solid #e4e7ec;background:#fff;border-radius:14px;padding:8px;cursor:pointer;text-align:left;font:inherit;display:flex;flex-direction:column;gap:3px;transition:border-color .15s,box-shadow .15s,transform .15s}
@@ -12735,7 +12754,161 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T18:50';
+/* ===== THÔNG BÁO CHO LÁI XE: chuông + giọng nói (Nam / Nữ tự chọn trong Giao diện của tôi) =====
+   Máy nào thao tác vé / lịch chạy (có quyền Vận hành) tự so sánh trước–sau, soạn thông báo và ghi vào tài liệu riêng 'nt_<mã NV>' của từng
+   lái xe, phụ xe của đúng chuyến đó (mã thông báo cố định nên 2 máy cùng ghi không bị trùng). Máy của lái xe nghe tài liệu của chính mình:
+   hiện ở chuông, đọc to (app đang mở), hiện thông báo điện thoại (app chạy nền). Nhắc trước giờ chạy 30 phút do máy lái xe tự tính. */
+ICONS.bell = ICONS.bell || '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>';
+const NOTI = {
+  EV: [['dat', 'Khách đặt vé mới'], ['huy', 'Khách hủy vé'], ['doi', 'Đổi ghế / điểm đón'], ['chuyen', 'Khách chuyển chuyến'], ['hang', 'Gửi hàng lên chuyến'], ['dh', 'Điều hành đổi xe, giờ, phân công'], ['nhac', 'Nhắc trước giờ chạy 30 phút']],
+  cfg() { const v = (THM.get().vo) || {}; return { on: v.on !== false, g: v.g || 'nu', rate: +v.rate || 1, vol: v.vol == null ? 1 : +v.vol, ev: Object.assign(Object.fromEntries(NOTI.EV.map(x => [x[0], true])), v.ev || {}), qs: v.qs || '', qe: v.qe || '' }; },
+  me() { try { const e = DRV.me(); return e && e.id ? String(e.id) : ''; } catch (x) { return ''; } },
+  /* ---------- phía máy thao tác: so sánh trước–sau ---------- */
+  can: () => !!(Auth.user && typeof FB !== 'undefined' && FB.db && !(typeof FO !== 'undefined' && FO.on) && Array.isArray(DB.datve) && Auth.can('lichchay', 'view')),
+  snap() {
+    const td = D.today(), to = D.add(td, 2), T = {}, rt = l => ({ gio: l.gio || '', tuyen: l.tuyen || '', ngay: l.ngay, xe: l.xeId || '', lx: [l.laiXe, l.laiXe2, l.phuXe].filter(Boolean).map(String), v: {}, h: {} });
+    (DB.lichchay || []).forEach(l => { if (l.ngay >= td && l.ngay <= to && !l._me) T[l.id] = rt(l); });
+    (DB.datve || []).forEach(b => { const t = T[b.chuyen]; if (t && !b.huy) t.v[b.id] = { ghe: b.ghe || '', don: b.diemDon || '' }; });
+    (DB.guihang || []).forEach(h => { const t = T[h.chuyen]; if (t && !h.huy) t.h[h.id] = { ten: h.tenHang || 'hàng', noi: h.noiNhan || '' }; });
+    return T;
+  },
+  say1: t => String(t || '').replace(/^0?(\d{1,2}):(\d{2})$/, (m, h, mi) => +mi ? `${+h} giờ ${+mi}` : `${+h} giờ`),
+  rName: r => String(r || '').toLowerCase().replace(/(^|\s|-)\p{L}/gu, c => c.toUpperCase()).replace(/\s*-\s*/g, ' đi '),
+  diff(A, B) {
+    const out = [], td = D.today(), when = t => (t.ngay === td ? '' : t.ngay === D.add(td, 1) ? 'ngày mai, ' : F.date(t.ngay) + ', '), head = t => `Chuyến ${when(t)}${NOTI.say1(t.gio)} ${NOTI.rName(t.tuyen)}`, n = t => Object.keys(t.v).length;
+    const add = (t, tp, id, txt) => t.lx.forEach(emp => out.push({ emp, ev: { id, t: tp, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, txt, at: Date.now() } }));
+    const moved = {}; Object.keys(B).forEach(k => Object.keys(B[k].v).forEach(v => { moved[v] = k; }));
+    Object.entries(B).forEach(([k, b]) => {
+      const a = A[k]; if (!a) return;
+      const nw = Object.keys(b.v).filter(v => !a.v[v]), gone = Object.keys(a.v).filter(v => !b.v[v]);
+      const into = nw.filter(v => Object.keys(A).some(o => o !== k && A[o].v[v])), fresh = nw.filter(v => !into.includes(v));
+      if (fresh.length) { const dn = [...new Set(fresh.map(v => b.v[v].don).filter(Boolean))]; add(b, 'dat', 'd:' + k + ':' + fresh.sort().join(','), `${head(b)}, thêm ${fresh.length} khách${dn.length ? ', đón tại ' + dn.join(', ') : ''}. Tổng ${n(b)} khách.`); }
+      if (into.length) add(b, 'chuyen', 'c:' + k + ':' + into.sort().join(','), `${head(b)}, nhận thêm ${into.length} khách chuyển từ chuyến khác. Tổng ${n(b)} khách.`);
+      const out1 = gone.filter(v => moved[v] && moved[v] !== k), huy = gone.filter(v => !out1.includes(v)), gh = huy.map(v => a.v[v].ghe).filter(Boolean);
+      if (huy.length) add(b, 'huy', 'h:' + k + ':' + huy.sort().join(','), `${head(b)}, hủy ${huy.length} khách${gh.length ? ' ghế ' + gh.join(', ') : ''}. Còn ${n(b)} khách.`);
+      if (out1.length) { const to = B[moved[out1[0]]]; add(b, 'chuyen', 'o:' + k + ':' + out1.sort().join(','), `${head(b)}, ${out1.length} khách chuyển sang chuyến ${NOTI.say1(to.gio)}. Còn ${n(b)} khách.`); }
+      Object.keys(b.v).filter(v => a.v[v]).forEach(v => { const x = a.v[v], y = b.v[v];
+        if (x.ghe !== y.ghe) add(b, 'doi', 'g:' + v + ':' + y.ghe, `${head(b)}, khách ghế ${x.ghe} đổi sang ghế ${y.ghe}.`);
+        if (x.don !== y.don && y.don) add(b, 'doi', 'p:' + v + ':' + y.don, `${head(b)}, khách ghế ${y.ghe} đổi điểm đón sang ${y.don}.`); });
+      const hn = Object.keys(b.h).filter(h => !a.h[h]); if (hn.length) add(b, 'hang', 'k:' + k + ':' + hn.sort().join(','), `${head(b)} có ${hn.length} kiện hàng gửi${b.h[hn[0]].noi ? ' ' + b.h[hn[0]].noi : ''}.`);
+      if (a.xe !== b.xe && b.xe) { const v = (DB.vehicles || []).find(x => x.id === b.xe); add(b, 'dh', 'x:' + k + ':' + b.xe, `${head(b)} đổi sang xe ${v ? v.bks : ''}.`); }
+      if (a.gio !== b.gio) add(b, 'dh', 't:' + k + ':' + b.gio, `Chuyến ${NOTI.rName(b.tuyen)} đổi giờ từ ${NOTI.say1(a.gio)} sang ${NOTI.say1(b.gio)}.`);
+      b.lx.filter(x => !a.lx.includes(x)).forEach(emp => out.push({ emp, ev: { id: 'a:' + k + ':' + emp, t: 'dh', ngay: b.ngay, gio: b.gio, tuyen: b.tuyen, txt: `Bạn được phân công ${head(b).toLowerCase()}. Hiện có ${n(b)} khách.`, at: Date.now() } }));
+    });
+    return out;
+  },
+  async send(list) {
+    const by = {}; list.forEach(x => { (by[x.emp] = by[x.emp] || {})[x.ev.id.replace(/[.~*/\[\]`]/g, '_')] = x.ev; });
+    for (const [emp, ev] of Object.entries(by)) { try { await FB.col().doc('nt_' + emp).set({ t: 'nt', emp, ev }, { merge: true }); } catch (e) { console.warn('NOTI.send', e); } }
+  },
+  track() {
+    if (!NOTI.can()) { NOTI.prev = null; return; }
+    const cur = NOTI.snap(); if (NOTI.prev) { const L = NOTI.diff(NOTI.prev, cur); if (L.length) NOTI.send(L); } NOTI.prev = cur;
+  },
+  /* ---------- phía lái xe: nhận, chuông, giọng nói ---------- */
+  K: () => 'tgtp:nt:' + NOTI.me(),
+  list() { try { return JSON.parse(localStorage.getItem(NOTI.K()) || '[]'); } catch (e) { return []; } },
+  save(L) { try { localStorage.setItem(NOTI.K(), JSON.stringify(L.slice(0, 60))); } catch (e) { } NOTI.bell(); },
+  got(ev) {
+    const L = NOTI.list(); if (L.some(x => x.id === ev.id)) return; L.unshift({ ...ev, rd: 0 }); NOTI.save(L);
+    const c = NOTI.cfg(); if (!c.ev[ev.t]) return;
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { try { navigator.serviceWorker.ready.then(r => r.showNotification('Nhà xe Thịnh Phát', { body: ev.txt, tag: ev.id, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: [200, 100, 200] })); } catch (e) { } }
+    NOTI.speak(ev.txt);
+  },
+  quiet() { const c = NOTI.cfg(); if (!c.qs || !c.qe) return false; const t = new Date().toTimeString().slice(0, 5); return c.qs <= c.qe ? t >= c.qs && t < c.qe : t >= c.qs || t < c.qe; },
+  listen() {
+    const id = NOTI.me(); if (!id || !Auth.user || typeof FB === 'undefined' || !FB.db || (typeof FO !== 'undefined' && FO.on)) return;
+    if (NOTI._on === id) return; try { NOTI._un && NOTI._un(); } catch (e) { } NOTI._on = id; const t0 = Date.now() - 6 * 3600e3; let first = true;
+    const ref = FB.col().doc('nt_' + id);
+    NOTI._un = ref.onSnapshot(s => {
+      const ev = (s.exists && s.data().ev) || {}, E = Object.entries(ev).filter(x => x[1] && x[1].id).sort((a, b) => a[1].at - b[1].at), L = E.map(x => x[1]);
+      if (first) { first = false; const have = new Set(NOTI.list().map(x => x.id)), add = L.filter(x => x.at > t0 && !have.has(x.id)); if (add.length) NOTI.save([...add.reverse().map(x => ({ ...x, rd: 0 })), ...NOTI.list()]); }
+      else L.forEach(x => NOTI.got(x));
+      if (E.length > 80) { try { const a = []; E.slice(0, E.length - 50).forEach(([k]) => a.push(new firebase.firestore.FieldPath('ev', k), firebase.firestore.FieldValue.delete())); ref.update(...a).catch(() => { }); } catch (e) { } }   // giữ 50 thông báo gần nhất
+    }, () => { NOTI._on = ''; });
+  },
+  remind() {
+    const id = NOTI.me(); if (!id) return; const td = D.today(), now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+    (DB.lichchay || []).filter(l => l.ngay === td && [l.laiXe, l.laiXe2, l.phuXe].map(String).includes(id) && l.gio).forEach(l => {
+      const [h, mi] = String(l.gio).split(':').map(Number), d = h * 60 + mi - m; if (d < 25 || d > 31) return;
+      const v = (DB.vehicles || []).find(x => x.id === l.xeId), nv = Array.isArray(DB.datve) && DB.datve.some(b => b.chuyen === l.id) ? DB.datve.filter(b => b.chuyen === l.id && !b.huy).length : (l.ve || 0);
+      NOTI.got({ id: 'n:' + l.id, t: 'nhac', ngay: l.ngay, gio: l.gio, tuyen: l.tuyen, at: Date.now(), txt: `Còn 30 phút nữa chạy chuyến ${NOTI.say1(l.gio)} ${NOTI.rName(l.tuyen)}${v ? ', xe ' + v.bks : ''}, ${nv} khách.` });
+    });
+  },
+  /* ---------- giọng đọc: Gemini (giọng Nam / Nữ rõ ràng) → giọng có sẵn trên máy ---------- */
+  VOICE: { nam: 'Charon', nu: 'Kore' },
+  ac: null,
+  unlock() { try { if (!NOTI.ac) NOTI.ac = new (window.AudioContext || window.webkitAudioContext)(); if (NOTI.ac.state === 'suspended') NOTI.ac.resume(); } catch (e) { } },
+  speak(txt, force) {
+    const c = NOTI.cfg(); if (!force && (!c.on || NOTI.quiet())) return;
+    NOTI._q = (NOTI._q || Promise.resolve()).then(() => NOTI.speak1(txt, c)).catch(() => { });
+    return NOTI._q;
+  },
+  async speak1(txt, c) {
+    if (AIX.ok() && !(NOTI._ttsOff > Date.now())) {
+      try {
+        const body = { contents: [{ parts: [{ text: `Đọc bằng tiếng Việt, giọng ${c.g === 'nam' ? 'nam' : 'nữ'} miền Nam, rõ ràng, ${c.rate < 1 ? 'chậm rãi' : c.rate > 1 ? 'hơi nhanh' : 'tốc độ vừa'}: ${txt}` }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: NOTI.VOICE[c.g] || 'Kore' } } } } };
+        let j = null; for (const md of ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts']) { try { j = await AIX.call(md, body, AIX.cfg().key); break; } catch (e) { if (e.code !== 'no_model') throw e; } }
+        const part = j && ((((j.candidates || [])[0] || {}).content || {}).parts || []).find(p => p.inlineData || p.inline_data);
+        if (part) { const d = part.inlineData || part.inline_data, rate = +((String(d.mimeType || d.mime_type || '').match(/rate=(\d+)/) || [])[1]) || 24000; await NOTI.pcm(d.data, rate, c.vol); return; }
+      } catch (e) { NOTI._ttsOff = Date.now() + 30 * 60e3; }   // giọng AI lỗi / hết lượt: 30 phút dùng giọng trên máy
+    }
+    await NOTI.local(txt, c);
+  },
+  pcm(b64, rate, vol) {
+    NOTI.unlock(); const ac = NOTI.ac; if (!ac) return Promise.resolve();
+    const bin = atob(b64), n = bin.length >> 1, buf = ac.createBuffer(1, n, rate), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v >= 32768) v -= 65536; ch[i] = v / 32768; }
+    const src = ac.createBufferSource(), g = ac.createGain(); g.gain.value = vol; src.buffer = buf; src.connect(g).connect(ac.destination);
+    return new Promise(ok => { src.onended = ok; src.start(); setTimeout(ok, n / rate * 1000 + 500); });
+  },
+  local(txt, c) {
+    return new Promise(ok => {
+      try {
+        if (!('speechSynthesis' in window)) return ok(); const V = speechSynthesis.getVoices().filter(v => /^vi/i.test(v.lang));
+        const male = V.find(v => /nam\b|male|vid|vic|minh/i.test(v.name)), fem = V.find(v => /n[ữu]\b|female|gft|vif|linh|hoai|mai/i.test(v.name));
+        const u = new SpeechSynthesisUtterance(txt); u.lang = 'vi-VN'; u.voice = (c.g === 'nam' ? male : fem) || V[0] || null; u.rate = c.rate; u.volume = c.vol;
+        if (c.g === 'nam' && !male) u.pitch = .7; u.onend = ok; u.onerror = ok; speechSynthesis.speak(u); setTimeout(ok, 15000);
+      } catch (e) { ok(); }
+    });
+  },
+  /* ---------- chuông trên thanh trên cùng ---------- */
+  bell() {
+    const host = $('#tbRight') || $('.topbar'); if (!host || !NOTI.me()) return;
+    let b = $('#ntBell');
+    if (!b) { const h = '<button class="nt-bell" id="ntBell" type="button" title="Thông báo">' + ic('bell') + '<em></em></button>', au = $('#auMe'); au && au.parentNode === host ? au.insertAdjacentHTML('beforebegin', h) : host.insertAdjacentHTML('beforeend', h); b = $('#ntBell'); if (!b) return; b.onclick = e => { e.stopPropagation(); NOTI.unlock(); NOTI.panel(); }; }
+    const n = NOTI.list().filter(x => !x.rd).length, em = b.querySelector('em'); em.textContent = n > 99 ? '99+' : n || ''; em.hidden = !n; b.classList.toggle('on', !!n);
+  },
+  panel() {
+    let p = $('#ntPanel'); if (p) { p.remove(); return; }
+    const L = NOTI.list(), lb = Object.fromEntries(NOTI.EV), tm = x => { const d = new Date(x.at); return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + (d.toDateString() === new Date().toDateString() ? '' : ' ' + d.toLocaleDateString('vi-VN')); };
+    document.body.insertAdjacentHTML('beforeend', `<div class="nt-panel" id="ntPanel" data-runtime="1"><div class="nt-h"><b>Thông báo</b>${L.length ? '<button class="btn sm" data-ntall>Đánh dấu đã đọc</button>' : ''}</div><div class="nt-l">${L.length ? L.map(x => `<div class="nt-i ${x.rd ? '' : 'new'}" data-ntid="${esc(x.id)}"><div class="nt-t">${esc(lb[x.t] || 'Thông báo')}<span>${esc(tm(x))}</span></div><div>${esc(x.txt)}</div><button class="nt-play" data-ntplay title="Đọc lại">${ic('sparkle')}</button></div>`).join('') : '<div class="empty">Chưa có thông báo.</div>'}</div><div class="nt-f"><button class="btn sm" data-act="uxOpen">${ic('settings')} Cài đặt giọng đọc</button></div></div>`);
+    p = $('#ntPanel');
+    p.addEventListener('click', e => {
+      e.stopPropagation(); NOTI.unlock();
+      if (e.target.closest('[data-ntall]')) { NOTI.save(NOTI.list().map(x => ({ ...x, rd: 1 }))); p.remove(); return; }
+      if (e.target.closest('[data-act]')) { p.remove(); return ACT.uxOpen(); }
+      const it = e.target.closest('[data-ntid]'); if (!it) return;
+      const L2 = NOTI.list(), x = L2.find(q => q.id === it.dataset.ntid); if (!x) return;
+      if (e.target.closest('[data-ntplay]')) return NOTI.speak(x.txt, true);
+      x.rd = 1; NOTI.save(L2); it.classList.remove('new');
+    });
+    setTimeout(() => document.addEventListener('click', function off(e) { if (!e.target.closest('#ntPanel')) { const q = $('#ntPanel'); q && q.remove(); document.removeEventListener('click', off); } }), 0);
+  }
+};
+addCSS(`.nt-bell{position:relative;border:0;background:none;cursor:pointer;width:38px;height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;color:#475467;margin-right:4px;flex:none}.nt-bell:hover{background:#f1f5f9}.nt-bell svg{width:21px;height:21px}
+.nt-bell em{position:absolute;top:3px;right:2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ef4444;color:#fff;font:700 10.5px/17px system-ui;font-style:normal;text-align:center}.nt-bell em[hidden]{display:none}.nt-bell.on svg{animation:ntRing 1.2s ease 2}
+@keyframes ntRing{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-5deg)}}
+.nt-panel{position:fixed;top:64px;right:14px;width:min(380px,calc(100vw - 20px));max-height:70vh;display:flex;flex-direction:column;background:#fff;border:1px solid #e4e7ec;border-radius:16px;box-shadow:0 18px 48px rgba(15,23,42,.18);z-index:260;overflow:hidden}
+.nt-h,.nt-f{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #eef2f6}.nt-f{border-bottom:0;border-top:1px solid #eef2f6}.nt-l{overflow:auto}
+.nt-i{position:relative;padding:10px 44px 10px 14px;border-bottom:1px solid #f1f5f9;font-size:13.5px;line-height:1.45;cursor:pointer}.nt-i.new{background:#eff6ff}.nt-t{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;font-weight:700;color:#475467;margin-bottom:2px}.nt-t span{font-weight:500;color:#94a3b8}
+.nt-play{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#f1f5f9;border-radius:10px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center}.nt-play svg{width:15px;height:15px}`);
+{ const sc0 = Store.changed; Store.changed = function () { const r = sc0.apply(this, arguments); try { NOTI.track(); } catch (e) { console.warn('NOTI.track', e); } return r; }; }
+setInterval(() => { try { if (NOTI.can()) NOTI.prev = NOTI.snap(); else NOTI.prev = null; } catch (e) { } }, 2500);   // bản nền mới nhất (kể cả thay đổi từ máy khác) → chỉ báo thay đổi do chính máy này làm
+setInterval(() => { try { NOTI.listen(); NOTI.bell(); NOTI.remind(); } catch (e) { } }, 30000); setTimeout(() => { try { NOTI.listen(); NOTI.bell(); } catch (e) { } }, 4000);
+['pointerdown', 'keydown'].forEach(t => window.addEventListener(t, () => NOTI.unlock(), { once: true, capture: true }));
+{ const ch3 = Auth.chip; Auth.chip = function () { const r = ch3.apply(this, arguments); try { NOTI.bell(); } catch (e) { } return r; }; }
+const APP_BUILD = '2026-11-06T19:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
