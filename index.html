@@ -12121,7 +12121,7 @@ const PARTS = {
   core: { label: 'Dữ liệu chung', keys: [] },
   nhansu: { label: 'Hồ sơ nhân sự', keys: ['employees'] },
   luong: { label: 'Chấm công & lương', keys: ['cham', 'extra'], match: /^(luong|tamUng|tamung|congNo|congno|thue|bangLuong)/ },
-  vanhanh: { label: 'Vận hành', keys: ['lichchay', 'suachua', 'nhienlieu', 'kmxe', 'guihang', 'hdvc', 'lylich', 'lcBo'] }
+  vanhanh: { label: 'Vận hành', keys: ['lichchay', 'suachua', 'nhienlieu', 'kmxe', 'guihang', 'hdvc', 'lylich', 'lcBo', 'phanAnh'] }
 };
 /* trường nhạy cảm của nhân viên: chỉ nằm ở phần nhansu; danh bạ rút gọn (nvPub) ở core bỏ các trường này */
 const NV_PRIV = /^(luong|hd(AnTrua|Xang|DienThoai|Khac|Tu|Den)$|pc[A-Z]|phuCap|mst$|soNPT|soBHXH|bhxh|cccd|diaChi|stk|nganHang|soHD$|loaiHD$|moTaCV|ketHon|conKetHon|trinhDo|pw$|matKhau|ghiChuRieng|khongLuong|thaiSan|kyLuat|nangLuong)/;
@@ -12197,6 +12197,8 @@ Object.assign(MODL.parts, { dashboard: ['core', 'vanhanh'], lichchay: ['core', '
   phuongtien: ['core', 'vanhanh'], nhienlieu: ['core', 'vanhanh'], suachua: ['core', 'vanhanh'], kmxe: ['core', 'vanhanh'], lylich: ['core', 'vanhanh'], hdvc: ['core', 'vanhanh'],
   nhanvien: ['core', 'nhansu'], hopdong: ['core', 'nhansu'], chamcong: ['core', 'luong'], bangluong: ['core', 'luong', 'nhansu'], thue: ['core', 'luong', 'nhansu'],
   cuatoi: ['core', 'vanhanh', 'luong'], hoso: ['core'], scan: ['core'], users: ['core'], caidat: ['core'], data: ['core'] });
+/* module mới (cách mới): file riêng modules/phananh.js, quyền theo Điều hành, dữ liệu phanAnh ở phần Vận hành */
+MODL.reg('phananh', { title: 'Phản ánh & sự cố', icon: 'message', group: 'Vận hành', after: 'baocaovt', mod: 'dieuhanh', parts: ['core', 'vanhanh'], desc: 'Sổ tiếp nhận, xử lý phản ánh của hành khách · sổ theo dõi vi phạm, tai nạn của lái xe (NĐ 158/2024)' });
 
 /* ===== MỨC 2 · phiên (c): TỜ CÁ NHÂN (ME) + TẢI THEO KHOẢNG NGÀY — mới có code, chưa bật (theo PS.on) =====
    Tờ cá nhân 'me_<mã NV>': chỉ những gì liên quan tới chính người đó → lái xe / nhân viên chỉ tải tờ này + dữ liệu chung rút gọn.
@@ -12235,7 +12237,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T12:35';
+const APP_BUILD = '2026-11-06T12:55';
 /* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
 const MEAV = {
   paint() {
