@@ -12255,7 +12255,7 @@ const MED = {
     const img = (lb, u) => `<figure class="med-img"><figcaption>${lb}</figcaption>${u ? `<img src="${esc(u)}" alt="" data-zoom>` : '<div class="med-no">Chưa có ảnh</div>'}</figure>`;
     const hist = (loai, cols) => { let L = []; try { L = llRecs(e.id, loai); } catch (z) { } return L.length ? `<div class="tbl-wrap free" style="margin-top:12px"><table class="tbl compact"><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${L.map(r => `<tr>${cols.map(c => `<td class="wrap">${c[2] === 'date' ? d(r[c[0]]) : esc(r[c[0]] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="muted" style="margin-top:12px">Chưa có bản ghi nào trong Lý lịch hành nghề.</div>'; };
     const P = {
-      gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>${(x.th || e.theNVTruoc || (() => { try { return llIsLai(e); } catch (z) { return false; } })()) ? `<div class="med-sec">${ic('shield')} Thẻ tập huấn nghiệp vụ</div><div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Nội dung', x.th ? esc(x.th.noiDung || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ tập huấn (mặt trước)', e.theNVTruoc)}</div>` : ''}`],
+      gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>${(x.th || e.theNVTruoc || (() => { try { return llIsLai(e); } catch (z) { return false; } })()) ? `<div class="med-sec">${ic('shield')} Thẻ tập huấn nghiệp vụ${e.theNVTruoc && Auth.can('lylich', 'add') ? `<button class="btn sm" style="margin-left:auto" data-thr>${ic('sparkle')} Đọc từ ảnh thẻ</button>` : ''}</div><div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Nội dung', x.th ? esc(x.th.noiDung || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ tập huấn (mặt trước)', e.theNVTruoc)}</div>` : ''}`],
       thenv: ['Thẻ nghiệp vụ lái xe', `<div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ nghiệp vụ (mặt trước)', e.theNVTruoc)}</div>`],
       cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số CCCD', esc(e.cccd || ''))}${v('Họ và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Địa chỉ thường trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
       sk: ['Giấy khám sức khỏe', `<div class="med-kv">${v('Lần khám gần nhất', x.sk ? d(x.sk.ngay) : '')}${v('Nơi khám', x.sk ? esc(x.sk.noi || '') : '')}${v('Tình trạng sức khỏe', x.sk ? esc(x.sk.tt || '') : '')}${v('Hạn giấy khám', x.skH ? d(x.skH) + ' ' + x.st(x.skH) : '')}</div><div class="med-h">Lịch sử khám sức khỏe</div>${hist('sk', [['ngay', 'Ngày khám', 'date'], ['noi', 'Nơi khám'], ['tt', 'Tình trạng'], ['hetHan', 'Hạn', 'date']])}`],
@@ -12267,6 +12267,9 @@ const MED = {
     const urls = [], gx = k === 'gplx' ? ['gplx', 'theNV'].map(t => `${DOCH.can(t) ? `<div class="med-sec">${ic('refresh')} ${DOCH.T[t].label}: thay giấy mới <button class="btn sm" style="margin-left:auto" data-dn="${t}">${ic('plus')} Thêm giấy mới</button></div>` : ''}${DOCH.hist(e, t, urls)}`).join('') : '';
     const md = Modal.open({ title: P[0] + ' · ' + esc(e.ten || ''), width: 720, body: `<div class="med">${P[1]}${gx}</div>`, onClose: () => urls.forEach(u => URL.revokeObjectURL(u)) });
     if (k === 'gplx') DOCH.bind(md.el, e, () => { md.close(); MED.open(k, e, MED.ctx(e)); });
+    const again = () => { if (document.body.contains(md.el)) { md.close(); MED.open(k, e, MED.ctx(e)); } };
+    const rb = md.el.querySelector('[data-thr]'); if (rb) rb.onclick = () => { rb.disabled = true; THR.read(e, e.theNVTruoc).then(ok => ok ? again() : (rb.disabled = false)); };
+    if ((k === 'gplx' || k === 'thenv') && e.theNVTruoc && !x.th && Auth.can('lylich', 'add') && !THR.tried.has(e.id)) { THR.tried.add(e.id); THR.read(e, e.theNVTruoc, true).then(ok => ok && again()); }   // có ảnh thẻ mà chưa có dữ liệu: tự đọc 1 lần
     md.el.querySelectorAll('[data-zoom]').forEach(i => i.onclick = () => Modal.open({ title: P[0], width: 1000, body: `<img src="${i.src}" style="width:100%;border-radius:8px">` }));
     const hb = md.el.querySelector('[data-hdv]'); if (hb) hb.onclick = () => HDV.open(e);
   }
@@ -12302,7 +12305,7 @@ const DOCH = {
         if (Object.keys(old.f).length || old.han) DOCH.ls(o, t).unshift(old);
         T.f.forEach(([k]) => { o[k] = v[k] || ''; }); if (T.han) o[T.han] = v[T.han]; (T.x || []).forEach(([k]) => { o[k] = v[k] || ''; });
         App.changed(); toast('Đã lưu giấy mới, giấy cũ chuyển vào lịch sử', 'ok'); done && done();
-        DOCH.toHS(o, t);
+        DOCH.toHS(o, t); if (t === 'theNV' && o.theNVTruoc) THR.read(o, o.theNVTruoc, true);
       } });
   },
   /* Giấy mới tự chép vào Lưu trữ hồ sơ: [Năm] › 03. Phương tiện › <nhóm> › <biển số>  hoặc  [Năm] › 02. Nhân sự › <nhóm> › <tên>; bản lưu trước của cùng loại tự thành "Bản cũ" và ẩn */
@@ -12337,6 +12340,38 @@ const DOCH = {
 };
 addCSS(`.hs-an{cursor:pointer;color:var(--p);text-decoration:underline}.dh-ls{margin-top:10px;border-top:1px dashed #cbd5e1;padding-top:8px}.dh-h{font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px}.dh-r{border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;margin-bottom:6px}.dh-r.an{opacity:.7}
 .dh-t{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}.dh-chk{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;white-space:nowrap}.dh-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}`);
+/* ===== Đọc thẻ / giấy chứng nhận tập huấn nghiệp vụ bằng AI → ghi vào Lý lịch hành nghề (loại 'th') ===== */
+const THR = {
+  tried: new Set(),
+  ask: `Đây là ảnh Giấy chứng nhận / thẻ tập huấn nghiệp vụ cho lái xe, nhân viên phục vụ trên xe (Việt Nam). Trả về JSON một object:
+- "hoTen": họ và tên; "so": số giấy chứng nhận;
+- "tuNgay", "denNgay": ngày bắt đầu và kết thúc lớp tập huấn (dòng "Từ … đến …"), YYYY-MM-DD;
+- "ngayCap": ngày ký cấp giấy, YYYY-MM-DD;
+- "donVi": đơn vị tổ chức tập huấn (dòng "Đã qua lớp tập huấn tại …" hoặc tên đơn vị cấp);
+- "noiDung": nội dung / loại tập huấn nếu có ghi;
+- "hetHan": ngày giấy chứng nhận có giá trị đến (dòng "GCN có giá trị đến …"), YYYY-MM-DD.
+Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng.`,
+  async read(e, url, quiet) {
+    if (!e || !url || !Auth.can('lylich', 'add')) return false;
+    const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
+    if (!sample || !lim || !lim.images) { if (!quiet) AIX.need('Đọc thẻ tập huấn'); return false; }
+    toast('Đang đọc thẻ tập huấn…', '', 12000); const tw = rootEl('toasts').lastElementChild, tOff = () => { try { tw && tw.remove(); } catch (z) { } };
+    let r; try { const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob(); r = await sample.json(THR.ask, { images: [blob], modelTier: 'default', cache: false }); }
+    catch (x) { tOff(); toast('Không đọc được ảnh thẻ tập huấn' + (x && x.code && sample.gemini ? ': ' + AIX.msg(x) : ''), 'err', 6000); return false; }
+    tOff(); const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
+    r = r || {}; const tu = dt(r.tuNgay), den = dt(r.denNgay), ngay = tu || den || dt(r.ngayCap), han = dt(r.hetHan);
+    if (!ngay && !han) { toast('Không đọc được ngày trên thẻ tập huấn, bạn nhập tay trong Lý lịch hành nghề', 'err', 6000); return false; }
+    const d = { ngay: ngay || '', donVi: String(r.donVi || '').trim(), hetHan: han,
+      noiDung: String(r.noiDung || '').trim() || ('Tập huấn nghiệp vụ' + (tu && den ? ` từ ${F.date(tu)} đến ${F.date(den)}` : '') + (r.so ? ` · GCN số ${String(r.so).trim()}` : '')) };
+    DB.lylich = DB.lylich || [];
+    const ex = llRecs(e.id, 'th').find(x => (ngay && x.ngay === ngay) || (han && x.hetHan === han));
+    if (ex) Object.keys(d).forEach(k => { if (d[k] && !ex[k]) ex[k] = d[k]; });
+    else DB.lylich.push({ id: uid(), lai: e.id, loai: 'th', ...d, nguoiTao: dvLog.who(), tg: D.today() });
+    App.changed(); toast(`Đã đọc thẻ tập huấn${d.donVi ? ' · ' + esc(d.donVi) : ''}${han ? ' · hạn ' + F.date(han) : ''}. Đã ghi vào Lý lịch hành nghề, vui lòng kiểm tra lại`, 'ok', 7000);
+    if (typeof LL !== 'undefined' && LL.refresh) try { LL.refresh(); } catch (x) { }
+    return true;
+  }
+};
 /* ===== Xem bản hợp đồng dạng trang giấy (bảo mật) =====
    Trình duyệt không thể chặn tuyệt đối việc chụp màn hình (nút cứng điện thoại, máy ảnh khác) — chỉ làm khó và truy vết:
    in chìm tên + SĐT người xem + giờ xem, chặn chọn chữ/sao chép/chuột phải/in/lưu, làm mờ khi phím PrintScreen,
@@ -12569,7 +12604,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T17:45';
+const APP_BUILD = '2026-11-06T17:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
