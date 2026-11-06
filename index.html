@@ -8966,6 +8966,7 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
       const s = await FB.col().doc('me_' + PS.emp).get(); if (!s.exists) return; const d = JSON.parse(s.data().d); data._me = d;
       if (!have.includes('nhansu') && d.nv) { const L = data.employees || (data.employees = []), i = L.findIndex(e => String(e.id) === String(PS.emp)); if (i >= 0) L[i] = Object.assign({}, L[i], d.nv); else L.push(d.nv); }
       if (!have.includes('vanhanh') && Array.isArray(d.trips)) { const L = data.lichchay || (data.lichchay = []), ids = new Set(L.map(r => r.id)); d.trips.forEach(t => { if (!ids.has(t.id)) L.push({ id: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, xeId: t.xeId, laiXe: t.laiXe, laiXe2: t.laiXe2, _me: 1 }); }); }   // chuyến của chính mình
+      if (!have.includes('vanhanh') && Array.isArray(d.hd)) { const L = data.hdvc || (data.hdvc = []), ids = new Set(L.map(r => r.id)); d.hd.forEach(c => { if (!ids.has(c.id)) L.push({ ...c, _me: 1 }); }); }   // hợp đồng vận chuyển của chính mình
       if (!have.includes('vanhanh') && Array.isArray(d.ll)) { const L = data.lylich || (data.lylich = []), ids = new Set(L.map(r => r.id)); d.ll.forEach(r => { if (!ids.has(r.id)) L.push(r); }); }   // lý lịch hành nghề của chính mình
       if (!have.includes('luong') && d.cham) { data.cham = data.cham || {}; Object.keys(d.cham).forEach(m => { (data.cham[m] = data.cham[m] || {})[PS.emp] = d.cham[m]; }); }
     } catch (e) { }
@@ -12324,6 +12325,7 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       const XE = (DB.vehicles || []).filter(v => !v.ngung && (xT.has(v.id) || xU.has(v.id) || [v.laiXe1, v.laiXe2].map(String).includes(String(e.id)))).sort((a, b) => xT.has(b.id) - xT.has(a.id) || String(a.bks).localeCompare(String(b.bks)));
       const xr = XE.map(v => `<tr class="me-row" data-mexe="${esc(v.id)}" title="Bấm để xem giấy tờ xe"><td><b>${esc(v.bks || '')}</b>${xT.has(v.id) ? ' <span class="badge b-p">Hôm nay</span>' : ''}${v.loai ? ' <span class="muted small">' + esc(v.loai) + (+v.soCho ? ' · ' + v.soCho + ' chỗ' : '') + '</span>' : ''}
         <div class="small" style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px">${[['Cà vẹt', v.cavet, ''], ['Đăng kiểm', v.dangKiem, v.hhDangKiem], ['BHDS', v.bhds, v.hhBHDS], ['BHVC', v.bhvc, v.hhBHVC], ['Phù hiệu', v.phuHieuF, v.hhPhuHieu]].map(([n, f, h]) => `<span style="white-space:nowrap">${n} ${h ? st(h) : f ? '<span class="badge b-green">Có</span>' : '<span class="badge b-gray">Chưa có</span>'}</span>`).join('')}</div></td><td class="r" style="width:1%"><span class="me-go">›</span></td></tr>`).join('');
+      const HV = (DB.hdvc || []).filter(c => [c.laiXe1, c.laiXe2].map(String).includes(String(e.id)) && String(c.ngayTra || c.ngayDon || '9999') >= D.add(today, -90)).sort((a, b) => (b.ngayDon >= today) - (a.ngayDon >= today) || (a.ngayDon >= today ? String(a.ngayDon).localeCompare(String(b.ngayDon)) : String(b.ngayDon).localeCompare(String(a.ngayDon)))).slice(0, 20);
       /* chuyến: một bảng — sắp chạy (7 ngày) trên, đã chạy trong tháng dưới */
       const T = all.filter(l => String(l.ngay).startsWith(ym) && l.ngay < today).sort((a, b) => (b.ngay + b.gio).localeCompare(a.ngay + a.gio)), nv = l => (DB.datve || []).filter(b => b.chuyen === l.id && !b.huy).length;
       const tr = (l, tag) => `<tr class="${l.ngay === today ? 'me-today' : ''}"><td>${F.date(l.ngay)}</td><td><b>${esc(l.gio || '')}</b></td><td>${esc(l.tuyen || '')}</td><td>${esc(veh(l.xeId))}</td><td class="r">${nv(l)}</td><td>${tag || ''}</td></tr>`;
@@ -12332,6 +12334,7 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       const html = `<div class="me-stack">${W.length ? `<div class="card me-warn"><div class="card-h"><h3>${ic('alert')} Việc cần chú ý</h3><span class="sub">${W.length} mục</span></div><div class="card-b"><ul class="me-w">${W.join('')}</ul></div></div>` : ''}
         <div class="card"><div class="card-h"><h3>Chuyến của tôi</h3><span class="sub">${up.length} sắp chạy · ${T.length} đã chạy ${F.month(ym).toLowerCase()}</span></div><div class="card-b p0">${tb ? `<div class="me-trips"><table class="tbl compact"><thead><tr><th>Ngày</th><th>Giờ</th><th>Tuyến</th><th>Xe</th><th class="r">Khách</th><th></th></tr></thead><tbody>${tb}</tbody></table></div>` : '<div class="empty">Chưa có chuyến.</div>'}</div></div>
         <div class="card"><div class="card-h"><h3>Giấy tờ & hồ sơ cá nhân</h3><span class="sub">Bấm từng dòng để xem chi tiết, ảnh giấy tờ</span></div><div class="card-b p0"><table class="tbl compact me-docs"><tbody>${rows}</tbody></table></div></div>
+        ${HV.length ? `<div class="card"><div class="card-h"><h3>Hợp đồng vận chuyển của tôi</h3><span class="sub">${HV.length} hợp đồng · bấm để xem</span></div><div class="card-b p0"><table class="tbl compact me-docs"><tbody>${HV.map(c => { const v = (DB.vehicles || []).find(x => x.id === c.xeId); return `<tr class="me-row${c.ngayDon === today ? ' me-today' : ''}" data-mehd="${esc(c.id)}"><td><b>${c.ngayDon ? F.date(c.ngayDon) : '—'}${c.gioDon ? ' · ' + esc(c.gioDon) : ''}</b>${c.ngayDon === today ? ' <span class="badge b-blue">Hôm nay</span>' : c.ngayDon > today ? ' <span class="badge b-p">Sắp chạy</span>' : ''}<div class="muted small">${esc(c.hanhTrinh || '')}${v ? ' · xe ' + esc(v.bks) : ''} · HĐ ${esc(vcSo(c))}</div></td><td class="r" style="width:1%"><span class="me-go">›</span></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
         ${drv || XE.length ? `<div class="card"><div class="card-h"><h3>Phương tiện của tôi</h3><span class="sub">Giấy tờ xe để xuất trình khi kiểm tra</span></div><div class="card-b p0">${XE.length ? `<table class="tbl compact me-docs"><tbody>${xr}</tbody></table>` : '<div class="empty">Chưa có xe nào: xe được gán tên bạn hoặc xe của các chuyến bạn chạy sẽ hiện ở đây.</div>'}</div></div>` : ''}</div>`;
       /* bỏ phần trùng của trang gốc: dòng GPLX ở đầu trang (đã có trong giấy tờ), bảng chuyến cũ; thêm thông tin hồ sơ vào đầu trang */
       el.querySelectorAll('.me-gplx').forEach(x => x.remove());
@@ -12341,7 +12344,7 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       /* thứ tự: đầu trang → việc cần chú ý → giấy tờ & hồ sơ → phương tiện → chuyến → (cuối) công & lương, bảng lương chi tiết ẩn/hiện */
       const top = el.querySelector('.me-top'); top ? top.insertAdjacentHTML('afterend', html) : el.insertAdjacentHTML('afterbegin', html);
       const stk = el.querySelector('.me-stack'), card = re => [...stk.children].find(c => re.test((c.querySelector('h3') || {}).textContent || ''));
-      if (stk) [card(/Việc cần chú ý/), card(/Giấy tờ/), card(/Phương tiện/), card(/Chuyến của tôi/)].filter(Boolean).forEach(c => stk.appendChild(c));
+      if (stk) [card(/Việc cần chú ý/), card(/Giấy tờ/), card(/Phương tiện/), card(/Chuyến của tôi/), card(/Hợp đồng vận chuyển/)].filter(Boolean).forEach(c => stk.appendChild(c));
       const kp = el.querySelector('.kpis'), ym2 = vMe.ym(), px = (() => { try { return payroll(ym2).find(p => p.id === e.id); } catch (x) { return null; } })();
       el.querySelectorAll('#meSlip').forEach(x => x.remove());
       let showP = false; try { showP = localStorage.getItem('tgtp:me:slip') === '1'; } catch (x) { }
@@ -12351,6 +12354,7 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       const tg = pay.querySelector('[data-mepay]'); if (tg) tg.onclick = () => { const sl = pay.querySelector('.me-slip'), on = sl.hidden; sl.hidden = !on; if (on && !sl.innerHTML) sl.innerHTML = `<div class="pr">${slipHTML(px)}</div>`; tg.querySelector('span').textContent = (on ? 'Ẩn' : 'Hiện') + ' bảng lương chi tiết'; try { localStorage.setItem('tgtp:me:slip', on ? '1' : '0'); } catch (x) { } };
       const pr = pay.querySelector('[data-meprn]'); if (pr) pr.onclick = () => Print.run(`<div class="pr">${slipHTML(px)}</div>`, { title: 'Phieu luong ' + (px.ma || '') + ' ' + ym2 });
       el.querySelectorAll('[data-me]').forEach(tr => tr.onclick = () => tr.dataset.me === 'll' ? MODL.load('lylich').then(() => Modal.open({ title: 'Lý lịch hành nghề người lái xe · ' + esc(e.ten), width: 920, body: llDoc(e, false) })) : MED.open(tr.dataset.me, e, { st, sk, skH, th, thH }));
+      el.querySelectorAll('[data-mehd]').forEach(tr => tr.onclick = async () => { const c = (DB.hdvc || []).find(x => x.id === tr.dataset.mehd); if (!c) return; await QR.load().catch(() => { }); GP.show(vcHTML(c), 'Hop dong van chuyen ' + vcSo(c).replace('/', '-')); });
       el.querySelectorAll('[data-mexe]').forEach(tr => tr.onclick = () => { const v = (DB.vehicles || []).find(x => x.id === tr.dataset.mexe); if (v) vehDocs(v); });
     } catch (x) { console.warn('vMe+', x); }
     return r;
@@ -12741,7 +12745,7 @@ const ME = {
       .map(l => ({ id: l.id, ngay: l.ngay, gio: l.gio, tuyen: l.tuyen, xe: bks(l.xeId), xeId: l.xeId, laiXe: l.laiXe || '', laiXe2: l.laiXe2 || '', ve: (DB.datve || []).filter(v => v.chuyen === l.id && !v.huy).length }));
     const pay = {}, cham = {}; [prev, cur].forEach(m => { try { pay[m] = calcPay(e, m); } catch (x) { } const a = (DB.cham[m] || {})[e.id]; if (a) cham[m] = a; });
     let sk = null, th = null; try { sk = llLatest(e.id, 'sk'); th = llLatest(e.id, 'th'); } catch (x) { }
-    return { v: 1, id: e.id, nv: e, trips, cham, pay, gt: { bangHetHan: e.bangHetHan || '', sk: sk ? { ngay: sk.ngay, han: llHan(sk) } : null, th: th ? { ngay: th.ngay, han: th.hetHan || '' } : null }, ll: llRecs(e.id) };   // toàn bộ lý lịch hành nghề của chính người đó (khám SK, tập huấn, vi phạm, tai nạn)
+    return { v: 1, id: e.id, nv: e, trips, cham, pay, gt: { bangHetHan: e.bangHetHan || '', sk: sk ? { ngay: sk.ngay, han: llHan(sk) } : null, th: th ? { ngay: th.ngay, han: th.hetHan || '' } : null }, ll: llRecs(e.id), hd: (DB.hdvc || []).filter(c => [c.laiXe1, c.laiXe2].map(String).includes(String(e.id)) && String(c.ngayTra || c.ngayDon || '9999') >= D.add(D.today(), -90)) };   // hợp đồng vận chuyển gắn tên mình (90 ngày gần đây + sắp tới)   // toàn bộ lý lịch hành nghề của chính người đó (khám SK, tập huấn, vi phạm, tai nạn)
   },
   /* chỉ máy có đủ dữ liệu (Admin / điều hành / kế toán) mới soạn tờ; ghi tờ nào có thay đổi */
   canBuild: () => PS.on && ['vanhanh', 'luong', 'nhansu'].every(p => PS.readable().includes(p)),
@@ -13027,7 +13031,7 @@ addCSS(`.dvp-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:
     return r;
   };
 }
-const APP_BUILD = '2026-11-06T19:20';
+const APP_BUILD = '2026-11-06T19:25';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
