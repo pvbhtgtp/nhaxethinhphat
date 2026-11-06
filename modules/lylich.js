@@ -19,6 +19,7 @@ function llEntry(e, loai, r, pick) {
       try { if (f.type === 'application/pdf') att.push(await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(f); })); else att.push(await resizeImage(f, 1600)); } catch (er) { toast('Không đọc được tệp ' + esc(f.name), 'err'); }
     }
     draw();
+    if ((loai === 'sk' || loai === 'th') && fs.length && att.length) { const d = await LLAI.read(loai, att[att.length - 1]); if (d && document.body.contains(m.el)) LLAI.fill(m.el, d, D.today()); }   // AI đọc giấy vừa tải và điền sẵn
   };
   draw();
   q('[data-cancel]').onclick = () => m.close();
@@ -53,6 +54,7 @@ function llProfile(id, tab) {
       <div class="sc-h"><b>${LL[LL_TAB.tab].label}</b>${Auth.can('lylich', 'add') ? `<button class="btn sm pri" data-ll="add">${ic('plus')} Thêm</button>` : ''}</div>${llTable(e, LL_TAB.tab)}`;
   };
   LL.refresh = draw; draw();
+  if (e.theNVTruoc && !llLatest(id, 'th') && Auth.can('lylich', 'add') && !THR.tried.has(e.id)) { THR.tried.add(e.id); THR.read(e, e.theNVTruoc, true).then(ok => { if (ok === true && document.body.contains(m.el)) draw(); }); }   // lấy thẻ tập huấn từ hồ sơ nhân viên
   m.el.addEventListener('click', ev => {
     if (ev.target.closest('[data-gplx]')) return MED.open('gplx', e, MED.ctx(e));
     const t = ev.target.closest('[data-tab]'); if (t) { LL_TAB.tab = t.dataset.tab; return draw(); }

@@ -12367,7 +12367,7 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
     DB.lylich = DB.lylich || [];
     const ex = llRecs(e.id, 'th').find(x => (ngay && x.ngay === ngay) || (han && x.hetHan === han));
     if (ex) Object.keys(d).forEach(k => { if (d[k] && !ex[k]) ex[k] = d[k]; });
-    else DB.lylich.push({ id: uid(), lai: e.id, loai: 'th', ...d, nguoiTao: dvLog.who(), tg: D.today() });
+    else DB.lylich.push({ id: uid(), lai: e.id, loai: 'th', ...d, files: /^data:/.test(url) ? [url] : [], nguoiTao: dvLog.who(), tg: D.today() });
     App.changed(); toast(`Đã đọc thẻ tập huấn${bg ? ' của ' + esc(e.ten || '') : ''}${d.donVi ? ' · ' + esc(d.donVi) : ''}${han ? ' · hạn ' + F.date(han) : ''}. Đã ghi vào Lý lịch hành nghề, vui lòng kiểm tra lại`, 'ok', 7000);
     if (typeof LL !== 'undefined' && LL.refresh) try { LL.refresh(); } catch (x) { }
     return true;
@@ -12383,6 +12383,39 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
   }
 };
 setTimeout(() => THR.auto(), 120000); setInterval(() => THR.auto(), 30 * 60000);
+/* ===== AI đọc tệp đính kèm khi nhập Lý lịch hành nghề (giấy khám sức khỏe, giấy chứng nhận tập huấn) → điền sẵn các ô ===== */
+const LLAI = {
+  ask: {
+    sk: `Đây là ảnh / bản scan Giấy khám sức khỏe của người lái xe (Việt Nam). Trả về JSON một object:
+- "ngay": ngày khám / ngày kết luận, YYYY-MM-DD;
+- "noi": tên cơ sở khám sức khỏe (bệnh viện, phòng khám…);
+- "tt": kết luận sức khỏe (ví dụ "Đủ điều kiện sức khỏe lái xe hạng D");
+- "hetHan": ngày hết giá trị nếu giấy có ghi, YYYY-MM-DD; không ghi thì để rỗng.
+Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng.`,
+    th: null
+  },
+  async read(loai, url) {
+    const ask = loai === 'th' ? THR.ask : LLAI.ask[loai]; if (!ask || !url) return null;
+    const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
+    if (!sample || !lim || !lim.images) { toast('Đã tải tệp. Muốn app tự đọc và điền: cài AI đọc ảnh (khóa Gemini) trong menu tài khoản', '', 6000); return null; }
+    toast('Đang đọc ' + (loai === 'th' ? 'giấy chứng nhận tập huấn' : 'giấy khám sức khỏe') + '…', '', 12000); const tw = rootEl('toasts').lastElementChild;
+    try {
+      const blob = fileIsPdf(url) ? await vehPdfToBlob(url) : await (await fetch(url)).blob();
+      const r = await sample.json(ask, { images: [blob], modelTier: 'default', cache: false }) || {};
+      const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
+      if (loai === 'th') { const tu = dt(r.tuNgay), den = dt(r.denNgay); return { ngay: tu || den || dt(r.ngayCap), donVi: String(r.donVi || '').trim(), hetHan: dt(r.hetHan), noiDung: String(r.noiDung || '').trim() || ('Tập huấn nghiệp vụ' + (tu && den ? ` từ ${F.date(tu)} đến ${F.date(den)}` : '') + (r.so ? ` · GCN số ${String(r.so).trim()}` : '')) }; }
+      return { ngay: dt(r.ngay), noi: String(r.noi || '').trim(), tt: String(r.tt || '').trim(), hetHan: dt(r.hetHan) };
+    } catch (e) { toast('Không đọc được tệp này, bạn nhập tay nhé', 'err', 5000); return null; }
+    finally { try { tw && tw.remove(); } catch (z) { } }
+  },
+  /* điền vào form: chỉ ghi đè ô đang trống hoặc ô ngày khám đang để mặc định hôm nay */
+  fill(root, d, today) {
+    if (!d) return 0; let n = 0;
+    Object.entries(d).forEach(([k, v]) => { const el = root.querySelector(`[data-k="${k}"]`); if (!el || !v) return; if (el.value && !(k === 'ngay' && el.value === today) && !(k === 'hetHan' && el.dataset.auto)) return;
+      el.value = v; el.style.background = '#fef9c3'; if (k === 'hetHan') el.dataset.auto = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); n++; });
+    toast(n ? 'Đã tự điền ' + n + ' ô từ tệp (tô vàng), kiểm tra rồi bấm Lưu' : 'Không đọc thêm được thông tin nào từ tệp', n ? 'ok' : '', 6000); return n;
+  }
+};
 /* ===== Xem bản hợp đồng dạng trang giấy (bảo mật) =====
    Trình duyệt không thể chặn tuyệt đối việc chụp màn hình (nút cứng điện thoại, máy ảnh khác) — chỉ làm khó và truy vết:
    in chìm tên + SĐT người xem + giờ xem, chặn chọn chữ/sao chép/chuột phải/in/lưu, làm mờ khi phím PrintScreen,
@@ -12615,7 +12648,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T18:00';
+const APP_BUILD = '2026-11-06T18:05';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
