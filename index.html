@@ -6850,18 +6850,19 @@ service cloud.firestore {
         : doc.matches('^(v[0-9a-z]+_[0-9]+|c[0-9]+)$') ? admin()
         : doc.matches('^hf_.+') ? (admin() || (member() && acl().get('hs', true) == true))
         : doc.matches('^nt_.+') ? (admin() || (member() && doc == 'nt_' + acl().get('emp', '-')))
+        : doc.matches('^tx_.+') ? (has('vanhanh') || (member() && doc == 'tx_' + acl().get('emp', '-')))
         : doc.matches('^pa_lc_.+') ? has('vanhanh')
         : doc.matches('^p(m_)?nhansu(_.*)?$') ? has('nhansu')
         : doc.matches('^p(m_)?luong(_.*)?$') ? has('luong')
         : doc.matches('^p(m_)?vanhanh(_.*)?$') ? has('vanhanh')
         : user();
     }
-    function okWrite(doc) { return doc.matches('^me_.+') ? (has('nhansu') && has('luong') && has('vanhanh')) : doc.matches('^(hf|nt)_.+') ? user() : okDoc(doc); }
+    function okWrite(doc) { return doc.matches('^me_.+') ? (has('nhansu') && has('luong') && has('vanhanh')) : doc.matches('^(hf|nt|tx)_.+') ? user() : okDoc(doc); }
     function versioned(doc) { return doc == 'meta' || doc.matches('^pm_.+'); }
     match /nhaxe/{doc} {
       allow get: if user() && okDoc(doc);
       // vé, phơi, lệnh vận chuyển, nghiệm thu an toàn: cần phần Vận hành · thư mục/danh mục hồ sơ, khóa ghế: mọi tài khoản
-      allow list: if user() && ((resource.data.t in ['v', 'p', 'o', 'a'] && has('vanhanh')) || resource.data.t in ['f', 'h', 'l']);
+      allow list: if user() && ((resource.data.t in ['v', 'p', 'o', 'a', 'x'] && has('vanhanh')) || resource.data.t in ['f', 'h', 'l']);
       allow create, update: if admin() || (user() && okWrite(doc) && (!versioned(doc) || metaOk()));
       allow delete: if admin() || (user() && okWrite(doc) && !versioned(doc));
     }
@@ -13031,7 +13032,57 @@ addCSS(`.dvp-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:
     return r;
   };
 }
-const APP_BUILD = '2026-11-06T19:25';
+/* ===== CHUYẾN CỦA TÔI (lái xe): dữ liệu chuyến riêng từng người 'tx_<mã NV>' =====
+   Máy có dữ liệu Đặt vé (quầy vé, điều hành, admin) soạn chuyến hôm nay + ngày mai của từng lái xe / phụ xe (khách, điểm đón, tiền, hàng gửi, sơ đồ ghế,
+   lộ trình) và ghi khi có thay đổi → lái xe nhận ngay, không đọc được vé của chuyến khác. Lái xe bấm "Đã lên xe / Đã thu" ghi vào acts của tài liệu đó;
+   máy quầy vé đang mở tự ghi vào vé (lxAt chống ghi lặp). */
+const TX = {
+  sent: {}, applied: {},
+  win: () => [D.today(), D.add(D.today(), 1)],
+  mine: (l, emp) => [l.laiXe, l.laiXe2, l.phuXe].map(String).includes(String(emp)),
+  trip(l) {
+    const v = (DB.vehicles || []).find(x => x.id === l.xeId) || {}; let so = null; try { so = dvSO(l); } catch (e) { }
+    return { id: l.id, ngay: l.ngay, gio: l.gio || '', tuyen: l.tuyen || '', xe: { bks: v.bks || '', loai: v.loai || '', soCho: +v.soCho || 0 }, so, lt: LT.get(l.tuyen).map(x => ({ ten: x.ten, phut: +x.phut || 0 })),
+      vai: '', lai: [l.laiXe, l.laiXe2, l.phuXe].map(id => ((DB.employees || []).find(e => e.id === id) || {}).ten || ''),
+      pax: dvBook(l.id).map(b => ({ id: b.id, ghe: b.ghe || '', ten: b.ten || '', sdt: b.sdt || '', don: b.diemDon || '', tra: b.diemTra || '', tien: dvTot(b), coc: +b.coc || 0, tt: b.tt || 'giu', httt: b.httt || '', len: !!b.len, gc: b.ghiChu || '', tg: b.tg || '' })),
+      hang: (GH.list(l.id) || []).filter(h => !h.huy).map(h => ({ id: h.id, so: h.so || '', ten: GH.items(h).map(i => i.tenHang).filter(Boolean).join('; ') || 'Hàng gửi', sl: GH.slTong(h), nhan: h.tenNhan || '', sdt: h.sdtNhan || '', noi: h.noiNhan || '', tien: GH.tien(h), thu: h.nguoiThu || '' })) };
+  },
+  build(emp) {
+    const [a, b] = TX.win();
+    return (DB.lichchay || []).filter(l => l.ngay >= a && l.ngay <= b && !l._me && TX.mine(l, emp)).sort((x, y) => (x.ngay + x.gio).localeCompare(y.ngay + y.gio)).map(l => Object.assign(TX.trip(l), { vai: l.phuXe === emp ? 'Phụ xe' : 'Lái xe' }));
+  },
+  push() {
+    if (!NOTI.can()) return; const [a, b] = TX.win(), E = new Set(Object.keys(TX.sent));
+    (DB.lichchay || []).forEach(l => { if (l.ngay >= a && l.ngay <= b && !l._me) [l.laiXe, l.laiXe2, l.phuXe].filter(Boolean).forEach(x => E.add(String(x))); });
+    E.forEach(emp => {
+      const trips = TX.build(emp), h = PM.h(JSON.stringify(trips)); if (TX.sent[emp] === h) return; TX.sent[emp] = h;
+      FB.col().doc('tx_' + emp).set({ t: 'x', emp, trips, at: Date.now() }, { merge: true }).catch(e => { delete TX.sent[emp]; console.warn('TX.push', e); });
+    });
+  },
+  soon() { clearTimeout(TX._t); TX._t = setTimeout(() => { try { TX.push(); } catch (e) { console.warn('TX', e); } }, 1500); },
+  /* máy quầy vé: nhận "Đã lên xe / Đã thu" từ lái xe, ghi vào vé */
+  watch() {
+    if (TX._w || !NOTI.can()) return; TX._w = true;
+    try {
+      TX._un = FB.col().where('t', '==', 'x').onSnapshot(S2 => {
+        let ch = false;
+        S2.docs.forEach(d => { const o = d.data() || {}, A = o.acts || {}, who = ((DB.employees || []).find(e => String(e.id) === String(o.emp)) || {}).ten || 'Lái xe';
+          Object.entries(A).forEach(([id, a]) => { const b = (DB.datve || []).find(x => x.id === id); if (!b || !a || (+b.lxAt || 0) >= (+a.at || 0)) return;
+            const nd = []; if (a.len != null && !!b.len !== !!a.len) { b.len = !!a.len; nd.push(a.len ? 'đã lên xe' : 'bỏ đánh dấu lên xe'); }
+            if (a.tt === 'tra' && b.tt !== 'tra') { b.tt = 'tra'; b.httt = a.httt || 'tm'; b.lxThu = 1; nd.push('đã thu ' + (b.httt === 'ck' ? 'chuyển khoản' : 'tiền mặt')); }
+            if (a.tt === 'giu' && b.tt === 'tra' && b.lxThu) { b.tt = 'giu'; b.httt = ''; delete b.lxThu; nd.push('bỏ đánh dấu đã thu'); }
+            b.lxAt = +a.at; if (nd.length) { (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: who, nd: who + ' (trên xe): ' + nd.join(', ') }); ch = true; } });
+        });
+        if (ch) App.changed(false);
+      }, () => { TX._w = false; });
+    } catch (e) { TX._w = false; }
+  }
+};
+{ const sc1 = Store.changed; Store.changed = function () { const r = sc1.apply(this, arguments); try { TX.soon(); } catch (e) { } return r; }; }
+setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
+setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
+MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
+const APP_BUILD = '2026-11-06T19:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -13135,7 +13186,8 @@ addCSS(`@media(max-width:900px){.topbar{position:static;flex-wrap:wrap;padding:1
 Auth.homeView = function () {
   const u = Auth.user; if (!u) return null; const r = (DB.roles || {})[u.role] || {};
   const dh = u.role === 'admin' || /dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '');
-  return (dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
+  let lx = false; try { const e = DRV.me(); lx = !dh && !!e && (llIsLai(e) || /phụ\s*xe/i.test(e.chucVu || '')); } catch (x) { }   // lái xe, phụ xe: mở thẳng Chuyến của tôi
+  return (lx ? ['chuyentoi', 'cuatoi'] : dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
 };
 /* Mã QR trên lệnh / hợp đồng vận chuyển: mở văn bản trong app (phải đăng nhập) */
 const QR = {
