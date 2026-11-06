@@ -3512,7 +3512,7 @@ const vehCols = [
 ];
 const vVeh = {
   title: 'Phương tiện', icon: 'bus', desc: 'Danh sách xe, giấy tờ, hạn đăng kiểm và bảo hiểm', 
-  tools: () => `<button class="btn" data-act="vehLyPick">${ic('idcard')} Lý lịch xe</button><button class="btn pri" data-act="vehAdd">${ic('plus')} Thêm phương tiện</button>`,
+  tools: () => `<button class="btn" data-act="nyOpen">${ic('printer')} Niêm yết trên xe</button><button class="btn" data-act="vehLyPick">${ic('idcard')} Lý lịch xe</button><button class="btn pri" data-act="vehAdd">${ic('plus')} Thêm phương tiện</button>`,
   render(el) {
     const L = DB.vehicles, nOff = L.filter(v => v.ngung).length, hh = L.filter(v => !v.ngung && ['hhDangKiem', 'hhBHDS', 'hhBHVC'].some(k => { const n = vehExp(v[k])[2]; return n !== null && n <= 30; })).length;
     el.insertAdjacentHTML('beforeend', '<div id="vehT"></div>');
@@ -5188,7 +5188,7 @@ addCSS(`.dx-cald{background:#fff;border:1px solid var(--line,#e5e7eb);border-rad
 function dhDocWarn(l) {
   const w = [], ng = l.ngay || D.today(), v = (DB.vehicles || []).find(x => x.id === l.xeId), ex = (d, t) => { if (d && String(d) < ng) w.push(t + ' (' + F.date(d) + ')'); };
   if (v) { ex(v.hhDangKiem, 'Xe ' + v.bks + ': đăng kiểm'); ex(v.hhBHDS, 'Xe ' + v.bks + ': bảo hiểm dân sự'); ex(v.hhPhuHieu, 'Xe ' + v.bks + ': phù hiệu'); }
-  [l.laiXe, l.laiXe2].filter(Boolean).forEach(id => { const e = (DB.employees || []).find(x => x.id === id); if (!e) return; ex(e.bangHetHan, e.ten + ': GPLX'); try { const sk = llLatest(e.id, 'sk'); if (sk) ex(llHan(sk), e.ten + ': giấy khám sức khỏe'); } catch (x) { } });
+  [l.laiXe, l.laiXe2].filter(Boolean).forEach(id => { const e = (DB.employees || []).find(x => x.id === id); if (!e) return; ex(e.bangHetHan, e.ten + ': GPLX'); try { const sk = llLatest(e.id, 'sk'); if (sk) ex(llHan(sk), e.ten + ': giấy khám sức khỏe'); const th = llLatest(e.id, 'th'); if (th) ex(th.hetHan, e.ten + ': thẻ tập huấn nghiệp vụ'); } catch (x) { } });
   return w;
 }
 // NĐ 158/2024 Đ11 k5 + Luật TTATGTĐB Đ64: lái xe ≤10 giờ/ngày, ≤4 giờ liên tục, nghỉ ≥15 phút giữa 2 lần lái
@@ -12198,6 +12198,7 @@ Object.assign(MODL.parts, { dashboard: ['core', 'vanhanh'], lichchay: ['core', '
   nhanvien: ['core', 'nhansu'], hopdong: ['core', 'nhansu'], chamcong: ['core', 'luong'], bangluong: ['core', 'luong', 'nhansu'], thue: ['core', 'luong', 'nhansu'],
   cuatoi: ['core', 'vanhanh', 'luong'], hoso: ['core'], scan: ['core'], users: ['core'], caidat: ['core'], data: ['core'] });
 /* module mới (cách mới): file riêng modules/phananh.js, quyền theo Điều hành, dữ liệu phanAnh ở phần Vận hành */
+Object.assign(ACT, { nyOpen: () => MODL.load('niemyet').then(() => NY.open()).catch(e => toast(esc(e.message), 'err')) }); Auth.ACT_PERM.nyOpen = ['phuongtien', 'view'];
 MODL.reg('phananh', { title: 'Phản ánh & sự cố', icon: 'message', group: 'Vận hành', after: 'baocaovt', mod: 'dieuhanh', parts: ['core', 'vanhanh'], desc: 'Sổ tiếp nhận, xử lý phản ánh của hành khách · sổ theo dõi vi phạm, tai nạn của lái xe (NĐ 158/2024)' });
 
 /* ===== MỨC 2 · phiên (c): TỜ CÁ NHÂN (ME) + TẢI THEO KHOẢNG NGÀY — mới có code, chưa bật (theo PS.on) =====
@@ -12237,7 +12238,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T12:55';
+const APP_BUILD = '2026-11-06T13:10';
 /* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
 const MEAV = {
   paint() {
