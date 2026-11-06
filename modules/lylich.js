@@ -4,7 +4,7 @@ function llEntry(e, loai, r, pick) {
   const isNew = !r; if (!Auth.guard('lylich', isNew ? 'add' : 'edit')) return;
   const lais = pick ? llDrivers() : [];
   const T = LL[loai], R = r ? { ...r, files: (r.files || []).slice() } : { loai, lai: e ? e.id : '', ngay: D.today(), files: [] };
-  const body = (pick ? `<div class="form c2"><div class="field"><label>Tên lái xe <i class="req">*</i></label><select class="inp" id="llWho"><option value="">— Chọn lái xe —</option>${lais.map(x => `<option value="${x.id}" ${e && e.id === x.id ? 'selected' : ''}>${esc(x.ten)}</option>`).join('')}</select></div><div class="field"><label>Loại ghi nhận</label><select class="inp" id="llLoai">${LL.order.map(k => `<option value="${k}" ${k === loai ? 'selected' : ''}>${LL[k].label}</option>`).join('')}</select></div></div>` : '') + `<div class="form c2" style="margin-top:${pick ? 8 : 0}px">${T.f.map(f => `<div class="field ${f[2] === 'area' ? 'full' : ''}"><label>${f[1]}${f[3] ? ' <i class="req">*</i>' : ''}</label>${f[2] === 'area' ? `<textarea class="inp" rows="2" data-k="${f[0]}">${esc(R[f[0]] || '')}</textarea>` : `<input class="inp" ${f[2] === 'date' ? 'type="date"' : ''} data-k="${f[0]}" value="${esc(R[f[0]] || '')}">`}</div>`).join('')}</div>
+  const body = (pick ? `<div class="form c2"><div class="field"><label>Tên lái xe <i class="req">*</i></label><select class="inp" id="llWho"><option value="">— Chọn lái xe —</option>${lais.map(x => `<option value="${x.id}" ${e && e.id === x.id ? 'selected' : ''}>${esc(x.ten)}</option>`).join('')}</select></div><div class="field"><label>Loại ghi nhận</label><select class="inp" id="llLoai">${LL.order.map(k => `<option value="${k}" ${k === loai ? 'selected' : ''}>${LL[k].label}</option>`).join('')}</select></div></div>` : '') + `<div class="form c2" style="margin-top:${pick ? 8 : 0}px">${T.f.map(f => `<div class="field ${f[2] === 'area' ? 'full' : ''}"><label>${f[1]}${f[3] ? ' <i class="req">*</i>' : ''}</label>${f[2] === 'area' ? `<textarea class="inp" rows="2" data-k="${f[0]}">${esc(R[f[0]] || '')}</textarea>` : /^select:/.test(f[2]) ? `<select class="inp" data-k="${f[0]}">${f[2].slice(7).split('|').map(o => `<option ${R[f[0]] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : `<input class="inp" ${f[2] === 'date' ? 'type="date"' : ''} data-k="${f[0]}" value="${esc(R[f[0]] || '')}">`}</div>`).join('')}</div>
     <div class="field full" style="margin-top:8px"><label>${loai === 'sk' ? 'Giấy khám sức khỏe' : 'Tệp đính kèm'}</label><div class="sc-att" id="llAtt"></div><div class="row" style="gap:8px;align-items:center"><label class="btn sm">${ic('upload')} Tải ảnh / PDF<input type="file" id="llFile" accept="image/*,application/pdf" multiple hidden></label><span class="muted small">Tối đa 6 tệp</span></div></div>`;
   const m = Modal.open({ title: pick ? 'Thêm lý lịch hành nghề' : `${isNew ? 'Thêm' : 'Sửa'} · ${T.label} · ${esc(e.ten)}`, width: 640, body, foot: `<button class="btn" data-cancel>Hủy</button><button class="btn pri" data-save>${ic('check')} Lưu</button>` });
   const q = s => m.el.querySelector(s), K = k => q(`[data-k="${k}"]`), att = R.files, box = q('#llAtt');
@@ -38,47 +38,62 @@ function llTable(e, loai) {
   if (!L.length) return `<div class="muted" style="padding:18px 4px">Chưa có ghi nhận nào.</div>`;
   return `<div class="tbl-wrap free"><table class="tbl"><thead><tr>${T.f.map(f => `<th>${f[1]}</th>`).join('')}<th>Tệp</th><th></th></tr></thead><tbody>${L.map(r => `<tr>${T.f.map(f => `<td>${f[2] === 'date' ? (f[0] === 'hetHan' ? llBadge(llPick(r, f), '—') : F.date(r[f[0]])) : esc(r[f[0]] || '') || '<span class="muted">—</span>'}</td>`).join('')}<td>${(r.files || []).length ? `<button class="ibtn" data-ll="files" data-id="${r.id}" style="width:auto;padding:0 6px;gap:3px;color:#0369a1">${ic('file')}<b style="font-size:12px">${r.files.length}</b></button>` : '<span class="muted">—</span>'}</td><td style="white-space:nowrap">${canE ? `<button class="ibtn" data-ll="edit" data-id="${r.id}" data-tip="Sửa">${ic('edit')}</button>` : ''}${canD ? `<button class="ibtn del" data-ll="del" data-id="${r.id}" data-tip="Xóa">${ic('trash')}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
 }
-function llProfile(id, tab) {
-  const e = empById(id); if (!e) return; LL_TAB.tab = tab || LL_TAB.tab || 'sk';
-  const canE = Auth.can('lylich', 'edit');
-  const m = Modal.open({ title: 'Lý lịch hành nghề · ' + esc(e.ten), width: 920, body: '<div id="llBody"></div>', foot: `<button class="btn" data-prn>${ic('printer')} In lý lịch</button><button class="btn pri" data-no>Đóng</button>` });
+/* Lý lịch hành nghề người lái xe = MỘT văn bản theo Phụ lục II Thông tư 36/2024/TT-BGTVT (xem và in giống nhau):
+   thông tin chung → quá trình hành nghề → sức khỏe → vi phạm → tai nạn → khen thưởng, kỷ luật → tập huấn.
+   Thông tin chung lấy từ hồ sơ Nhân viên; quá trình hành nghề lấy từ Lịch chạy (xe đã chạy) + hợp đồng lao động. */
+function llWork(e) {
+  const T = (DB.lichchay || []).filter(l => [l.laiXe, l.laiXe2].includes(e.id) && l.xeId && l.ngay), G = {};
+  T.forEach(l => { const v = (DB.vehicles || []).find(x => x.id === l.xeId); if (!v) return; const k = (v.loai || '') + '|' + (v.soCho || v.taiTrong || ''); const g = G[k] = G[k] || { tu: l.ngay, den: l.ngay, loai: v.loai || '', cho: +v.soCho ? v.soCho + ' chỗ' : (v.taiTrong ? v.taiTrong + ' kg' : '') }; if (l.ngay < g.tu) g.tu = l.ngay; if (l.ngay > g.den) g.den = l.ngay; });
+  const R = Object.values(G).sort((a, b) => a.tu.localeCompare(b.tu));
+  if (!R.length && (e.llXe || e.ngayVao)) R.push({ tu: e.ngayVao || '', den: '', loai: e.llXe || '', cho: e.llCho || '' });
+  return R.map(r => ({ ...r, hang: e.bangHang || '', hd: e.loaiHD || '' }));
+}
+function llDoc(e, ed) {
+  const c = 'border:1px solid #333;padding:5px 6px;font-size:13px;vertical-align:top', h = c + ';background:#f1f5f9;font-weight:700;text-align:center';
+  const canA = ed && Auth.can('lylich', 'add'), canE = ed && Auth.can('lylich', 'edit'), canD = ed && Auth.can('lylich', 'del');
+  const d = x => x ? F.date(x) : '', tbl = (H, rows) => `<div style="overflow-x:auto"><table style="width:100%;min-width:${ed ? 560 : 0}px;border-collapse:collapse;margin:4px 0 2px"><tr>${H.map(x => `<th style="${h}">${x}</th>`).join('')}${ed ? `<th style="${h};width:1%"></th>` : ''}</tr>${rows.length ? rows.join('') : `<tr>${H.map(() => `<td style="${c};height:26px"></td>`).join('')}${ed ? `<td style="${c}"></td>` : ''}</tr>`}</table></div>`;
+  const act = r => ed ? `<td style="${c};white-space:nowrap">${(r.files || []).length ? `<button class="ibtn" data-ll="files" data-id="${r.id}" title="Xem tệp">${ic('file')}</button>` : ''}${canE ? `<button class="ibtn" data-ll="edit" data-id="${r.id}" title="Sửa">${ic('edit')}</button>` : ''}${canD ? `<button class="ibtn del" data-ll="del" data-id="${r.id}" title="Xóa">${ic('trash')}</button>` : ''}</td>` : '';
+  const sec = (n, t, loai) => `<div style="display:flex;align-items:center;gap:8px;margin:14px 0 4px"><b style="font-size:13.5px">${n}. ${t}</b>${loai && canA ? `<button class="btn sm" data-ll="add" data-loai="${loai}" style="margin-left:auto">${ic('plus')} Thêm</button>` : ''}</div>`;
+  const rows = (loai, F) => llRecs(e.id, loai).slice().reverse().map(r => `<tr>${F.map(f => `<td style="${c}">${f(r)}</td>`).join('')}${act(r)}</tr>`);
+  const W = llWork(e), kv = (l, v) => `<td style="padding:3px 0;font-size:13.5px">${l}: <b>${v || ''}</b></td>`;
+  return `<div class="ll-doc" style="color:#111">
+    <div style="font-weight:700;font-size:13.5px">1. Thông tin chung</div>
+    <table style="width:100%;border-collapse:collapse;margin:4px 0"><tr>${kv('Họ và tên', esc(e.ten))}${kv('Ngày sinh', d(e.ngaySinh))}</tr><tr>${kv('Số CCCD', esc(e.cccd || ''))}${kv('Điện thoại', esc(e.sdt || ''))}</tr>
+      <tr>${kv('Giấy phép lái xe số', esc(e.bangSo || ''))}${kv('Hạng', esc(e.bangHang || '') + (e.bangHetHan ? ' · hết hạn ' + d(e.bangHetHan) : ''))}</tr><tr><td colspan="2" style="padding:3px 0;font-size:13.5px">Cơ quan cấp GPLX: <b>${esc(e.bangNoiCap || '')}</b>${e.bangNgayCap ? ' · ngày cấp <b>' + d(e.bangNgayCap) + '</b>' : ''}</td></tr>
+      <tr><td colspan="2" style="padding:3px 0;font-size:13.5px">Nơi thường trú: <b>${esc(e.diaChiTT || '')}</b></td></tr></table>
+    ${sec(2, 'Quá trình hành nghề lái xe')}${tbl(['Thời gian', 'Hạng GPLX', 'Loại xe điều khiển', 'Sức chứa / tải trọng', 'Hình thức hợp đồng lao động'], W.map(r => `<tr><td style="${c}">${r.tu ? d(r.tu) + ' – ' + (r.den ? d(r.den) : 'nay') : ''}</td><td style="${c}">${esc(r.hang)}</td><td style="${c}">${esc(r.loai)}</td><td style="${c}">${esc(r.cho)}</td><td style="${c}">${esc(r.hd)}</td>${ed ? `<td style="${c}"></td>` : ''}</tr>`))}
+    ${ed ? '<div class="muted small">Tự lấy theo các xe đã chạy trong Lịch chạy và loại hợp đồng trong hồ sơ Nhân viên.</div>' : ''}
+    ${sec(3, 'Theo dõi sức khỏe', 'sk')}${tbl(['Ngày khám', 'Cơ sở khám', 'Kết quả khám', 'Hạn giấy khám'], rows('sk', [r => d(r.ngay), r => esc(r.noi || ''), r => esc(r.tt || ''), r => ed ? llBadge(llHan(r), '—') : d(llHan(r))]))}
+    ${sec(4, 'Vi phạm quy định về an toàn giao thông', 'vp')}${tbl(['Ngày', 'Lỗi vi phạm', 'Hình thức xử lý', 'Ghi chú'], rows('vp', [r => d(r.ngay), r => esc(r.loi || ''), r => esc(r.xuLy || ''), r => esc(r.ghiChu || '')]))}
+    ${sec(5, 'Tai nạn giao thông', 'tn')}${tbl(['Ngày', 'Xe', 'Địa điểm', 'Thiệt hại về người và phương tiện', 'Nguyên nhân'], rows('tn', [r => d(r.ngay), r => esc(r.xe || ''), r => esc(r.diaDiem || ''), r => esc(r.thietHai || ''), r => esc(r.nguyenNhan || '')]))}
+    ${sec(6, 'Khen thưởng, kỷ luật', 'kt')}${tbl(['Ngày', 'Khen thưởng / Kỷ luật', 'Nội dung', 'Số quyết định'], rows('kt', [r => d(r.ngay), r => esc(r.hinhThuc || ''), r => esc(r.noiDung || ''), r => esc(r.soQD || '')]))}
+    ${sec(7, 'Tập huấn nghiệp vụ', 'th')}${tbl(['Nội dung tập huấn', 'Thời gian', 'Đơn vị tổ chức', 'Hạn giấy chứng nhận'], rows('th', [r => esc(r.noiDung || ''), r => d(r.ngay), r => esc(r.donVi || ''), r => ed ? llBadge(r.hetHan, '—') : d(r.hetHan)]))}
+  </div>`;
+}
+function llProfile(id) {
+  const e = empById(id); if (!e) return;
+  const m = Modal.open({ title: 'Lý lịch hành nghề người lái xe · ' + esc(e.ten), width: 920, body: '<div id="llBody"></div>', foot: `<button class="btn left" data-gplx>${ic('file')} Giấy tờ GPLX & thẻ tập huấn</button><button class="btn" data-prn>${ic('printer')} In lý lịch</button><button class="btn pri" data-no>Đóng</button>` });
   const q = s => m.el.querySelector(s), body = q('#llBody');
-  const draw = () => {
-    const xes = [...new Set(DB.vehicles.map(v => v.loai).filter(Boolean))];
-    const sk = llLatest(id, 'sk'), th = llLatest(id, 'th'), n = k => llRecs(id, k).length;
-    body.innerHTML = `<div class="ll-head"><div class="ll-info"><b style="font-size:16px">${esc(e.ten)}</b> <span class="badge ${e.trangThai === 'Nghỉ việc' ? 'b-red' : 'b-green'}">${esc(e.trangThai || '')}</span>
-      <div class="muted small">${e.ngaySinh ? 'Sinh ' + F.date(e.ngaySinh) + ' · ' : ''}CCCD ${esc(e.cccd || '—')} · ${esc(e.sdt || '')}</div>
-      <div class="small" style="margin-top:4px">Bằng lái hạng <b>${esc(e.bangHang || '—')}</b> · Số ${esc(e.bangSo || '—')} · Hết hạn ${e.bangHetHan ? F.date(e.bangHetHan) : '—'} ${gplxBadge(e)} <button class="btn sm" data-gplx style="margin-left:6px">${ic('file')} Giấy tờ GPLX & thẻ tập huấn</button></div></div>
-      <div class="ll-xe"><div class="field"><label>Loại xe đảm nhận</label><input class="inp" id="llXe" list="llXeL" value="${esc(e.llXe || '')}" ${canE ? '' : 'readonly'}><datalist id="llXeL">${xes.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div><div class="field"><label>Sức chứa</label><input class="inp" id="llCho" value="${esc(e.llCho || '')}" placeholder="VD: 16 CHỖ" ${canE ? '' : 'readonly'}></div></div></div>
-      <div class="ll-sum"><span>Khám SK: ${sk ? llBadge(llHan(sk)).replace('<br>', ' ') : '<span class="badge b-red">Chưa khám</span>'}</span><span>Thẻ tập huấn: ${th && th.hetHan ? llBadge(th.hetHan).replace('<br>', ' ') : '<span class="badge b-p">Chưa có</span>'}</span></div>
-      <div class="ll-tabs">${LL.order.map(k => `<button class="${k === LL_TAB.tab ? 'on' : ''}" data-tab="${k}">${LL[k].label} <em>${n(k)}</em></button>`).join('')}</div>
-      <div class="sc-h"><b>${LL[LL_TAB.tab].label}</b>${Auth.can('lylich', 'add') ? `<button class="btn sm pri" data-ll="add">${ic('plus')} Thêm</button>` : ''}</div>${llTable(e, LL_TAB.tab)}`;
-  };
+  const draw = () => { body.innerHTML = llDoc(e, true); };
   LL.refresh = draw; draw();
   if (e.theNVTruoc && !llLatest(id, 'th') && Auth.can('lylich', 'add') && !THR.tried.has(e.id)) { THR.tried.add(e.id); THR.read(e, e.theNVTruoc, true).then(ok => { if (ok === true && document.body.contains(m.el)) draw(); }); }   // lấy thẻ tập huấn từ hồ sơ nhân viên
   m.el.addEventListener('click', ev => {
     if (ev.target.closest('[data-gplx]')) return MED.open('gplx', e, MED.ctx(e));
-    const t = ev.target.closest('[data-tab]'); if (t) { LL_TAB.tab = t.dataset.tab; return draw(); }
     const b = ev.target.closest('[data-ll]'); if (!b) return; const r = (DB.lylich || []).find(x => x.id === b.dataset.id);
-    if (b.dataset.ll === 'add') llEntry(e, LL_TAB.tab);
+    if (b.dataset.ll === 'add') llEntry(e, b.dataset.loai);
     else if (b.dataset.ll === 'edit' && r) llEntry(e, r.loai, r);
     else if (b.dataset.ll === 'files' && r) scView(r.files);
     else if (b.dataset.ll === 'del' && r) Modal.confirm(`Xóa ghi nhận <b>${LL[r.loai].label}</b> ngày ${F.date(r.ngay)}?`, { ok: 'Xóa', danger: true }).then(ok => { if (ok && Auth.guard('lylich', 'del')) { DB.lylich = DB.lylich.filter(x => x !== r); App.changed(); draw(); toast('Đã xóa', 'ok'); } });
   });
-  const sv = () => { if (!canE) return; e.llXe = q('#llXe').value.trim().toUpperCase(); e.llCho = q('#llCho').value.trim().toUpperCase(); App.changed(); };
-  m.el.addEventListener('change', ev => { if (ev.target.id === 'llXe' || ev.target.id === 'llCho') sv(); });
   q('[data-prn]').onclick = () => llPrint(e);
   q('[data-no]').onclick = () => m.close();
-  const lp = lpAttach(m, () => lpCapture(() => llPrint(e)), { caption: 'Xem trước lý lịch hành nghề', width: 1320 }), d0 = LL.refresh; LL.refresh = () => { d0(); lp.draw(); };
   const oc = m.close; m.close = () => { LL.refresh = null; oc(); };
 }
 function llPrint(e) {
-  const th = 'border:1px solid #333;padding:5px;text-align:left;font-size:13px', tb = loai => { const T = LL[loai], L = llRecs(e.id, loai); return `<h3 style="margin:14px 0 6px">${LL.order.indexOf(loai) + 1}. ${T.label.toUpperCase()}</h3>` + (L.length ? `<table style="width:100%;border-collapse:collapse"><tr>${T.f.map(f => `<th style="${th}">${f[1]}</th>`).join('')}</tr>${L.map(r => `<tr>${T.f.map(f => `<td style="${th}">${f[2] === 'date' ? F.date(llPick(r, f)) : esc(r[f[0]] || '')}</td>`).join('')}</tr>`).join('')}</table>` : '<div class="muted" style="font-size:13px">Không có.</div>'); };
-  Print.run(`<div class="pr">${Print.head()}<h2>LÝ LỊCH HÀNH NGHỀ LÁI XE</h2>
-    <table style="width:100%;font-size:13.5px;margin:10px 0;border-collapse:collapse"><tr><td style="padding:3px 0;width:50%">Họ và tên: <b>${esc(e.ten)}</b></td><td>Ngày sinh: <b>${e.ngaySinh ? F.date(e.ngaySinh) : ''}</b></td></tr><tr><td style="padding:3px 0">CCCD: <b>${esc(e.cccd || '')}</b></td><td>Điện thoại: <b>${esc(e.sdt || '')}</b></td></tr><tr><td style="padding:3px 0">Bằng lái hạng: <b>${esc(e.bangHang || '')}</b> · Số: <b>${esc(e.bangSo || '')}</b></td><td>Hết hạn: <b>${e.bangHetHan ? F.date(e.bangHetHan) : ''}</b></td></tr><tr><td style="padding:3px 0">Loại xe đảm nhận: <b>${esc(e.llXe || '')}</b></td><td>Sức chứa: <b>${esc(e.llCho || '')}</b></td></tr><tr><td colspan="2" style="padding:3px 0">Địa chỉ: ${esc(e.diaChiTT || '')}</td></tr></table>
-    ${LL.order.map(tb).join('')}${Print.signs(['Người lập', 'Lái xe', 'Giám đốc'])}</div>`, { title: 'Ly lich hanh nghe ' + e.ten });
+  Print.run(`<div class="pr">${Print.head()}<h2 style="margin-bottom:2px">LÝ LỊCH HÀNH NGHỀ NGƯỜI LÁI XE</h2><div style="text-align:center;font-style:italic;font-size:12px;margin-bottom:8px">(Theo Phụ lục II Thông tư số 36/2024/TT-BGTVT)</div>
+    ${llDoc(e, false)}${Print.signs(['Người lập', 'Người lái xe', 'Thủ trưởng đơn vị'])}</div>`, { title: 'Ly lich hanh nghe ' + e.ten });
 }
-LL.order = ['sk', 'vp', 'tn', 'th'];
+LL.order = ['sk', 'vp', 'tn', 'kt', 'th'];
 function llRows(L) { return L.map(e => { const sk = llLatest(e.id, 'sk'), th = llLatest(e.id, 'th'); return { id: e.id, e, sk, th, vp: llRecs(e.id, 'vp').length, tn: llRecs(e.id, 'tn').length }; }); }
 const vLL = {
   title: 'Lý lịch hành nghề', icon: 'idcard', desc: 'Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn',
@@ -149,7 +164,7 @@ function llImport() {
 function llAddMulti(pre) {
   if (!Auth.guard('lylich', 'add')) return;
   const lais = llDrivers(), on = new Set(pre ? [pre] : ['sk']), atts = {}; LL.order.forEach(k => { atts[k] = []; });
-  const sec = k => { const T = LL[k]; return `<div class="ll-sec" data-sec="${k}" ${on.has(k) ? '' : 'hidden'}><div class="ll-st">${T.label}</div><div class="form c2">${T.f.map(f => `<div class="field ${f[2] === 'area' ? 'full' : ''}"><label>${f[1]}${f[3] ? ' <i class="req">*</i>' : ''}</label>${f[2] === 'area' ? `<textarea class="inp" rows="2" data-k="${k}.${f[0]}"></textarea>` : `<input class="inp" ${f[2] === 'date' ? 'type="date"' : ''} data-k="${k}.${f[0]}" ${f[0] === 'ngay' ? `value="${D.today()}"` : ''}>`}</div>`).join('')}</div><div class="sc-att" data-att="${k}" style="margin-top:8px"></div><label class="btn sm">${ic('upload')} Tải ảnh / PDF<input type="file" data-file="${k}" accept="image/*,application/pdf" multiple hidden></label></div>`; };
+  const sec = k => { const T = LL[k]; return `<div class="ll-sec" data-sec="${k}" ${on.has(k) ? '' : 'hidden'}><div class="ll-st">${T.label}</div><div class="form c2">${T.f.map(f => `<div class="field ${f[2] === 'area' ? 'full' : ''}"><label>${f[1]}${f[3] ? ' <i class="req">*</i>' : ''}</label>${f[2] === 'area' ? `<textarea class="inp" rows="2" data-k="${k}.${f[0]}"></textarea>` : /^select:/.test(f[2]) ? `<select class="inp" data-k="${k}.${f[0]}">${f[2].slice(7).split('|').map(o => `<option>${esc(o)}</option>`).join('')}</select>` : `<input class="inp" ${f[2] === 'date' ? 'type="date"' : ''} data-k="${k}.${f[0]}" ${f[0] === 'ngay' ? `value="${D.today()}"` : ''}>`}</div>`).join('')}</div><div class="sc-att" data-att="${k}" style="margin-top:8px"></div><label class="btn sm">${ic('upload')} Tải ảnh / PDF<input type="file" data-file="${k}" accept="image/*,application/pdf" multiple hidden></label></div>`; };
   const body = `<div class="field"><label>Tên lái xe <i class="req">*</i></label><select class="inp" id="llWho"><option value="">— Chọn lái xe —</option>${lais.map(x => `<option value="${x.id}">${esc(x.ten)}</option>`).join('')}</select></div>
     <div class="field" style="margin-top:10px"><label>Chọn các mục cần thêm</label><div class="ll-chk">${LL.order.map(k => `<label class="ll-c ${on.has(k) ? 'on' : ''}"><input type="checkbox" data-pick="${k}" ${on.has(k) ? 'checked' : ''}> ${LL[k].label}</label>`).join('')}</div></div>${LL.order.map(sec).join('')}`;
   const m = Modal.open({ title: 'Thêm lý lịch hành nghề', width: 720, body, foot: `<button class="btn" data-cancel>Hủy</button><button class="btn pri" data-save>${ic('check')} Lưu</button>` });
