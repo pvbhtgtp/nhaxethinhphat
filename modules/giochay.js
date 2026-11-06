@@ -45,7 +45,7 @@ const gcCols = [
 ];
 const vGC = {
   title: 'Giờ chạy', icon: 'clock', desc: 'Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến',
-  tools: () => `<button class="btn pri" data-act="gcAdd">${ic('plus')} Thêm giờ chạy</button><button class="btn" data-act="gcBulk">${ic('clock')} Thêm nhiều giờ</button>${Auth.can('giochay', 'edit') ? `<button class="btn" data-act="ttTuyen" title="Tên tuyến, cự ly, mã số tuyến, bến và hành trình in trên Lệnh vận chuyển">${ic('route')} Thông tin tuyến</button>` : ''}`,
+  tools: () => `<button class="btn pri" data-act="gcAdd">${ic('plus')} Thêm giờ chạy</button><button class="btn" data-act="gcBulk">${ic('clock')} Thêm nhiều giờ</button>${Auth.can('lichchay', 'add') ? `<button class="btn" data-act="lcGen" title="Tạo chuyến cho các ngày bạn chọn từ các giờ chạy đang MỞ (chuyến đã có giữ nguyên)">${ic('calendar')} Tạo lịch chạy</button>` : ''}${Auth.can('giochay', 'edit') ? `<button class="btn" data-act="ttTuyen" title="Tên tuyến, cự ly, mã số tuyến, bến và hành trình in trên Lệnh vận chuyển">${ic('route')} Thông tin tuyến</button>` : ''}`,
   render(el) {
     const L = gcSorted(), R = gcRoutes(), nOpen = L.filter(g => g.tt !== 'ĐÓNG').length, nUn = L.filter(g => g.tt !== 'ĐÓNG' && (!g.xeId || !g.laiXe)).length;
     const rows = gcCur() ? L.filter(g => g.tuyen === gcCur()) : L;

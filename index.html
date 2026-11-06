@@ -3895,6 +3895,7 @@ setInterval(() => {
 let lcSig = '';
 function lcAutoRun(silent) {
   try {
+    return 0;   // đã bỏ tự tạo lịch: chỉ tạo thủ công bằng nút "Tạo lịch chạy" (chọn từ ngày đến ngày)
     const a = (S() || {}).autoLich; if (!a || !a.on || !Auth.user || !Auth.can('lichchay', 'add')) return 0;
     const nowT = new Date().toTimeString().slice(0, 5); if (nowT < (a.gio || '06:00') || a.last === D.today()) return 0;
     const open = DB.giochay.filter(g => g.tt !== 'ĐÓNG'); if (!open.length) return 0;
@@ -3944,13 +3945,10 @@ Object.assign(ACT, {
     if (!Auth.guard('lichchay', 'add')) return;
     const open = DB.giochay.filter(g => g.tt !== 'ĐÓNG');
     if (!open.length) { toast('Chưa có giờ chạy đang mở', 'err'); return; }
-    Form.open({ title: 'Tạo lịch chạy từ Giờ chạy', width: 520, cols: 2, saveText: 'Tạo lịch ngay', value: { tu: lcDay(), den: lcDay(), auto: !!(S().autoLich && S().autoLich.on), autoDays: String((S().autoLich && S().autoLich.days) || 7), autoGio: (S().autoLich && S().autoLich.gio) || '06:00' },
-      fields: [{ key: 'tu', label: 'Từ ngày', type: 'date', required: true }, { key: 'den', label: 'Đến ngày', type: 'date', required: true, hint: `Mỗi ngày trong khoảng được tạo ${open.length} chuyến đang MỞ trong mục Giờ chạy, kèm xe và lái xe đã gán. Chuyến đã có sẵn được giữ nguyên. Tối đa 62 ngày một lần` },
-        { key: 'auto', label: 'Tự động tạo lịch chạy, không cần bấm tay', type: 'checkbox', full: true },
-        { key: 'autoGio', label: 'Giờ tự động tạo mỗi ngày', type: 'time', hint: 'Đến giờ này mỗi ngày, hệ thống tự tạo lịch (nếu đang mở trang). Mở trang sau giờ này thì tạo ngay khi mở' },
-        { key: 'autoDays', label: 'Luôn giữ sẵn lịch cho (kể từ hôm nay)', type: 'select', options: [{ value: '7', label: '7 ngày tới' }, { value: '14', label: '14 ngày tới' }, { value: '30', label: '30 ngày tới' }, { value: '60', label: '60 ngày tới' }], hint: 'Hệ thống tự thêm các chuyến còn thiếu theo mục Giờ chạy' }],
+    Form.open({ title: 'Tạo lịch chạy từ Giờ chạy', width: 520, cols: 2, saveText: 'Tạo lịch ngay', value: { tu: lcDay(), den: lcDay(), autoDays: String((S().autoLich && S().autoLich.days) || 7), autoGio: (S().autoLich && S().autoLich.gio) || '06:00' },
+      fields: [{ key: 'tu', label: 'Từ ngày', type: 'date', required: true }, { key: 'den', label: 'Đến ngày', type: 'date', required: true, hint: `Mỗi ngày trong khoảng được tạo ${open.length} chuyến đang MỞ trong mục Giờ chạy, kèm xe và lái xe đã gán. Chuyến đã có sẵn được giữ nguyên. Tối đa 62 ngày một lần` }],
       onSave: d => {
-        S().autoLich = { on: !!d.auto, days: +d.autoDays || 7, gio: d.autoGio || '06:00', last: '' };
+        S().autoLich = Object.assign({}, S().autoLich || {}, { on: false });
         if (!d.tu || !d.den) { toast('Vui lòng chọn từ ngày và đến ngày', 'err'); return false; }
         if (d.den < d.tu) { toast('Đến ngày phải sau hoặc bằng từ ngày', 'err'); return false; }
         const days = D.diff(d.den, d.tu) + 1; if (days > 62) { toast('Chỉ tạo tối đa 62 ngày một lần', 'err'); return false; }
@@ -10441,8 +10439,16 @@ Object.defineProperty(LC, 'ngay', {
 
 /* ---------- Tự tạo lịch chạy (mặc định BẬT, có nút chọn chế độ) ---------- */
 const LCX = {
-  on() { const a = (S() || {}).autoLich; return !!a && a.on !== false; },
-  init() { try { const s = S(); if (s && !s.autoLich) { s.autoLich = { on: true, days: 7, gio: '00:00', last: '' }; Store.changed(); } } catch (e) { } },
+  on() { return false; },   // bỏ tự tạo lịch (gây trùng chuyến trống đè lên chuyến đã gán tài khi tải lại)
+  init() { },
+  /* dọn chuyến TRÙNG cùng ngày + tuyến + giờ do tự tạo lịch trước đây: bỏ bản trống (không xe, không lái xe, không vé), giữ bản đã gán */
+  dedup() {
+    const L = DB.lichchay || [], td = D.today(); if (L.length === LCX._dn || !Auth.user || !Auth.can('lichchay', 'edit')) return; LCX._dn = L.length;
+    const G = {}; L.forEach(l => { if (l.ngay >= td) (G[l.ngay + '|' + l.tuyen + '|' + l.gio] = G[l.ngay + '|' + l.tuyen + '|' + l.gio] || []).push(l); });
+    const bo = new Set(); Object.values(G).forEach(a => { if (a.length < 2) return; const blank = l => !l.xeId && !l.laiXe && !l.laiXe2 && !l.phuXe && !dvBook(l.id).length && !(DB.datve || []).some(x => x.chuyen === l.id);
+      let keep = a.filter(l => !blank(l)); if (!keep.length) keep = [a[0]]; a.forEach(l => { if (!keep.includes(l)) bo.add(l); }); });
+    if (!bo.size) return; DB.lichchay = L.filter(l => !bo.has(l)); LCX._dn = DB.lichchay.length; Store.changed(); console.info('LCX.dedup: bỏ', bo.size, 'chuyến trống trùng');
+  },
   ensureDay(day) {                                  // tạo đủ chuyến của ngày đang xem từ mục Giờ chạy (chỉ ngày hôm nay trở đi)
     try {
       if (!LCX.on() || !day || day < D.today() || !Auth.user || !Auth.can(App.cur === 'dieuhanh' ? 'dieuhanh' : 'lichchay', 'add')) return 0;
@@ -10456,7 +10462,8 @@ const LCX = {
       if (n) Store.changed(); return n;
     } catch (e) { return 0; }
   },
-  btn() { const on = LCX.on(); return `<button class="btn${on ? ' pri' : ''}" data-lx="auto" title="${on ? 'Đang tự tạo lịch chạy từ mục Giờ chạy. Bấm để tắt' : 'Đang tắt. Bấm để bật tự tạo lịch chạy'}">⚡ Tự tạo lịch: ${on ? 'BẬT' : 'TẮT'}</button>`; },
+  btn() { return Auth.can('lichchay', 'add') ? `<button class="btn" data-act="lcGen" title="Tạo chuyến từ mục Giờ chạy cho các ngày bạn chọn">${ic('calendar')} Tạo lịch chạy</button>` : ''; },
+  btn0() { const on = LCX.on(); return `<button class="btn${on ? ' pri' : ''}" data-lx="auto" title="${on ? 'Đang tự tạo lịch chạy từ mục Giờ chạy. Bấm để tắt' : 'Đang tắt. Bấm để bật tự tạo lịch chạy'}">⚡ Tự tạo lịch: ${on ? 'BẬT' : 'TẮT'}</button>`; },
   toggle() { const s = S(); s.autoLich = Object.assign({ days: 7, gio: '00:00', last: '' }, s.autoLich || {}, { on: !LCX.on() }); Store.changed(); toast(s.autoLich.on ? 'Đã bật tự tạo lịch chạy' : 'Đã tắt tự tạo lịch chạy', 'ok'); App.render(); },
   /* ---- "+ Thêm giờ" ---- */
   tuyenNow() { return (dvCur() || {}).tuyen || DV.tuyen || ($('#dvRoute') || {}).value || ((DB.giochay || [])[0] || {}).tuyen || ''; },
@@ -10500,7 +10507,7 @@ const LCX = {
   const rn1 = App.render;
   App.render = function () {
     document.body.dataset.view = App.cur || '';
-    try { LCX.init(); if (App.cur === 'lichchay' || App.cur === 'dieuhanh') LCX.ensureDay(LC.ngay); } catch (e) { }
+    try { LCX.dedup(); } catch (e) { }
     const r = rn1.apply(this, arguments);
     try { if (App.cur === 'lichchay') { LCX.cards(); LCX.plus(); } } catch (e) { console.warn('v2 render', e); }
     return r;
@@ -13107,7 +13114,7 @@ const TX = {
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
-const APP_BUILD = '2026-11-06T20:20';
+const APP_BUILD = '2026-11-06T20:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
