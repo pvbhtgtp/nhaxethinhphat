@@ -1437,7 +1437,8 @@ const App = {
     else if (DB._meta.sample) $('#draftBox').innerHTML = `<div class="banner">${ic('alert')}<div class="grow">File đang có <b>dữ liệu mẫu</b> để xem thử. Khi dùng thật: vào <a data-nav="data" href="#">Dữ liệu & sao lưu</a> bấm "Xóa dữ liệu mẫu", rồi nhập dữ liệu của mình.</div><button class="ibtn" data-act="bannerClose">${ic('x')}</button></div>`;
     window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== App.cur && App.views[h]) App.go(h); });
     const start = (location.hash || '').slice(1);
-    App.go(App.views[start] ? start : cfg.home || 'dashboard');
+    if (Auth.user && typeof Auth.homeView === 'function') { App.go(Auth.homeView() || cfg.home || 'dashboard'); if (/^(lvc|hdvc):/.test(start)) setTimeout(() => DL.open(start), 700); }
+    else App.go(App.views[start] ? start : cfg.home || 'dashboard');
   },
   go(id) {
     if (!App.views[id]) id = App.cfg.home || 'dashboard';
@@ -3721,6 +3722,7 @@ function vcHTML(c) {
     <div>Hành trình chạy: ${hanhTrinh}${c.khuHoi === false ? '' : ' và ngược lại'} (Kèm theo hợp đồng)</div></td>
     <td class="hd-c" style="vertical-align:top"><b>Giám đốc</b>${vcSign() || '<div style="height:92px"></div><b>' + esc(co.daiDien || '') + '</b>'}<div style="margin-top:22px"><b>Cán bộ kiểm tra</b></div></td></tr></table>
   <p style="margin-top:14px"><i>Lưu ý: Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, điều khiển xe đúng tốc độ cho phép. Hoàn trả lệnh vận chuyển khi hoàn thành hợp đồng.</i></p>
+  ${c.id && typeof QR !== 'undefined' ? `<div style="text-align:right;margin-top:8px">${QR.block('hdvc', c.id, 'Quét để xem hợp đồng điện tử')}</div>` : ''}
   </div>`;
 }
 const vcPrint = list => PrintDlg.open({ htmls: list.map(vcHTML), title: list.length === 1 ? 'Hop dong van chuyen ' + vcSo(list[0]).replace('/', '-') : 'Hop dong van chuyen' });
@@ -5715,7 +5717,7 @@ const Auth = {
   logout() {
     Auth.user = null; try { sessionStorage.removeItem(Auth.sKey()); } catch (e) { }
     document.querySelectorAll('.modal-wrap,.ppd').forEach(n => n.remove());
-    Auth.login(() => { Auth.chip(); Auth.nav(); const id = Auth.canView(App.cur) ? App.cur : Auth.firstView(); App.cur = null; App.go(id); });
+    Auth.login(() => { Auth.chip(); Auth.nav(); const id = Auth.homeView() || Auth.firstView(); App.cur = null; App.go(id); });
   },
   changePass(force = false) {
     const m = Modal.open({
@@ -10353,7 +10355,7 @@ const LVC = {
         ${leg('Lượt về', benDen, benDi, ret ? gn(ret.gio, ret.ngay) : gn('', ''), gn('', ''))}
         <tr><td colspan="5" style="padding:0;border:0"><table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>${sg('LÁI XE 1', l1.id ? l1 : null)}${sg('LÁI XE 2', l2)}${sg('CÁN BỘ ĐIỀU HÀNH', dh)}</tr></table></td></tr>
       </table>
-      <div style="font-size:13px;margin-top:6px"><b>Lưu ý:</b> Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, đúng tốc độ cho phép.<br><span style="padding-left:44px">Nộp trả lệnh vận chuyển có đủ xác nhận của bến đi và bến đến.</span></div>
+      <div style="font-size:13px;margin-top:6px;display:flex;gap:10px;align-items:flex-start"><div style="flex:1"><b>Lưu ý:</b> Không lái xe quá thời gian quy định, luôn chấp hành luật giao thông, đúng tốc độ cho phép.<br><span style="padding-left:44px">Nộp trả lệnh vận chuyển có đủ xác nhận của bến đi và bến đến.</span></div>${o.id ? QR.block('lvc', o.id, 'Quét để xem lệnh điện tử') : ''}</div>
       </div>`;
   },
   print(o) { GP.show(LVC.html(o), 'Lenh van chuyen ' + o.so); },
@@ -12239,7 +12241,41 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T13:35';
+const APP_BUILD = '2026-11-06T13:55';
+/* Màn hình mở đầu: Admin và phòng Điều hành vào Điều hành xe; mọi người khác vào Đặt vé (lái xe: Chuyến của tôi) */
+Auth.homeView = function () {
+  const u = Auth.user; if (!u) return null; const r = (DB.roles || {})[u.role] || {};
+  const dh = u.role === 'admin' || /dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '');
+  return (dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
+};
+/* Mã QR trên lệnh / hợp đồng vận chuyển: mở văn bản trong app (phải đăng nhập) */
+const QR = {
+  src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', _p: null,
+  load() { if (window.qrcode) return Promise.resolve(); return QR._p || (QR._p = new Promise((ok, no) => { const s = document.createElement('script'); s.src = QR.src; s.dataset.runtime = '1'; s.onload = ok; s.onerror = () => { QR._p = null; s.remove(); no(new Error('Không tải được thư viện mã QR')); }; document.head.appendChild(s); })); },
+  link: (k, id) => location.origin + location.pathname + '#' + k + ':' + id,
+  svg(text, mm) { if (!window.qrcode) return ''; try { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 2, margin: 0, scalable: true }).replace('<svg', `<svg style="width:${mm}mm;height:${mm}mm;display:block"`); } catch (e) { return ''; } },
+  block(k, id, cap) { const s = QR.svg(QR.link(k, id), 20); return s ? `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:9.5px;line-height:1.2;text-align:center;flex:none">${s}<span>${cap}</span></div>` : ''; }
+};
+setTimeout(() => QR.load().catch(() => { }), 2500);
+const DL = {
+  mine(ids) { try { const e = PQ.emp(Auth.user); return !!e && ids.filter(Boolean).map(String).includes(String(e.id)); } catch (x) { return false; } },
+  async open(h) {
+    const [k, id] = String(h || '').split(':'); if (!Auth.user || !id) return;
+    try { history.replaceState(null, '', '#' + (App.cur || '')); } catch (e) { }
+    if (k === 'lvc') {
+      const o = (DB.lenhVC || []).find(x => x.id === id); if (!o) return toast('Không tìm thấy lệnh vận chuyển này (có thể đã bị hủy)', 'err', 6000);
+      const t = (DB.lichchay || []).find(x => x.id === o.chuyen) || {};
+      if (!(Auth.canView('dieuhanh') || Auth.canView('lichchay') || DL.mine([o.laiXe, t.laiXe, t.laiXe2]))) return toast('Tài khoản không có quyền xem lệnh này', 'err');
+      await QR.load().catch(() => { }); return LVC.print(o);
+    }
+    if (k === 'hdvc') {
+      const c = (DB.hdvc || []).find(x => x.id === id); if (!c) return toast('Không tìm thấy hợp đồng vận chuyển này', 'err', 6000);
+      if (!(Auth.canView('hdvc') || DL.mine([c.laiXe1, c.laiXe2]))) return toast('Tài khoản không có quyền xem hợp đồng này', 'err');
+      await QR.load().catch(() => { }); return GP.show(vcHTML(c), 'Hop dong van chuyen ' + vcSo(c).replace('/', '-'));
+    }
+  }
+};
+window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (/^(lvc|hdvc):/.test(h) && Auth.user) DL.open(h); });
 /* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
 const MEAV = {
   paint() {
