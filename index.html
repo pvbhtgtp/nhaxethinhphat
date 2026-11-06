@@ -7887,8 +7887,9 @@ const THM = {
     const t = THM._t; if (!t) return null; let ch = false;
     if (t.h != null && s > .22 && (H >= 185 && H <= 280)) { H = t.h; if (t.s != null) s = Math.min(s, t.s); ch = true; }
     if (t.dark && !(fg && l > .78)) {
-      if (s < .14) { s = Math.min(s, .12) + .06; H = s > .1 ? 222 : H; l = l >= .995 ? .165 : l > .8 ? .095 + (1 - l) * .9 : l < .35 ? .93 - l * .45 : Math.max(.52, 1 - l); }
-      else if (l > .8) { l = .14 + (1 - l) * .9; s = s * .55; }
+      /* nền xám trung tính → thang màu than chì cố định (không ám nâu / tím) */
+      if (s < .14) return fg ? (l < .2 ? '#f1f5f9' : l < .35 ? '#e2e8f0' : l < .55 ? '#b6c2d4' : l < .8 ? '#94a3b8' : '#cbd5e1') : (l >= .995 ? '#151d2c' : l > .955 ? '#0d1422' : l > .9 ? '#1e293b' : l > .8 ? '#2a364a' : l > .55 ? '#3b4a61' : l > .35 ? '#64748b' : l > .2 ? '#cbd5e1' : '#e2e8f0');
+      else if (l > .8) { l = .15 + (1 - l) * .35; s = Math.min(s, .45) * .6; }
       else if (l < .36 && fg) l = .9 - l * .5;
       ch = true;
     }
@@ -7910,7 +7911,11 @@ const THM = {
       const sel = css.slice(i, o); let d = 1, j = o + 1; while (j < n && d) { if (css[j] === '{') d++; else if (css[j] === '}') d--; j++; }
       const body = css.slice(o + 1, j - 1), st = sel.trim();
       if (/^@media|^@supports|^@layer|^@container/i.test(st)) out += sel + '{' + (THM.SKIP.test(st) ? body : THM.tx(body)) + '}';
-      else if (/^@font-face|^@import|^@page/i.test(st) || THM.SKIP.test(st)) out += sel + '{' + body + '}';
+      else if (/^@font-face|^@import|^@page/i.test(st)) out += sel + '{' + body + '}';
+      else if (THM.SKIP.test(st)) {   // tách nhóm bộ chọn: phần của vùng in giữ nguyên, phần còn lại vẫn đổi màu
+        const parts = st.split(','), keep = parts.filter(x => THM.SKIP.test(x)), conv = parts.filter(x => !THM.SKIP.test(x));
+        out += keep.join(',') + '{' + body + '}' + (conv.length ? conv.join(',') + '{' + THM.decl(body) + '}' : '');
+      }
       else out += sel + '{' + (/^@keyframes/i.test(st) ? THM.tx(body) : THM.decl(body)) + '}';
       i = j;
     }
@@ -12403,7 +12408,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T16:45';
+const APP_BUILD = '2026-11-06T17:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
