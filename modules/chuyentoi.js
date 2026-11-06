@@ -11,7 +11,7 @@ const CT = {
     const me = CT.me(); if (!me || CT.live() || typeof FB === 'undefined' || !FB.db || CT.on === me) return; CT.on = me;
     try { CT.un && CT.un(); } catch (e) { }
     CT.un = FB.col().doc('tx_' + me).onSnapshot(s => {
-      const o = s.exists ? s.data() : {}; CT.data = o.trips || []; CT.acts = o.acts || {}; CT.at = o.at || 0; CT.none = !s.exists; CT.err = '';
+      const o = s.exists ? s.data() : {}; CT.data = (() => { try { return o.d ? JSON.parse(o.d) : (o.trips || []); } catch (e) { return []; } })(); CT.acts = o.acts || {}; CT.at = o.at || 0; CT.none = !s.exists; CT.err = '';
       const now = Date.now(); CT.data.forEach(t => t.pax.forEach(p => { if (CT.seen[t.id] && !CT.seen[t.id].has(p.id)) CT.fresh[p.id] = now + 90e3; })); CT.data.forEach(t => { CT.seen[t.id] = new Set(t.pax.map(p => p.id)); });
       if (App.cur === 'chuyentoi' && !(typeof UX !== 'undefined' && UX.busy())) App.render(); else if (App.cur === 'chuyentoi') UX.pend.render = true;
     }, e => { CT.on = ''; CT.err = (e && e.code) || 'err'; CT.data = CT.data || []; if (App.cur === 'chuyentoi') App.render(); });
