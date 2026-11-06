@@ -5373,7 +5373,7 @@ dhScan.saveDay = async function (day, force) {
 ACT.dhSaveRange = async () => {
   if (!Auth.can('hoso', 'add')) return toast('Bạn chưa có quyền thêm hồ sơ vào Lưu trữ hồ sơ', 'err');
   if (!HS.google()) return toast('Cần kết nối Google Drive (Management → Kho hồ sơ) để lưu hồ sơ', 'err', 6000);
-  const today = D.today(), m = Modal.open({ title: 'Lưu Bảng phân công vào hồ sơ', width: 460, body: `<div class="row" style="gap:10px"><label class="field grow"><span>Từ ngày</span><input class="inp" type="date" data-f value="${today.slice(0, 4)}-10-01"></label><label class="field grow"><span>Đến ngày</span><input class="inp" type="date" data-t value="${today}"></label></div><div class="small muted" style="margin-top:8px">Mỗi ngày lưu 1 tệp PDF vào <b>08. Điều hành xe › Bảng phân công lịch tài &amp; xe › Tháng MM-YYYY</b>. Ngày còn chuyến thiếu xe hoặc lái xe sẽ bỏ qua và liệt kê lại. Ngày đã lưu trước đó sẽ được thay bằng bản mới.</div><label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer"><input type="checkbox" data-force> Vẫn lưu ngày còn chuyến thiếu xe / lái xe (ô thiếu để trống)</label><div data-p class="small" style="margin-top:10px"></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('check')} Lưu</button>` });
+  const today = D.today(), m = Modal.open({ title: 'Lưu Bảng phân công vào hồ sơ', width: 460, body: `<div class="row" style="gap:10px"><label class="field grow"><span>Từ ngày</span><input class="inp" type="date" data-f value="${today}"></label><label class="field grow"><span>Đến ngày</span><input class="inp" type="date" data-t value="${today}"></label></div><div class="small muted" style="margin-top:8px">Mỗi ngày lưu 1 tệp PDF vào <b>08. Điều hành xe › Bảng phân công lịch tài &amp; xe › Tháng MM-YYYY</b>. Ngày còn chuyến thiếu xe hoặc lái xe sẽ bỏ qua và liệt kê lại. Ngày đã lưu trước đó sẽ được thay bằng bản mới.</div><label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer"><input type="checkbox" data-force> Vẫn lưu ngày còn chuyến thiếu xe / lái xe (ô thiếu để trống)</label><div data-p class="small" style="margin-top:10px"></div>`, foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-go>${ic('check')} Lưu</button>` });
   const q = x => m.el.querySelector(x); q('[data-no]').onclick = () => m.close();
   q('[data-go]').onclick = async () => {
     const f = q('[data-f]').value, t = q('[data-t]').value; if (!f || !t || f > t) return toast('Khoảng ngày không hợp lệ', 'err');
@@ -10318,7 +10318,7 @@ const LVC = {
   open(t) {
     let o = LVC.of(t.id); if (o) return o; const e = V2U.ends(t);
     o = { id: uid(), so: LVC.so(t), chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, xeId: t.xeId || '', laiXe: t.laiXe || '', diemDi: e.di, diemDen: e.den, tg: dvLog.now(), nguoi: dvLog.who(), tt: 'mo' };
-    LVC.all().push(o); Store.changed(); return o;
+    LVC.all().push(o); try { ATK.auto(t, o); } catch (x) { } Store.changed(); return o;
   },
   close(ids, ret) {
     const e = V2U.ends(ret); let n = 0;
@@ -10404,13 +10404,23 @@ const ATK = {
     ['D. An toàn cho hành khách', [['hk1', 'Dây an toàn các ghế, ghế ngồi chắc chắn'], ['hk2', 'Cửa lên xuống, cửa thoát hiểm mở được; có búa phá kính'], ['hk3', 'Bình chữa cháy, hộp sơ cứu đầy đủ, còn hạn'], ['hk4', 'Lối đi thông thoáng, hành lý được chằng buộc chắc chắn'], ['hk5', 'Đã phổ biến hướng dẫn an toàn cho hành khách'], ['hk6', 'Điều hòa hoạt động, xe sạch sẽ']]]
   ],
   keys: () => ATK.G.flatMap(g => g[1].map(i => i[0])),
+  /* số nghiệm thu = số lệnh vận chuyển của chuyến, hậu tố NTAT-<hậu tố công ty> */
+  so(t, r) { const o = (r && r.lenh && (DB.lenhVC || []).find(x => x.id === r.lenh)) || LVC.of(t.id); return o ? String(o.so || '').replace(/^LVC-/, '') + '/NTAT-' + PCFG.suffix() : ''; },
+  allOk: () => Object.fromEntries(ATK.keys().map(k => [k, 'ok'])),
+  /* chuyến có lái xe: mặc định đạt tất cả; tạo lệnh mới → tạo nghiệm thu mới theo lệnh đó */
+  auto(t, o) {
+    if (!t || !(t.laiXe || t.laiXe2)) return; const L = (DB.antoan = DB.antoan || []), x = L.find(z => z.id === t.id);
+    if (x && x.lenh === o.id) return;
+    const r = { id: t.id, kq: ATK.allOk(), odo: '', nl: '', ghiChu: '', lenh: o.id, nguoi: dvLog.who(), tg: dvLog.now(), ketLuan: 'dat', auto: true };
+    if (x) { Object.keys(x).forEach(k => delete x[k]); Object.assign(x, r); } else L.push(r);
+  },
   get: tid => (DB.antoan = DB.antoan || []).find(x => x.id === tid),
   state(t) { const r = ATK.get(t.id); return !r ? '' : (r.ketLuan === 'dat' ? 'ok' : r.ketLuan === 'khong' ? 'fail' : 'part'); },
   concl(kq) { const k = ATK.keys(); if (k.some(x => kq[x] === 'fail')) return 'khong'; return k.every(x => kq[x] === 'ok' || kq[x] === 'na') ? 'dat' : 'chua'; },
   html(t, r) {
     const xe = V2U.xeOf(t), lai = V2U.laiOf(t), kq = r.kq || {}, mark = (v, w) => v === w ? '☒' : '☐', cl = ATK.concl(kq);
     const rows = ATK.G.map(g => `<tr><td colspan="5" style="border:1px solid #000;background:#f1f5f9;padding:3px 6px"><b>${g[0]}</b></td></tr>` + g[1].map((i, n) => `<tr><td style="border:1px solid #000;text-align:center;width:6%">${n + 1}</td><td style="border:1px solid #000;padding:2px 6px">${i[1]}</td><td style="border:1px solid #000;text-align:center;width:9%">${mark(kq[i[0]], 'ok')}</td><td style="border:1px solid #000;text-align:center;width:9%">${mark(kq[i[0]], 'fail')}</td><td style="border:1px solid #000;text-align:center;width:9%">${mark(kq[i[0]], 'na')}</td></tr>`).join('')).join('');
-    return `<div class="hd" style="font-size:12.5px;line-height:1.4">${V2U.head('BẢNG KIỂM TRA AN TOÀN, NGHIỆM THU XE TRƯỚC KHI KHỞI HÀNH', `Chuyến <b>${esc(t.gio)}</b>, ${V2U.ngayDai(t.ngay)}`)}
+    return `<div class="hd" style="font-size:12.5px;line-height:1.4">${V2U.head('BẢNG KIỂM TRA AN TOÀN, NGHIỆM THU XE TRƯỚC KHI KHỞI HÀNH', `${ATK.so(t, r) ? `Số: <b>${esc(ATK.so(t, r))}</b> · ` : ''}Chuyến <b>${esc(t.gio)}</b>, ${V2U.ngayDai(t.ngay)}`)}
       <table style="width:100%;border:0;margin:4px 0 6px"><tr><td style="border:0;width:50%">Biển số xe: <b>${esc(xe.bks || '…………')}</b></td><td style="border:0">Lái xe: <b>${esc(lai.ten || '…………')}</b></td></tr><tr><td style="border:0">Tuyến: <b>${esc(t.tuyen || '')}</b></td><td style="border:0">Số km đồng hồ: <b>${esc(r.odo || '……………')}</b> · Nhiên liệu: <b>${esc(r.nl || '………')}</b></td></tr></table>
       <table style="width:100%;border-collapse:collapse"><thead><tr style="background:#e2e8f0"><th style="border:1px solid #000">STT</th><th style="border:1px solid #000">Nội dung kiểm tra</th><th style="border:1px solid #000">Đạt</th><th style="border:1px solid #000">Không đạt</th><th style="border:1px solid #000">Không áp dụng</th></tr></thead><tbody>${rows}</tbody></table>
       <p style="margin:8px 0 2px"><b>Ghi chú / khắc phục:</b> ${esc(r.ghiChu || '………………………………………………………………………………………………………')}</p>
@@ -10419,9 +10429,11 @@ const ATK = {
       <div style="font-size:11px;color:#555">Kiểm tra lúc ${esc(dvLog.fmt(r.tg || dvLog.now()))}</div></div>`;
   },
   print(t, r) { GP.show(ATK.html(t, r), 'Nghiem thu an toan ' + t.gio); },
-  archive(t, r) { const xe = V2U.xeOf(t); return HS.saveDoc({ path: [String(t.ngay).slice(0, 4), 'Phương tiện', xe.bks || 'Chưa gán xe', 'Nghiệm thu an toàn'], ten: `Nghiệm thu an toàn ${t.gio} ${F.date(t.ngay)} · ${t.tuyen}`, tenFile: `NT-${String(t.ngay)}-${String(t.gio).replace(':', '')}-${(xe.bks || '').replace(/[^0-9A-Za-z]/g, '')}.pdf`, html: ATK.html(t, r), ref: 'atk:' + t.id, ghiChu: ATK.concl(r.kq || {}) === 'dat' ? 'Kết luận: ĐẠT' : 'Kết luận: ' + (ATK.concl(r.kq || {}) === 'khong' ? 'KHÔNG ĐẠT' : 'chưa đủ') }); },
+  archive(t, r) { const xe = V2U.xeOf(t); return HS.saveDoc({ path: [String(t.ngay).slice(0, 4), '08. Điều hành xe', 'Nghiệm thu an toàn', 'Tháng ' + String(t.ngay).slice(5, 7) + '-' + String(t.ngay).slice(0, 4)], ten: `Nghiệm thu an toàn ${t.gio} ${F.date(t.ngay)} · ${t.tuyen}`, tenFile: (ATK.so(t, r) ? ATK.so(t, r).replace(/\//g, '_') : `NT-${String(t.ngay)}-${String(t.gio).replace(':', '')}-${(xe.bks || '').replace(/[^0-9A-Za-z]/g, '')}`) + '.pdf', html: ATK.html(t, r), ref: 'atk:' + t.id, ghiChu: ATK.concl(r.kq || {}) === 'dat' ? 'Kết luận: ĐẠT' : 'Kết luận: ' + (ATK.concl(r.kq || {}) === 'khong' ? 'KHÔNG ĐẠT' : 'chưa đủ') }); },
   dlg(t) {
     const r = Object.assign({ kq: {}, odo: '', nl: '', ghiChu: '' }, JSON.parse(JSON.stringify(ATK.get(t.id) || {})));
+    if (!Object.keys(r.kq || {}).length && (t.laiXe || t.laiXe2)) r.kq = ATK.allOk();
+    if (!r.lenh) { const o = LVC.of(t.id); if (o) r.lenh = o.id; }
     const radio = (k, v, lb) => `<label class="atk-p ${v}"><input type="radio" name="atk_${k}" value="${v}" ${r.kq[k] === v ? 'checked' : ''}><span>${lb}</span></label>`;
     const body = ATK.G.map(g => `<div class="atk-g"><b>${g[0]}</b>${g[1].map(i => `<div class="atk-r"><span>${i[1]}</span><div>${radio(i[0], 'ok', 'Đạt')}${radio(i[0], 'fail', 'Không')}${radio(i[0], 'na', 'K.A.D')}</div></div>`).join('')}</div>`).join('');
     const m = Modal.open({ title: `✅ Nghiệm thu an toàn trước khi khởi hành · ${esc(t.gio)} · ${esc((V2U.xeOf(t)).bks || 'chưa gán xe')}`, width: 760, body: `<div class="row" style="gap:8px;margin-bottom:8px"><button class="btn sm" data-ak="all">Đạt tất cả</button><span class="muted small" id="atkRes"></span></div>${body}<div class="atk-g"><div class="row" style="gap:10px"><label class="field grow"><span>Số km đồng hồ</span><input class="inp" id="atkOdo" value="${esc(r.odo)}"></label><label class="field grow"><span>Nhiên liệu</span><input class="inp" id="atkNl" value="${esc(r.nl)}" placeholder="vd: 3/4 bình"></label></div><label class="field"><span>Ghi chú / khắc phục</span><textarea class="inp" id="atkGc" rows="2">${esc(r.ghiChu)}</textarea></label></div>`,
@@ -12252,7 +12264,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T15:00';
+const APP_BUILD = '2026-11-06T15:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại) → trả về lõi */
 addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);display:flex;align-items:center;justify-content:center;padding:2vh 2vw;animation:fade .15s}
 .gp{display:flex;width:100%;max-width:1180px;height:100%;max-height:900px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);font-family:'Be Vietnam Pro','Segoe UI',Roboto,Arial,sans-serif}
