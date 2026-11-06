@@ -6816,7 +6816,7 @@ const FBU = {
 /* ---- nối vào các phần có sẵn ---- */
 {
   GS.local = () => { try { return JSON.parse(localStorage.getItem(GS.K) || '{}') || {}; } catch (e) { return {}; } };
-  const cfg1 = GS.cfg; GS.cfg = function () { const c = cfg1.call(GS); if (c.mode !== 'fb') return c; const l = GS.local(), g = (DB && DB.settings && DB.settings.gsync) || {}; return { ...c, acct: l.acct != null ? !!l.acct : !!g.acct }; };
+  const cfg1 = GS.cfg; GS.cfg = function () { const c = cfg1.call(GS); if (c.mode !== 'fb') return c; const l = GS.local(), g = (DB && DB.settings && DB.settings.gsync) || {}; return { ...c, acct: !c.key ? true : (l.acct != null ? !!l.acct : !!g.acct) }; };   // không có mã kết nối thì chỉ có thể vào bằng tài khoản app (đăng nhập 1 lần): luôn bật, tránh máy bị kẹt "Chưa nhập đủ cấu hình" không lưu được
   const ok1 = GS.ok; GS.ok = c => c && c.mode === 'fb' && c.acct && !(c.key) ? !!(c.fb && c.fb.apiKey && c.fb.projectId) : ok1(c);
   const boot1 = GS.boot; GS.boot = function (next) { const c = GS.cfg(); if (c.mode === 'fb' && c.acct && !c.key && !c.off && c.fb && c.fb.projectId) return FBU.boot(next, c); return boot1.call(GS, next); };
   const ready1 = FB.ready; FB.ready = async function (c) { if (c && c.mode === 'fb' && c.acct && !c.key) { await FBU.init(c); if (!FBU.cur()) { const e = new Error('Cần đăng nhập lại'); e.code = 'need-login'; throw e; } return FB.db; } return ready1.call(FB, c); };
@@ -13143,7 +13143,7 @@ const TX = {
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
-const APP_BUILD = '2026-11-06T20:40';
+const APP_BUILD = '2026-11-06T20:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
