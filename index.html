@@ -6066,6 +6066,7 @@ const GDN = {
     return GDN.changes(d).map(c => `<div class="gdn-c ${c.my ? 'my' : ''} ${c.df > 0 ? 'up' : c.df < 0 ? 'dn' : ''}"><small>${esc(c.k)}${c.my ? ' · bồn công ty' : ''}</small><b>${F.money(c.p)}</b>${c.df ? `<em>${c.df > 0 ? '▲' : '▼'} ${F.money(Math.abs(c.df))}</em>` : '<em>không đổi</em>'}${big && c.o ? `<i>trước: ${F.money(c.o)}</i>` : ''}</div>`).join('');
   },
   impactHTML(d) {
+    try { if (DRV.on()) return ''; } catch (e) { }
     const m = GDN.impact(d); if (!m || !m.lit) return '';
     return `<div class="gdn-imp ${m.x.df > 0 ? 'up' : 'dn'}">${ic('calc')}<span>Theo lượng dầu đã cấp 30 ngày qua (<b>${nlL(m.lit)} lít</b>), mỗi tháng công ty sẽ ${m.x.df > 0 ? 'chi thêm' : 'tiết kiệm'} khoảng <b>${F.money(Math.abs(m.money))} đ</b>.</span></div>`;
   },
@@ -8609,6 +8610,8 @@ PQ.ensure = function (db) { try { PD.ensure(db); } catch (e) { } };
 PQ.mountIn = function () { };
 PQ.isDrv = e => /(lai xe|tai xe|phu xe|driver)/.test(PQ.nm(e && e.chucVu));
 DRV.on = function () { const u = Auth.user; if (!u || u.role === 'admin') return false; const r = DB.roles && DB.roles[u.role]; if (!r) return false; if (r.selfOnly) return true; if (r.dept == null || r.selfDrv === false) return false; const e = PQ.emp(u); return !!e && PQ.isDrv(e); };
+/* lái xe luôn được xem Nhiên liệu (chỉ xe gán tên mình + bảng giá), không thêm/sửa */
+{ const c0 = Auth.can; Auth.can = function (mod, act) { if (mod === 'nhienlieu' && act === 'view' && Auth.user) { try { if (DRV.on()) return true; } catch (e) { } } return c0.apply(this, arguments); }; }
 { const n0 = Auth.nav; Auth.nav = function () { const r = n0.apply(this, arguments); try { PD.labels(); } catch (e) { } return r; }; }
 /* Cài đặt: thêm thẻ phân quyền (chỉ Admin thấy) */
 /* Màn hình tài khoản: bỏ bảng vai trò cũ, chỉ còn danh sách tài khoản */
@@ -12221,7 +12224,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T10:40';
+const APP_BUILD = '2026-11-06T10:55';
 /* ===== APP CÀI ĐẶT (PWA): biểu tượng "Cài đặt" trên thanh địa chỉ / "Thêm vào màn hình chính"; mở cửa sổ riêng, không tab ===== */
 const PWA = {
   ev: null,

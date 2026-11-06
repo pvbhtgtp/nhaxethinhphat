@@ -266,4 +266,22 @@ addCSS(`
 .r80cut{border-top:1px dashed #999;margin:10px 0;page-break-after:always}
 @media print{#print-root .r80{width:72mm;margin:0 auto;padding:2mm 0}#print-root .r80cut{border:0;margin:0}}
 `);
+/* ---------- Lái xe: chỉ xem xe được gán tên mình (Phương tiện → Lái xe 1/2) + bảng giá nhiên liệu ---------- */
+vNL.myXes = () => { const e = PQ.emp(Auth.user), id = e && String(e.id); if (!id) return []; return (DB.vehicles || []).filter(v => !v.ngung && [v.laiXe1, v.laiXe2].map(String).includes(id)).map(v => v.bks).filter(Boolean).sort(); };
+vNL.renderDrv = function (el) {
+  if (!NL.thang) NL.thang = D.ymNow(); NLMK.init();
+  const xes = vNL.myXes(), { led, rows } = nlMonthRows(), X = rows.filter(r => led.map[r.id].k !== 'nhap' && xes.includes(r.xe)).slice().reverse();
+  const months = [...new Set([D.ymNow(), NL.thang, ...(DB.nhienlieu || []).filter(r => xes.includes(r.xe)).map(r => String(r.ngay).slice(0, 7))])].filter(Boolean).sort().reverse();
+  const card = bks => { const L = X.filter(r => r.xe === bks), km = sum(L, r => led.map[r.id].kmChay || 0), litTH = sum(L.filter(r => led.map[r.id].kmChay), r => r.lit), th = km ? litTH / km * 100 : 0;
+    return `<div class="nl-card nl-xe"><div class="nl-top"><span class="nl-ic">${ic('bus')}</span><div class="nl-tt"><b>${esc(bks)}</b><small>${L.length} lượt đổ · ${F.month(NL.thang).toLowerCase()}</small></div><div class="nl-lit">${nlL(sum(L, r => r.lit))}<small>lít</small></div></div>
+      <div class="nl-stats"><div><small>Km chạy</small><b>${km ? F.money(km) : '—'}</b></div><div><small>Tiêu hao</small><b>${th ? F.num(th, 1) : '—'}</b><small>L/100km</small></div><div><small>Định mức</small><b>${nlDm(bks) || '—'}</b></div></div>
+      ${L.length ? `<div class="nl-dl">${L.map(r => { const x = led.map[r.id]; return `<div><span>${F.date(r.ngay)}${r.gio ? ' ' + esc(r.gio) : ''}</span><span>${x.k === 'ngoai' ? esc(r.cayXang || 'Cây xăng') : 'Bồn công ty'}</span><b>${nlL(r.lit)} lít</b><span class="muted">${+r.km ? F.money(r.km) + ' km' : ''}</span></div>`; }).join('')}</div>` : '<div class="muted small" style="padding:6px 0">Chưa có lượt đổ trong tháng</div>'}</div>`; };
+  el.insertAdjacentHTML('beforeend', `${nlMkHTML({ bq: 0, map: {} }, [])}
+    <div class="row nl-bar"><b style="font-size:14px">${ic('bus')} Xe của tôi</b><span class="grow"></span><select class="inp" id="nlM">${months.map(x => `<option value="${x}" ${x === NL.thang ? 'selected' : ''}>${F.month(x)}</option>`).join('')}</select></div>
+    ${xes.length ? `<div class="nl-grid xe">${xes.map(card).join('')}</div>` : `<div class="card"><div class="empty">${ic('bus')}<div style="margin-top:8px">Chưa có xe nào gán tên bạn. Liên hệ điều hành để gán xe (Phương tiện → Lái xe 1 / Lái xe 2).</div></div></div>`}`);
+  $('#nlM', el).onchange = e => { NL.thang = e.target.value; App.render(); };
+};
+{ const r0 = vNL.render, t0 = vNL.tools; vNL.render = function (el) { return DRV.on() ? vNL.renderDrv(el) : r0.call(this, el); }; vNL.tools = function () { return DRV.on() ? '' : t0.apply(this, arguments); };
+  const x0 = vNL.excel; Object.defineProperty(vNL, 'excel', { configurable: true, get: () => DRV.on() ? undefined : x0 }); }
+addCSS(`.nl-bar>b{display:inline-flex;align-items:center;gap:8px}.nl-bar>b svg{width:18px;height:18px;color:var(--p)}.nl-dl{display:flex;flex-direction:column;gap:2px;margin-top:8px;border-top:1px dashed #e6e9f0;padding-top:6px}.nl-dl>div{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;font-size:12.5px;padding:3px 0;align-items:center}.nl-dl>div>span:nth-child(2){color:#475467;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`);
 MODL.def('nhienlieu', vNL);
