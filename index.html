@@ -13245,7 +13245,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-06T22:20';
+const APP_BUILD = '2026-11-06T22:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -13350,8 +13350,9 @@ addCSS(`@media(max-width:900px){.topbar{position:static;flex-wrap:wrap;padding:1
 const LXV = {
   is() {
     try {
-      const u = Auth.user; if (!u || u.role === 'admin') return false; const r = (DB.roles || {})[u.role] || {}; if (/dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '')) return false;
-      if (DRV.on()) return true;   // tài khoản chỉ xem dữ liệu của mình (lái xe, phụ xe): màn hình Đặt vé vô dụng → luôn dùng Chuyến của tôi
+      const u = Auth.user; if (!u || u.role === 'admin') return false;
+      if (DRV.on()) return true;   // chỉ xem dữ liệu của mình: là lái/phụ xe, kể cả khi thuộc phòng ban "Phòng Điều Hành"
+      const r = (DB.roles || {})[u.role] || {}; if (/dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '')) return false;   // tài khoản chỉ xem dữ liệu của mình (lái xe, phụ xe): màn hình Đặt vé vô dụng → luôn dùng Chuyến của tôi
       if (/(^|_)(lai_?xe|phu_?xe|tai_?xe)/i.test(u.role) || /lái\s*xe|phụ\s*xe|tài\s*xế/i.test(r.name || '')) return true;   // theo vai trò tài khoản (máy lái xe có thể chưa có danh sách nhân viên)
       let e = null; try { e = DRV.me(); } catch (x) { } if (e) return llIsLai(e) || /phụ\s*xe/i.test(e.chucVu || ''); return DRV.on() && !Auth.can('lichchay', 'add');   // chỉ xem của mình, không bán vé → lái/phụ xe
     } catch (x) { return false; }
@@ -13362,7 +13363,7 @@ const LXV = {
 { const r0 = App.render; App.render = function () { try { if (App.cur === 'lichchay' && LXV.ok()) return App.go('chuyentoi'); } catch (e) { } const r = r0.apply(this, arguments); try { PD.labels(); } catch (e) { } return r; }; }
 Auth.homeView = function () {
   const u = Auth.user; if (!u) return null; const r = (DB.roles || {})[u.role] || {};
-  const dh = u.role === 'admin' || /dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '');
+  const dh = u.role === 'admin' || (!DRV.on() && (/dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '')));
   let lx = false; try { lx = !dh && LXV.is(); } catch (x) { }   // lái xe, phụ xe: mở thẳng Chuyến của tôi
   return (lx ? ['chuyentoi', 'cuatoi'] : dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
 };
