@@ -12816,7 +12816,7 @@ const NOTI = {
   },
   async send(list) {
     const by = {}; list.forEach(x => { (by[x.emp] = by[x.emp] || {})[x.ev.id.replace(/[.~*/\[\]`]/g, '_')] = x.ev; });
-    for (const [emp, ev] of Object.entries(by)) { try { await FB.col().doc('nt_' + emp).set({ t: 'nt', emp, ev }, { merge: true }); } catch (e) { console.warn('NOTI.send', e); } }
+    for (const [emp, ev] of Object.entries(by)) { try { await FB.col().doc('nt_' + emp).set({ t: 'nt', emp, ev }, { merge: true }); } catch (e) { console.warn('NOTI.send', e); try { TX.denied(e); } catch (x) { } } }
   },
   track() {
     if (!NOTI.can()) { NOTI.prev = null; return; }
@@ -13056,9 +13056,11 @@ const TX = {
     (DB.lichchay || []).forEach(l => { if (l.ngay >= a && l.ngay <= b && !l._me) [l.laiXe, l.laiXe2, l.phuXe].filter(Boolean).forEach(x => E.add(String(x))); });
     E.forEach(emp => {
       const trips = TX.build(emp), h = PM.h(JSON.stringify(trips)); if (TX.sent[emp] === h) return; TX.sent[emp] = h;
-      FB.col().doc('tx_' + emp).set({ t: 'x', emp, trips, at: Date.now() }, { merge: true }).catch(e => { delete TX.sent[emp]; console.warn('TX.push', e); });
+      FB.col().doc('tx_' + emp).set({ t: 'x', emp, trips, at: Date.now() }, { merge: true }).catch(e => { delete TX.sent[emp]; console.warn('TX.push', e); TX.denied(e); });
     });
   },
+  /* luật bảo mật chưa cập nhật: báo ngay cho người thao tác (1 lần) */
+  denied(e) { if (!e || e.code !== 'permission-denied' || TX._pd) return; TX._pd = 1; toast(`Chưa gửi được chuyến / thông báo cho lái xe: luật bảo mật Firebase chưa cập nhật. ${PERM.admin() ? '<button class="btn sm" data-act="rulesGo" style="margin-left:6px">Cập nhật ngay</button>' : 'Báo Admin bấm Cập nhật luật.'}`, 'err', 15000); },
   soon() { clearTimeout(TX._t); TX._t = setTimeout(() => { try { TX.push(); } catch (e) { console.warn('TX', e); } }, 1500); },
   /* máy quầy vé: nhận "Đã lên xe / Đã thu" từ lái xe, ghi vào vé */
   watch() {
@@ -13082,7 +13084,7 @@ const TX = {
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
-const APP_BUILD = '2026-11-06T19:40';
+const APP_BUILD = '2026-11-06T19:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

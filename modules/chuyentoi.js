@@ -11,10 +11,10 @@ const CT = {
     const me = CT.me(); if (!me || CT.live() || typeof FB === 'undefined' || !FB.db || CT.on === me) return; CT.on = me;
     try { CT.un && CT.un(); } catch (e) { }
     CT.un = FB.col().doc('tx_' + me).onSnapshot(s => {
-      const o = s.exists ? s.data() : {}; CT.data = o.trips || []; CT.acts = o.acts || {};
+      const o = s.exists ? s.data() : {}; CT.data = o.trips || []; CT.acts = o.acts || {}; CT.at = o.at || 0; CT.none = !s.exists; CT.err = '';
       const now = Date.now(); CT.data.forEach(t => t.pax.forEach(p => { if (CT.seen[t.id] && !CT.seen[t.id].has(p.id)) CT.fresh[p.id] = now + 90e3; })); CT.data.forEach(t => { CT.seen[t.id] = new Set(t.pax.map(p => p.id)); });
       if (App.cur === 'chuyentoi' && !(typeof UX !== 'undefined' && UX.busy())) App.render(); else if (App.cur === 'chuyentoi') UX.pend.render = true;
-    }, () => { CT.on = ''; });
+    }, e => { CT.on = ''; CT.err = (e && e.code) || 'err'; CT.data = CT.data || []; if (App.cur === 'chuyentoi') App.render(); });
   },
   /* trạng thái vé: dữ liệu gốc + thao tác của lái xe chưa kịp ghi vào vé */
   st(p) { const a = CT.acts[p.id]; const o = { len: p.len, tt: p.tt, httt: p.httt }; if (a && !CT.live()) { if (a.len != null) o.len = !!a.len; if (a.tt) { o.tt = a.tt; if (a.httt) o.httt = a.httt; } } return o; },
@@ -30,6 +30,15 @@ const CT = {
   sum(t) { let len = 0, can = 0, tm = 0, ck = 0; t.pax.forEach(p => { const s = CT.st(p); if (s.len) len++; if (s.tt === 'tra') { if (s.httt === 'ck') ck += p.tien; else tm += p.tien - p.coc; } else can += Math.max(0, p.tien - p.coc); }); return { n: t.pax.length, len, can, tm, ck, cap: t.so ? sdSeats(t.so).length : t.xe.soCho }; },
   mins(t) { const d = new Date(t.ngay + 'T' + (t.gio || '00:00') + ':00').getTime(); return Math.round((d - Date.now()) / 60000); },
   when(t) { const m = CT.mins(t); if (m > 0) return m >= 60 ? `Còn ${Math.floor(m / 60)} giờ ${m % 60 ? (m % 60) + ' phút' : ''}` : `Còn ${m} phút`; if (m > -180) return 'Đang chạy'; return 'Đã chạy'; },
+  /* lý do chưa thấy chuyến: giúp lái xe / quản lý xử lý ngay */
+  why() {
+    if (typeof FO !== 'undefined' && FO.on) return 'App đang chạy dự phòng Google Drive (Firebase hết hạn mức), chuyến sẽ hiện khi Firebase có lại.';
+    if (CT.err === 'permission-denied') return 'Luật bảo mật Firebase chưa cập nhật bản mới. Báo Admin mở app, bấm "Cập nhật ngay" rồi Publish.';
+    if (CT.err) return 'Chưa kết nối được để nhận chuyến (' + esc(CT.err) + '). Kiểm tra mạng rồi mở lại app.';
+    if (CT.live()) return 'Khi điều hành phân công chuyến hôm nay hoặc ngày mai cho bạn, chuyến sẽ hiện ở đây.';
+    if (CT.none) return 'Chưa nhận được chuyến nào. Sau khi điều hành gắn tên bạn vào chuyến hôm nay / ngày mai (trên app bản mới), chuyến sẽ tự hiện.';
+    return 'Không có chuyến hôm nay và ngày mai' + (CT.at ? ' (cập nhật lúc ' + new Date(CT.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ')' : '') + '.';
+  },
   map: n => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(n),
   /* ---------- màn hình danh sách chuyến ---------- */
   list(el, T) {
@@ -38,7 +47,7 @@ const CT = {
       <div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when ${m > 0 && m <= 60 ? 'soon' : ''}">${t.ngay === td ? '' : 'Ngày mai · '}${CT.when(t)}</span></div>
       <div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
       <div class="ct-kpi"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Cần thu</span></div></div></button>`; };
-    el.innerHTML = `<div class="ct">${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>Khi điều hành phân công, chuyến sẽ hiện ở đây.</span></div>`}</div>`;
+    el.innerHTML = `<div class="ct">${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
     el.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { CT.trip = b.dataset.ct; CT.tab = 'don'; App.render(); window.scrollTo(0, 0); });
   },
   /* ---------- màn hình một chuyến ---------- */
