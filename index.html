@@ -9253,6 +9253,22 @@ const FO = {
       toast(`${ic('check')} Firebase đã hoạt động lại${pushed ? ' · đã đưa bản mới nhất từ ' + FO.tname() + ' lên Firebase' : ''}. App quay về dùng Firebase.`, 'ok', 8000);
     } finally { FO.rec = false; FO.paint(); }
   },
+  /* Firebase hết hạn mức GHI nhưng vẫn ĐỌC được: mở app (F5) sẽ đọc bản cũ trên Firebase, mất các thay đổi đã lưu sang Drive.
+     Sau lần đọc đầu tiên: nếu Drive dự phòng có bản lưu mới hơn bản trên Firebase → dùng bản Drive, ở lại chế độ dự phòng
+     (tự đưa về Firebase khi Firebase nhận ghi trở lại). */
+  async bootCheck() {
+    if (FO._bc || FO.on || !FO.ready()) return; FO._bc = 1;
+    try {
+      const [dj, fi] = await Promise.all([FO.pick({ action: 'info' }, 30000), FO.call0.call(GS, { action: 'info' }, GS.cfg(), 20000)]);
+      if (!/^\[Dự phòng\]/.test(dj.who || '') || !((dj.at || '') > (fi.savedAt || ''))) return;
+      if (Store.dirty) return;
+      const j = await FO.pick({ action: 'get' }); if (!j.data || !j.data.settings || FO.on) return;
+      FO.on = true; FO.reason = 'quota'; FO.since = dj.at || new Date().toISOString(); FO.needPull = false;
+      if (FO.full()) { GS.apply(j.data, j.ver); } else GS.ver = +j.ver || 0;
+      FO.start(); FO.paint(); try { App.render(); } catch (x) { }
+      toast(`${ic('alert')} Firebase chưa nhận lưu (hết hạn mức ghi hôm nay). App dùng bản mới nhất trên <b>${FO.tname()} dự phòng</b> và tự đưa về Firebase khi Firebase nhận lưu lại.`, 'err', 9000);
+    } catch (e) { console.warn('FO.bootCheck', e); }
+  },
   /* mở app khi Firebase lỗi: lấy dữ liệu từ Drive rồi đăng nhập bằng tài khoản app như bình thường */
   async bootDrive(next, e) {
     GS.loading('Firebase đang lỗi · đang tải dữ liệu từ máy chủ dự phòng…');
@@ -9285,7 +9301,7 @@ const FO = {
     GS.call = async function (body, c = GS.cfg(), ms) {
       if (!c || c.mode !== 'fb' || !FO.ready()) return FO.call0.call(GS, body, c, ms);
       if (FO.on) return FO.drive(body, ms);
-      try { const r = await FO.call0.call(GS, body, c, body.action === 'info' ? Math.min(ms || 60000, 20000) : ms); FO.fails = 0; FO.markOk(); return r; }
+      try { const r = await FO.call0.call(GS, body, c, body.action === 'info' ? Math.min(ms || 60000, 20000) : ms); FO.fails = 0; if (body.action === 'put') FO.markOk(); else if (body.action === 'get' && !FO._bc) setTimeout(() => FO.bootCheck(), 0); return r; }   // chỉ GHI thành công mới tính "Firebase ổn" (hết hạn mức ghi vẫn đọc được)
       catch (e) {
         const k = FO.kind(e); if (!k) throw e;
         if (k === 'net' && GS.on && ++FO.fails < 2) throw e;      // mạng chập chờn 1 lần: thử lại như cũ
@@ -13090,7 +13106,7 @@ const TX = {
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
-const APP_BUILD = '2026-11-06T20:00';
+const APP_BUILD = '2026-11-06T20:10';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
