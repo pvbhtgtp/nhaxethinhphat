@@ -12209,22 +12209,69 @@ const MED = {
     const img = (lb, u) => `<figure class="med-img"><figcaption>${lb}</figcaption>${u ? `<img src="${esc(u)}" alt="" data-zoom>` : '<div class="med-no">Chưa có ảnh</div>'}</figure>`;
     const hist = (loai, cols) => { let L = []; try { L = llRecs(e.id, loai); } catch (z) { } return L.length ? `<div class="tbl-wrap free" style="margin-top:12px"><table class="tbl compact"><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${L.map(r => `<tr>${cols.map(c => `<td class="wrap">${c[2] === 'date' ? d(r[c[0]]) : esc(r[c[0]] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="muted" style="margin-top:12px">Chưa có bản ghi nào trong Lý lịch hành nghề.</div>'; };
     const P = {
-      gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>`],
+      gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>${(x.th || e.theNVTruoc || (() => { try { return llIsLai(e); } catch (z) { return false; } })()) ? `<div class="med-sec">${ic('shield')} Thẻ tập huấn nghiệp vụ</div><div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Nội dung', x.th ? esc(x.th.noiDung || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ tập huấn (mặt trước)', e.theNVTruoc)}</div>` : ''}`],
       thenv: ['Thẻ nghiệp vụ lái xe', `<div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ nghiệp vụ (mặt trước)', e.theNVTruoc)}</div>`],
       cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số CCCD', esc(e.cccd || ''))}${v('Họ và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Địa chỉ thường trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
       sk: ['Giấy khám sức khỏe', `<div class="med-kv">${v('Lần khám gần nhất', x.sk ? d(x.sk.ngay) : '')}${v('Nơi khám', x.sk ? esc(x.sk.noi || '') : '')}${v('Tình trạng sức khỏe', x.sk ? esc(x.sk.tt || '') : '')}${v('Hạn giấy khám', x.skH ? d(x.skH) + ' ' + x.st(x.skH) : '')}</div><div class="med-h">Lịch sử khám sức khỏe</div>${hist('sk', [['ngay', 'Ngày khám', 'date'], ['noi', 'Nơi khám'], ['tt', 'Tình trạng'], ['hetHan', 'Hạn', 'date']])}`],
       th: ['Tập huấn nghiệp vụ', `<div class="med-kv">${v('Lần gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-h">Lịch sử tập huấn</div>${hist('th', [['ngay', 'Thời gian', 'date'], ['noiDung', 'Nội dung'], ['donVi', 'Đơn vị'], ['hetHan', 'Hạn thẻ', 'date']])}`],
-      hd: ['Hợp đồng lao động', `<div class="med-kv">${v('Số hợp đồng', esc(e.soHD || ''))}${v('Loại hợp đồng', esc(e.loaiHD || ''))}${v('Từ ngày', d(e.hdTu))}${v('Đến ngày', e.hdDen ? d(e.hdDen) + ' ' + x.st(e.hdDen) : (e.hdTu ? 'Không thời hạn' : ''))}${v('Chức vụ', esc(e.chucVu || ''))}${v('Phòng ban', esc(e.phongBan || ''))}${v('Lương CK (tháng)', m(e.luongCB))}${v('Lương cố định', m(e.luongCoDinh))}${v('Hỗ trợ ăn trưa', m(e.hdAnTrua))}${v('Hỗ trợ xăng xe', m(e.hdXang))}${v('Hỗ trợ điện thoại', m(e.hdDienThoai))}${v('Hỗ trợ khác', m(e.hdKhac))}${e.moTaCV ? `<div class="med-full"><span>Mô tả công việc</span><b style="white-space:pre-line;font-weight:500">${esc(e.moTaCV)}</b></div>` : ''}</div>`],
+      hd: ['Hợp đồng lao động', `<div class="med-kv">${v('Số hợp đồng', esc(e.soHD || ''))}${v('Loại hợp đồng', esc(e.loaiHD || ''))}${v('Từ ngày', d(e.hdTu))}${v('Đến ngày', e.hdDen ? d(e.hdDen) + ' ' + x.st(e.hdDen) : (e.hdTu ? 'Không thời hạn' : ''))}${v('Chức vụ', esc(e.chucVu || ''))}${v('Phòng ban', esc(e.phongBan || ''))}${v('Lương CK (tháng)', m(e.luongCB))}${v('Lương cố định', m(e.luongCoDinh))}${v('Hỗ trợ ăn trưa', m(e.hdAnTrua))}${v('Hỗ trợ xăng xe', m(e.hdXang))}${v('Hỗ trợ điện thoại', m(e.hdDienThoai))}${v('Hỗ trợ khác', m(e.hdKhac))}${e.moTaCV ? `<div class="med-full"><span>Mô tả công việc</span><b style="white-space:pre-line;font-weight:500">${esc(e.moTaCV)}</b></div>` : ''}</div><div class="med-act"><button class="btn pri" data-hdv>${ic('file')} Xem nội dung hợp đồng</button></div>`],
       bh: ['Bảo hiểm xã hội & thuế', `<div class="med-kv">${v('Số sổ BHXH', esc(e.soBHXH || ''))}${v('Ngày cấp sổ', d(e.bhxhNgayCap))}${v('Lương đóng bảo hiểm', m(e.luongBH))}${v('Mã số thuế cá nhân', esc(e.mst || ''))}${v('Số người phụ thuộc', String(+e.soNPT || 0))}${v('Phụ cấp chịu thuế', m(e.pcChiuThue))}${v('Phụ cấp không chịu thuế', m(e.pcKhongThue))}</div>`],
       zalo: ['Zalo nhận thông báo', e.zaloId ? `<div class="med-kv">${v('Trạng thái', '<span class="badge b-green">Đã liên kết</span>')}${v('Zalo Chat ID', esc(e.zaloId))}</div><p class="muted small">Phiếu lương và thông báo của công ty sẽ được gửi vào Zalo này.</p>` : `<p>Chưa liên kết Zalo. Mở Zalo Bot của công ty và nhắn <b>${esc(e.ma || 'mã nhân viên')}</b> hoặc số điện thoại của bạn, app sẽ tự liên kết trong vài phút.</p>`]
     }[k]; if (!P) return;
     const md = Modal.open({ title: P[0] + ' · ' + esc(e.ten || ''), width: 720, body: `<div class="med">${P[1]}</div>` });
     md.el.querySelectorAll('[data-zoom]').forEach(i => i.onclick = () => Modal.open({ title: P[0], width: 1000, body: `<img src="${i.src}" style="width:100%;border-radius:8px">` }));
+    const hb = md.el.querySelector('[data-hdv]'); if (hb) hb.onclick = () => HDV.open(e);
+  }
+};
+/* ===== Xem bản hợp đồng dạng trang giấy (bảo mật) =====
+   Trình duyệt không thể chặn tuyệt đối việc chụp màn hình (nút cứng điện thoại, máy ảnh khác) — chỉ làm khó và truy vết:
+   in chìm tên + SĐT người xem + giờ xem, chặn chọn chữ/sao chép/chuột phải/in/lưu, làm mờ khi phím PrintScreen,
+   khi rời cửa sổ hoặc chuyển ứng dụng. Admin luôn được in; nhân viên được in/chụp khi Cài đặt › Công ty bật hdChoChup. */
+const HDV = {
+  ok: () => PERM.admin() || !!(S().company || {}).hdChoChup,
+  open(e) {
+    let html = ''; try { html = hdHTML(e); } catch (x) { return toast('Không tạo được bản hợp đồng', 'err'); }
+    const ok = HDV.ok(), u = Auth.user || {}, t = new Date();
+    const wm = esc([u.ten || u.name || '', u.user || '', F.date(D.today()) + ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')].filter(Boolean).join(' · '));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260"><text x="210" y="130" text-anchor="middle" transform="rotate(-28 210 130)" font-family="Arial" font-weight="700" font-size="15" fill="#b91c1c" fill-opacity=".16">${wm}</text></svg>`;
+    const marks = ok ? '' : `<div class="hdv-wm" style="background-image:url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg).replace(/'/g, '%27')}')"></div>`;
+    let off = [];
+    const md = Modal.open({ title: 'Hợp đồng lao động · ' + esc(e.ten || ''), width: 900,
+      body: `<div class="hdv${ok ? '' : ' lock'}"><div class="hdv-sc"><div class="hdv-pg pd-doc"><div class="pr">${html}</div>${marks}</div></div><div class="hdv-cv">${ic('eye')} Nội dung đang được bảo vệ<br><small>Quay lại cửa sổ này để xem tiếp</small></div></div>`,
+      foot: `${ok ? '' : `<span class="small muted left hdv-ft">${ic('lock')} Bản xem bảo mật · không sao chép, in hoặc chụp</span>`}<button class="btn" data-no>Đóng</button>${ok ? `<button class="btn pri" data-pr>${ic('printer')} In hợp đồng</button>` : ''}`,
+      onClose: () => { off.forEach(f => f()); document.body.classList.remove('hdv-on'); } });
+    const box = md.el.querySelector('.hdv'), sc = md.el.querySelector('.hdv-sc'), pg = md.el.querySelector('.hdv-pg');
+    md.el.querySelector('[data-no]').onclick = () => md.close();
+    const pr = md.el.querySelector('[data-pr]'); if (pr) pr.onclick = () => PrintDlg.open({ htmls: [html], title: 'Hợp đồng lao động - ' + (e.ten || '') });
+    const fit = () => { const w = sc.clientWidth - 2, k = Math.min(1, w / 794); pg.style.transform = `scale(${k})`; sc.style.height = Math.min(pg.offsetHeight * k + 4, innerHeight * .72) + 'px'; pg.style.marginBottom = (k < 1 ? -(pg.offsetHeight * (1 - k)) : 0) + 'px'; };
+    requestAnimationFrame(fit); const on = (o, ev, f, c) => { o.addEventListener(ev, f, c); off.push(() => o.removeEventListener(ev, f, c)); };
+    on(window, 'resize', fit);
+    if (ok) return;
+    document.body.classList.add('hdv-on');
+    const hide = () => box.classList.add('cv'), show = () => box.classList.remove('cv');
+    ['contextmenu', 'copy', 'cut', 'dragstart', 'selectstart'].forEach(ev => on(box, ev, x => x.preventDefault()));
+    on(window, 'blur', hide); on(window, 'focus', show);
+    on(document, 'visibilitychange', () => document.hidden ? hide() : null);
+    on(document, 'keydown', x => {
+      const k = (x.key || '').toLowerCase();
+      if (k === 'printscreen' || x.keyCode === 44) { hide(); try { navigator.clipboard.writeText(''); } catch (z) { } setTimeout(show, 1500); x.preventDefault(); }
+      if ((x.ctrlKey || x.metaKey) && ['p', 's', 'c', 'a', 'u'].includes(k)) { x.preventDefault(); x.stopPropagation(); toast('Bản hợp đồng này không cho in hoặc sao chép', 'err'); }
+      if (x.metaKey && x.shiftKey && ['3', '4', '5', 's'].includes(k)) hide();   // phím chụp màn hình macOS / Windows (Win+Shift+S)
+    }, true);
+    on(document, 'keyup', x => { if ((x.key || '').toLowerCase() === 'printscreen') { hide(); setTimeout(show, 1500); } }, true);
+    on(document, 'touchstart', x => { if (x.touches.length >= 3) hide(); }, { passive: true });   // vuốt 3 ngón chụp màn hình
+    on(document, 'touchend', x => { if (!x.touches.length) setTimeout(show, 800); }, { passive: true });
   }
 };
 addCSS(`.me-row{cursor:pointer}.me-row:hover td{background:#f5f8ff!important}.me-go{color:#94a3b8;font-size:18px;margin-left:6px;vertical-align:middle}
 .med-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px}.med-kv>div>span{display:block;font-size:12px;color:#64748b;margin-bottom:2px}.med-kv .badge{margin-left:6px;vertical-align:middle}.med-kv b{font-size:14.5px}.med-full{grid-column:1/-1}
 .med-imgs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:16px}.med-img{margin:0}.med-img figcaption{font-size:12px;color:#64748b;margin-bottom:4px}.med-img img{width:100%;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;aspect-ratio:85.6/54;object-fit:cover;background:#f8fafc}
+.med-sec{display:flex;align-items:center;gap:6px;font-weight:700;font-size:13.5px;margin:20px 0 10px;padding-top:14px;border-top:1px solid #e2e8f0;color:#334155}.med-sec svg{width:16px;height:16px}.med-act{grid-column:1/-1;margin-top:6px}
+.hdv{position:relative}.hdv-sc{overflow:auto;background:#e5e7eb;border-radius:10px;padding:0;-webkit-overflow-scrolling:touch}.hdv-pg{position:relative;margin:0 auto;width:794px;min-height:1123px;background:#fff;color:#111;padding:0;box-sizing:border-box;transform-origin:top left;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.hdv.lock .hdv-pg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.hdv.lock img{pointer-events:none}
+.hdv-wm{position:absolute;inset:0;pointer-events:none;background-repeat:repeat;z-index:5}.hdv-ft svg{width:14px;height:14px;vertical-align:-2px}
+.hdv-cv{display:none;flex-direction:column;position:absolute;inset:0;z-index:9;background:#0f172a;color:#fff;border-radius:10px;align-items:center;justify-content:center;text-align:center;font-weight:600;line-height:1.7}.hdv-cv svg{width:20px;height:20px;vertical-align:-4px}.hdv.cv .hdv-cv{display:flex}.hdv.cv .hdv-sc{filter:blur(18px)}
+@media print{body.hdv-on *{visibility:hidden!important}body.hdv-on::after{content:'Bản hợp đồng bảo mật không được phép in';visibility:visible;display:block;font:20px Arial;padding:40px}}
 .med-no{aspect-ratio:85.6/54;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}.med-h{font-weight:700;font-size:13px;margin-top:16px;color:#334155}
 @media(max-width:600px){.med-kv{grid-template-columns:1fr}}`);
 addCSS('.inp-bad{border-color:#dc2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;background:#fff5f5!important}');
@@ -12408,7 +12455,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T17:00';
+const APP_BUILD = '2026-11-06T12:45';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -12613,7 +12660,7 @@ const UPD = {
   busy: false, last: 0, shown: false,
   async remote() {
     const r = await fetch(location.pathname + '?_v=' + Date.now(), { cache: 'no-store', credentials: 'omit' }); if (!r.ok) return null;
-    const t = await r.text(), m = t.match(/const APP_BUILD = '([^']+)'/); return m ? m[1] : null;
+    const t = await r.text(), m = t.match(/const APP_BUILD = '2026-11-06T12:45']+)'/); return m ? m[1] : null;
   },
   async check(force) {
     if (!UPD.pub() || UPD.busy || (!force && Date.now() - UPD.last < 60000)) return; UPD.busy = true; UPD.last = Date.now();
