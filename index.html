@@ -6382,6 +6382,8 @@ const FB = {
     const L = n => new Promise((ok, no) => { const s = document.createElement('script'); s.crossOrigin = 'anonymous'; s.src = `https://cdn.jsdelivr.net/npm/firebase@${FB.V}/${n}`; s.onload = ok; s.onerror = () => no(new Error('Không tải được thư viện Firebase (kiểm tra mạng, hoặc đang mở trong khung xem của Claude)')); document.head.appendChild(s); });
     return FB._p = L('firebase-app-compat.js').then(() => Promise.all([L('firebase-auth-compat.js'), L('firebase-firestore-compat.js')])).catch(e => { FB._p = null; throw e; });
   },
+  /* bộ nhớ đệm trên máy (IndexedDB): mở lại app chỉ tải phần thay đổi → đỡ tốn lượt đọc Firebase (gói miễn phí 50.000 lượt/ngày) */
+  mkdb(app) { const db = app.firestore(); try { db.enablePersistence({ synchronizeTabs: true }).catch(e => console.warn('FB cache', e && e.code)); } catch (e) { } return db; },
   async ready(c) {
     await FB.load();
     const sig = c.fb.projectId + '|' + c.fb.apiKey + '|' + c.email + '|' + c.key;
@@ -6389,7 +6391,7 @@ const FB = {
     try {
       if (FB.app && FB.app.options.projectId !== c.fb.projectId) { if (FB.unsub) { FB.unsub(); FB.unsub = null; } await FB.app.delete(); FB.app = null; FB.db = null; }
       if (!FB.app) FB.app = (firebase.apps || []).find(a => a.name === 'nhaxe') || firebase.initializeApp(c.fb, 'nhaxe');
-      if (!FB.db) FB.db = FB.app.firestore();
+      if (!FB.db) FB.db = FB.mkdb(FB.app);
       await FB.app.auth().signInWithEmailAndPassword(c.email, c.key);
     } catch (e) { FB.sig = ''; throw FB.err(e); }
     FB.sig = sig; return FB.db;
@@ -6599,7 +6601,7 @@ const FBU = {
     await FB.load();
     if (FB.app && FB.app.options.projectId !== c.fb.projectId) { if (FB.unsub) { FB.unsub(); FB.unsub = null; } await FB.app.delete(); FB.app = null; FB.db = null; FB.sig = ''; }
     if (!FB.app) FB.app = (firebase.apps || []).find(a => a.name === 'nhaxe') || firebase.initializeApp(c.fb, 'nhaxe');
-    if (!FB.db) FB.db = FB.app.firestore();
+    if (!FB.db) FB.db = FB.mkdb(FB.app);
     if (!FBU._ready) FBU._ready = new Promise(ok => { const un = FB.app.auth().onAuthStateChanged(() => { un(); ok(); }); });
     await FBU._ready; return FB.db;
   },
@@ -12182,7 +12184,7 @@ const PS = {
   /* lưu / đọc một phần trên Firestore: cùng cách chia mảnh + chốt phiên bản như khối cũ, tài liệu riêng 'pm_<phần>' + 'p<phần>_…' */
   async get(part) {
     const meta = FB.col().doc('pm_' + part), s = await meta.get(); if (!s.exists || !s.data().n) return { ok: true, ver: 0, data: null };
-    const m = s.data(), docs = await Promise.all(Array.from({ length: m.n }, (_, i) => FB.col().doc(m.p + i).get()));
+    const m = s.data(), one = async ref => { try { const c = await ref.get({ source: 'cache' }); if (c.exists) return c; } catch (e) { } return ref.get(); }, docs = await Promise.all(Array.from({ length: m.n }, (_, i) => one(FB.col().doc(m.p + i))));
     if (docs.some(x => !x.exists)) { const er = new Error('Phần ' + part + ' vừa được máy khác cập nhật'); er.code = 'aborted'; throw er; }
     return { ok: true, ver: +m.ver || 0, data: JSON.parse(docs.map(x => x.data().d).join('')) };
   },
@@ -12264,7 +12266,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T15:35';
+const APP_BUILD = '2026-11-06T15:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại) → trả về lõi */
 addCSS(`#pv{position:fixed;inset:0;z-index:420;background:rgba(32,33,36,.6);display:flex;align-items:center;justify-content:center;padding:2vh 2vw;animation:fade .15s}
 .gp{display:flex;width:100%;max-width:1180px;height:100%;max-height:900px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);font-family:'Be Vietnam Pro','Segoe UI',Roboto,Arial,sans-serif}
