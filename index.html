@@ -3425,7 +3425,7 @@ async function vehAuto(key, url, root) {
   toast('Đang đọc ' + cfg.label + ' để tự điền thông tin…', '', 15000);
   let res;
   try {
-    res = await sample.json(cfg.ask + '\nChỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng. Ngày đúng định dạng YYYY-MM-DD.', { images: await aiImgs(url), modelTier: 'default', cache: false });
+    res = await sample.json(cfg.ask + '\nChỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng. Ngày đúng định dạng YYYY-MM-DD.', { images: await aiImgs(url), modelTier: 'pro', deep: true, cache: false });
   } catch (e) { return toast(sample.gemini && e && e.code && e.code !== 'invalid_json' ? AIX.msg(e) : e && e.code === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không tự điền được' : fileIsPdf(url) ? 'Không đọc được file PDF này, hãy tải ảnh chụp giấy tờ để tự điền' : 'Không đọc được giấy tờ, bạn nhập tay các trường nhé', 'err', 6000); }
   if (!res || typeof res !== 'object') return toast('Không đọc được thông tin trên giấy tờ', 'err');
   const el = n => root.querySelector(`[name="${n}"]`), got = [], isDate = k => /^(dkNgay|hh)/.test(k), okDate = x => /^\d{4}-\d{2}-\d{2}$/.test(x);
@@ -8275,6 +8275,7 @@ addCSS(`.dx-chip.dx-new{border:1.5px dashed #94a3b8!important;background:#f8fafc
    Khóa lưu trong Cài đặt dữ liệu dùng chung để mọi máy (kể cả điện thoại) quét được. */
 const AIX = {
   URL: 'https://generativelanguage.googleapis.com/v1beta',
+  PRO: ['gemini-2.5-pro', 'gemini-pro-latest'],
   MODELS: ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
   /* model dùng được gần nhất được nhớ trên máy để lần sau gọi thẳng, không thử lại từ đầu */
   get _good() { try { return localStorage.getItem('aix.good') || ''; } catch (e) { return ''; } },
@@ -8325,7 +8326,47 @@ const AIX = {
     try { localStorage.setItem('aix.models', JSON.stringify({ t: Date.now(), l })); } catch (e) { }
     return l;
   },
+  /* ---- Nhiều AI: Gemini (bắt buộc) + ChatGPT / Claude (tùy chọn). Đọc giấy tờ (deep): model mạnh nhất, cho AI suy nghĩ,
+     AI này lỗi / hết lượt thì tự chuyển AI khác; có từ 2 AI thì đọc song song và đối chiếu, ô nào 2 AI đọc khác nhau thì báo (_diff). ---- */
+  provs() { const c = AIX.cfg(); return [c.key && 'gemini', c.oa && 'openai', c.an && 'claude'].filter(Boolean); },
+  async one(p, prompt, opt) {
+    if (p === 'gemini') return AIX.json1(prompt, opt);
+    const c = AIX.cfg(), imgs = [].concat(opt.images || []).filter(Boolean), b64 = await Promise.all(imgs.map(async b => ({ t: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', d: await AIX.b64(b) }))), txt = prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.';
+    const go = async (url, init) => { let r; try { r = await fetch(url, { ...init, signal: opt.signal }); } catch (e) { throw AIX.err(e && e.name === 'AbortError' ? 'cancelled' : 'network'); } if (r.ok) return r.json(); let m = ''; try { m = JSON.stringify(await r.json()).slice(0, 300); } catch (e) { } throw AIX.err(r.status === 429 ? 'rate_limited' : r.status === 401 || r.status === 403 ? 'bad_key' : r.status === 404 ? 'no_model' : 'http_' + r.status, p + ': ' + m); };
+    if (p === 'openai') {
+      const md = c.oaModel || await AIX.pick('openai');
+      const j = await go('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + c.oa }, body: JSON.stringify({ model: md, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: [{ type: 'text', text: txt }, ...b64.map(x => ({ type: 'image_url', image_url: { url: `data:${x.t};base64,${x.d}`, detail: 'high' } }))] }] }) });
+      return AIX.parse(((j.choices || [])[0] || {}).message ? j.choices[0].message.content : '');
+    }
+    const md = c.anModel || await AIX.pick('claude');
+    const j = await go('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': c.an, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: md, max_tokens: 2000, messages: [{ role: 'user', content: [...b64.map(x => ({ type: 'image', source: { type: 'base64', media_type: x.t, data: x.d } })), { type: 'text', text: txt }] }] }) });
+    return AIX.parse((j.content || []).map(x => x.text || '').join(''));
+  },
+  /* tự chọn model mới nhất của ChatGPT / Claude (nhớ 1 ngày), không phải sửa code khi hãng ra model mới */
+  async pick(p) {
+    const k = 'aix.m.' + p; try { const o = JSON.parse(localStorage.getItem(k) || 'null'); if (o && Date.now() - o.t < 864e5) return o.m; } catch (e) { }
+    const c = AIX.cfg(); let m = p === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-5';
+    try {
+      if (p === 'openai') { const j = await (await fetch('https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + c.oa } })).json(); const v = id => { const x = id.match(/^gpt-(\d+(?:\.\d+)?)(o)?$/); return x ? +x[1] + (x[2] ? .05 : 0) : 0; }; const L = (j.data || []).map(x => x.id).filter(v).sort((a, b) => v(b) - v(a)); if (L[0]) m = L[0]; }
+      else { const j = await (await fetch('https://api.anthropic.com/v1/models?limit=50', { headers: { 'x-api-key': c.an, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } })).json(); const L = (j.data || []).map(x => x.id).filter(id => /sonnet|opus/.test(id)); if (L[0]) m = L[0]; }
+    } catch (e) { }
+    try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), m })); } catch (e) { } return m;
+  },
   async json(prompt, opt = {}) {
+    if (!(opt.deep || opt.modelTier === 'pro')) return AIX.json1(prompt, opt);
+    const P = AIX.provs(); if (!P.length) throw AIX.err('no_key');
+    opt = { ...opt, deep: true };
+    if (P.length >= 2 && AIX.cfg().cross !== false) {   // đọc song song 2 AI và đối chiếu
+      const R = await Promise.allSettled(P.slice(0, 2).map(p => AIX.one(p, prompt, opt))), ok = R.filter(r => r.status === 'fulfilled').map(r => r.value);
+      if (!ok.length) { for (const p of P.slice(2)) { try { return await AIX.one(p, prompt, opt); } catch (e) { } } throw R[0].reason; }
+      const a = ok[0]; if (ok.length < 2 || !a || typeof a !== 'object' || Array.isArray(a)) return a;
+      const b = ok[1], df = {}, n = v => String(v ?? '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+      Object.keys(b || {}).forEach(k => { const x = n(a[k]), y = n(b[k]); if (!x && y) a[k] = b[k]; else if (x && y && x !== y) df[k] = [a[k], b[k]]; });
+      if (Object.keys(df).length) a._diff = df; return a;
+    }
+    let last; for (const p of P) { try { return await AIX.one(p, prompt, opt); } catch (e) { last = e; if (e.code === 'cancelled') throw e; } } throw last;
+  },
+  async json1(prompt, opt = {}) {
     try { return await AIX.json0(prompt, opt); }
     catch (e) {
       if (e.code !== 'no_model') throw e;
@@ -8334,24 +8375,24 @@ const AIX = {
       AIX._good = l[0]; return AIX.json0(prompt, opt);
     }
   },
-  async json0(prompt, { images, signal } = {}) {
+  async json0(prompt, { images, signal, deep } = {}) {
     const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
     const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
     for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
     let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
-    const list = [...new Set([c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];
+    const list = [...new Set([...(deep ? AIX.PRO : []), c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];   // đọc giấy tờ: thử model Pro trước
     let last;
     for (let round = 0; round < 3; round++) {
       if (round) await AIX.wait(round * 3000, signal);
       let again = false;
       for (const md of list) {
       try {
-        const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json', ...((AIX.noThink || {})[md] ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } };
-        const t0 = Date.now(), j = await AIX.call(md, body, c.key, signal); AIX._good = md; AIX.lastMs = Date.now() - t0;
+        const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json', ...((AIX.noThink || {})[md] || deep ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } };   // đọc giấy tờ: cho AI suy nghĩ (đọc chữ viết tay, con dấu tốt hơn)
+        const t0 = Date.now(), j = await AIX.call(md, body, c.key, signal); if (!AIX.PRO.includes(md)) AIX._good = md; AIX.lastMs = Date.now() - t0;
         const txt = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(p => p.text || '').join('') : '';
         if (!txt) throw AIX.err((j.promptFeedback && j.promptFeedback.blockReason) ? 'image_rejected' : 'invalid_json');
         return AIX.parse(txt);
-      } catch (e) { last = e; if (e.code === 'no_model') continue; if (AIX.transient(e.code)) { again = true; continue; } throw e; }
+      } catch (e) { last = e; if (e.code === 'no_model' || (deep && AIX.PRO.includes(md) && e.code !== 'bad_key' && e.code !== 'cancelled')) continue; if (AIX.transient(e.code)) { again = true; continue; } throw e; }
       }
       if (!again) break;
     }
@@ -8373,7 +8414,10 @@ const AIX = {
         <li>Bấm <b>Create API key</b> (Tạo khóa API), bấm vào khóa vừa tạo rồi bấm <b>Copy key</b>. Khóa bắt đầu bằng <code>AQ.</code> (loại mới) hoặc <code>AIza</code> (loại cũ) đều được.</li>
         <li>Dán vào ô dưới, bấm <b>Kiểm tra</b> rồi <b>Lưu</b>.</li></ol>
       <div class="form" style="grid-template-columns:1fr"><div class="field"><label>Khóa Gemini API</label><div class="hub-pw" style="position:relative"><input class="inp" id="aiK" type="password" autocomplete="off" value="${esc(c.key || '')}" placeholder="AQ.… hoặc AIza…" style="padding-right:44px"><button type="button" class="ibtn" id="aiEye" style="position:absolute;right:3px;top:3px" title="Hiện / ẩn">${ic('eye')}</button></div></div>
-      <div class="field"><label>Model (để trống = tự chọn)</label><input class="inp" id="aiM" value="${esc(c.model || '')}" placeholder="${esc(AIX.MODELS.join(' / '))}"></div></div>
+      <div class="field"><label>Model (để trống = tự chọn)</label><input class="inp" id="aiM" value="${esc(c.model || '')}" placeholder="${esc(AIX.MODELS.join(' / '))}"></div>
+      <div class="field"><label>Khóa ChatGPT (OpenAI) – tùy chọn</label><input class="inp" id="aiO" type="password" autocomplete="off" value="${esc(c.oa || '')}" placeholder="sk-… (platform.openai.com/api-keys)"></div>
+      <div class="field"><label>Khóa Claude (Anthropic) – tùy chọn</label><input class="inp" id="aiA" type="password" autocomplete="off" value="${esc(c.an || '')}" placeholder="sk-ant-… (console.anthropic.com)"></div>
+      <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="aiX" ${c.cross === false ? '' : 'checked'}> Khi đọc giấy tờ: có từ 2 AI thì đọc song song và đối chiếu, ô nào đọc khác nhau thì báo để kiểm tra</label></div>
       <div id="aiR" class="small" style="margin-top:8px"></div>
       <p class="small muted" style="margin:8px 0 0">Khóa được lưu trong cài đặt dữ liệu dùng chung, nên máy nào vào được dữ liệu đều quét ảnh được. Gói miễn phí của Google có giới hạn số lần mỗi ngày, đủ cho việc quét bảng điều hành và giấy tờ xe.</p>`,
       foot: `${c.key ? '<button class="btn danger left" data-del>Xóa khóa</button>' : ''}<button class="btn" data-test>${ic('check')} Kiểm tra</button><button class="btn pri" data-ok>Lưu</button>` });
@@ -8388,7 +8432,7 @@ const AIX = {
       finally { DB.settings.ai = keep; }
     };
     const del = q('[data-del]'); if (del) del.onclick = () => { delete DB.settings.ai; App.changed(); m.close(); toast('Đã xóa khóa AI', 'ok'); };
-    q('[data-ok]').onclick = () => { const key = q('#aiK').value.trim(); if (!key) return toast('Dán khóa Gemini API', 'err'); DB.settings.ai = { key, model: q('#aiM').value.trim() }; App.changed(); m.close(); toast('Đã lưu. Từ giờ Quét ảnh và tự đọc giấy tờ xe dùng được trên mọi máy.', 'ok', 6000); };
+    q('[data-ok]').onclick = () => { const key = q('#aiK').value.trim(); if (!key) return toast('Dán khóa Gemini API', 'err'); DB.settings.ai = { ...(DB.settings.ai || {}), key, model: q('#aiM').value.trim(), oa: q('#aiO').value.trim(), an: q('#aiA').value.trim(), cross: q('#aiX').checked }; App.changed(); m.close(); toast('Đã lưu. Từ giờ Quét ảnh và tự đọc giấy tờ xe dùng được trên mọi máy.', 'ok', 6000); };
   },
   msg(e) {
     const c = e && e.code;
@@ -12374,7 +12418,7 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
     const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
     if (!sample || !lim || !lim.images) { if (!quiet) AIX.need('Đọc thẻ tập huấn'); return 'noai'; }
     if (!bg) toast('Đang đọc thẻ tập huấn…', '', 12000); const tw = bg ? null : rootEl('toasts').lastElementChild, tOff = () => { try { tw && tw.remove(); } catch (z) { } };
-    let r; try { r = await sample.json(THR.ask, { images: await aiImgs(url), modelTier: 'default', cache: false }); }
+    let r; try { r = await sample.json(THR.ask, { images: await aiImgs(url), modelTier: 'pro', deep: true, cache: false }); }
     catch (x) { tOff(); if (bg) return false; toast('Không đọc được ảnh thẻ tập huấn' + (x && x.code && sample.gemini ? ': ' + AIX.msg(x) : ''), 'err', 6000); return false; }
     tOff(); const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
     r = r || {}; const tu = dt(r.tuNgay), den = dt(r.denNgay), ngay = tu || den || dt(r.ngayCap), han = dt(r.hetHan);
@@ -12417,18 +12461,21 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
     if (!sample || !lim || !lim.images) { toast('Đã tải tệp. Muốn app tự đọc và điền: cài AI đọc ảnh (khóa Gemini) trong menu tài khoản', '', 6000); return null; }
     toast('Đang đọc ' + (loai === 'th' ? 'giấy chứng nhận tập huấn' : 'giấy khám sức khỏe') + '…', '', 12000); const tw = rootEl('toasts').lastElementChild;
     try {
-      const r = await sample.json(ask, { images: await aiImgs(url), modelTier: 'default', cache: false }) || {};
+      const r = await sample.json(ask, { images: await aiImgs(url), modelTier: 'pro', deep: true, cache: false }) || {};
       const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
-      if (loai === 'th') { const tu = dt(r.tuNgay), den = dt(r.denNgay); return { ngay: tu || den || dt(r.ngayCap), donVi: String(r.donVi || '').trim(), hetHan: dt(r.hetHan), noiDung: String(r.noiDung || '').trim() || ('Tập huấn nghiệp vụ' + (tu && den ? ` từ ${F.date(tu)} đến ${F.date(den)}` : '') + (r.so ? ` · GCN số ${String(r.so).trim()}` : '')) }; }
-      return { ngay: dt(r.ngay), noi: String(r.noi || '').trim(), tt: String(r.tt || '').trim(), hetHan: dt(r.hetHan) };
+      const D0 = r._diff || {}, dif = loai === 'th' ? Object.fromEntries(Object.entries({ ngay: D0.tuNgay || D0.denNgay, donVi: D0.donVi, hetHan: D0.hetHan }).filter(x => x[1])) : D0;
+      if (loai === 'th') { const tu = dt(r.tuNgay), den = dt(r.denNgay); return { _diff: dif, ngay: tu || den || dt(r.ngayCap), donVi: String(r.donVi || '').trim(), hetHan: dt(r.hetHan), noiDung: String(r.noiDung || '').trim() || ('Tập huấn nghiệp vụ' + (tu && den ? ` từ ${F.date(tu)} đến ${F.date(den)}` : '') + (r.so ? ` · GCN số ${String(r.so).trim()}` : '')) }; }
+      return { _diff: dif, ngay: dt(r.ngay), noi: String(r.noi || '').trim(), tt: String(r.tt || '').trim(), hetHan: dt(r.hetHan) };
     } catch (e) { toast('Không đọc được tệp này, bạn nhập tay nhé', 'err', 5000); return null; }
     finally { try { tw && tw.remove(); } catch (z) { } }
   },
   /* điền vào form theo giấy vừa tải (tô vàng để kiểm tra) */
   fill(root, d, today) {
     if (!d) return 0; let n = 0;
-    Object.entries(d).forEach(([k, v]) => { const el = root.querySelector(`[data-k="${k}"]`); if (!el || !v || el.value === v) return;   // giấy vừa tải là nguồn đúng: ô nào đọc được thì điền theo giấy
-      el.value = v; el.style.background = '#fef9c3'; if (k === 'hetHan') el.dataset.auto = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); n++; });
+    const df = d._diff || {}; Object.entries(df).forEach(([k, v]) => { const el = root.querySelector(`[data-k="${k}"]`); if (el) { el.style.background = '#fed7aa'; el.title = 'Hai AI đọc khác nhau: ' + v.join('  ↔  '); } });
+    if (Object.keys(df).length) toast('Hai AI đọc khác nhau ở ' + Object.keys(df).length + ' ô (tô cam, rê chuột / chạm để xem 2 kết quả). Đối chiếu với giấy rồi sửa nếu cần', 'err', 9000);
+    Object.entries(d).forEach(([k, v]) => { if (k === '_diff') return; const el = root.querySelector(`[data-k="${k}"]`); if (!el || !v || el.value === v) return;   // giấy vừa tải là nguồn đúng: ô nào đọc được thì điền theo giấy
+      el.value = v; if (!df[k]) el.style.background = '#fef9c3'; if (k === 'hetHan') el.dataset.auto = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); n++; });
     toast(n ? 'Đã tự điền ' + n + ' ô từ tệp (tô vàng), kiểm tra rồi bấm Lưu' : 'Không đọc thêm được thông tin nào từ tệp', n ? 'ok' : '', 6000); return n;
   }
 };
@@ -12664,7 +12711,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T18:25';
+const APP_BUILD = '2026-11-06T18:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
