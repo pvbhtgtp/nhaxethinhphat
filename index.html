@@ -8672,6 +8672,94 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
   };
 }
 
+/* ===== MỨC 2 · phiên (b): LƯU THEO PHẦN =====
+   - 'meta' vẫn là số phiên bản chung (máy khác thấy đổi là tải lại, chống ghi đè như cũ); meta.split = true là đã chuyển.
+   - Mỗi phần nằm ở 'pm_<phần>' + 'p<phần>_…'. Mỗi máy chỉ tải phần vai trò được đọc (nhaxe_acl.parts), chỉ ghi phần mình đã tải và có thay đổi.
+   - Khối cũ (meta.p/meta.n + lịch sử) giữ nguyên làm bản sao lưu, không xóa.
+   - Máy Admin tự chuyển lần đầu (kiểm tra tách-ghép không mất dữ liệu trước khi ghi). */
+{
+  const call0 = FB.call, DENY = e => !!e && (e.code === 'permission-denied' || /permission|từ chối/i.test(e.message || ''));
+  const conflictErr = v => { const er = new Error('Dữ liệu trên Firebase đã có bản mới hơn'); er.conflict = true; er.ver = v; return er; };
+  const now = () => new Date().toISOString();
+  async function myParts() {
+    const all = Object.keys(PARTS); PS.emp = ''; let au = null; try { au = FB.app && FB.app.auth().currentUser; } catch (e) { }
+    if (!au) return all; const em = String(GS.cfg().email || '').toLowerCase(); if (em && String(au.email || '').toLowerCase() === em) return all;
+    try { const s = await FB.db.collection('nhaxe_acl').doc(au.uid).get(), d = s.exists ? s.data() : null; if (!d) return all; PS.emp = d.emp || ''; if (d.role === 'admin' || !Array.isArray(d.parts)) return all; return ['core', ...d.parts.filter(p => p !== 'core' && PARTS[p])]; } catch (e) { return all; }
+  }
+  /* người không được đọc nhân sự / lương: lấy tờ cá nhân của chính mình bù vào */
+  async function meMerge(data, have) {
+    if (!PS.emp || (have.includes('nhansu') && have.includes('luong'))) return;
+    try {
+      const s = await FB.col().doc('me_' + PS.emp).get(); if (!s.exists) return; const d = JSON.parse(s.data().d); data._me = d;
+      if (!have.includes('nhansu') && d.nv) { const L = data.employees || (data.employees = []), i = L.findIndex(e => String(e.id) === String(PS.emp)); if (i >= 0) L[i] = Object.assign({}, L[i], d.nv); else L.push(d.nv); }
+      if (!have.includes('luong') && d.cham) { data.cham = data.cham || {}; Object.keys(d.cham).forEach(m => { (data.cham[m] = data.cham[m] || {})[PS.emp] = d.cham[m]; }); }
+    } catch (e) { }
+  }
+  const sigOf = (data, have) => { const sp = PS.split(data), o = {}; have.forEach(p => o[p] = JSON.stringify(sp[p])); return o; };
+  async function partVer(p) { const s = await FB.col().doc('pm_' + p).get(); return s.exists ? +s.data().ver || 0 : 0; }
+  async function bump(meta, cur, force, who) {
+    return FB.db.runTransaction(async t => {
+      const s = await t.get(meta), mm = s.exists ? s.data() : {}, c2 = +mm.ver || 0;
+      if (!force && c2 !== cur) throw conflictErr(c2);
+      t.set(meta, Object.assign({}, mm, { ver: c2 + 1, base: c2, at: now(), who: String(who || ''), app: APP_BUILD, split: true, pv: Object.assign({}, PS.pv) }));
+      return { ok: true, ver: c2 + 1 };
+    });
+  }
+  async function migrate(body, m) {
+    const d = body.data, t = PS.selfTest(d);
+    if (!t.ok) { PS.want = false; console.warn('PS.selfTest', t); toast('Chưa chuyển dữ liệu theo phần: kiểm tra tách-ghép không khớp (' + esc(t.leak || 'dữ liệu') + ')', 'err', 8000); return call0.call(FB, body); }
+    if (!body.force && +body.baseVer !== (+m.ver || 0)) throw conflictErr(+m.ver || 0);
+    const sp = PS.split(d), all = Object.keys(PARTS);
+    for (const p of all) { const r = await PS.put(p, sp[p], await partVer(p), body.who); PS.pv[p] = r.ver; }
+    const r = await bump(FB.col().doc('meta'), +m.ver || 0, !!body.force, body.who);
+    PS.on = true; PS.want = false; PS.have = all; PS.sig = sigOf(d, all); PS.migratedAt = now();
+    console.info('PS.migrate ok', t.size); toast(ic('check') + ' Đã chuyển dữ liệu sang lưu theo phần (khối cũ vẫn giữ làm bản sao lưu)', 'ok', 6000);
+    setTimeout(() => { try { ME.sync(); } catch (e) { } }, 1500);
+    return r;
+  }
+  FB.call = async function (body, c) {
+    const a = body && body.action; if (a !== 'get' && a !== 'put') return call0.apply(this, arguments);
+    await FB.ready(c); const meta = FB.col().doc('meta'); let m;
+    try { const s = await meta.get(); m = s.exists ? s.data() : {}; } catch (e) { throw FB.err(e); }
+    try {
+      if (!m.split) {
+        if (a === 'put' && PS.want && body.data && body.data.settings) return await migrate(body, m);
+        PS.on = false; return await call0.apply(this, arguments);
+      }
+      PS.on = true;
+      if (a === 'get') {
+        const want = await myParts(), parts = {}, pv = {}, have = [];
+        await Promise.all(want.map(async p => { try { const r = await PS.get(p); if (r.data) { parts[p] = r.data; have.push(p); } pv[p] = r.ver; } catch (e) { if (!DENY(e)) throw e; } }));
+        if (!parts.core) { if (want.length) throw new Error('Chưa đọc được dữ liệu chung trên Firebase'); return { ok: true, ver: +m.ver || 0, data: null }; }
+        const data = PS.join(parts);
+        PS.have = have; PS.pv = Object.assign(PS.pv || {}, pv); PS.sig = sigOf(data, have);
+        await meMerge(data, have);
+        return { ok: true, ver: +m.ver || 0, who: m.who || '', data };
+      }
+      if (!body.data || !body.data.settings) throw new Error('Dữ liệu trống, không lưu');
+      const cur = +m.ver || 0; if (!body.force && +body.baseVer !== cur) throw conflictErr(cur);
+      if (!PS.have) { PS.have = await myParts(); PS.sig = {}; }
+      const sp = PS.split(body.data), ch = PS.have.filter(p => JSON.stringify(sp[p]) !== PS.sig[p]);
+      if (!ch.length) return { ok: true, ver: cur };
+      for (const p of ch) {
+        const base = body.force || PS.pv[p] == null ? await partVer(p) : PS.pv[p];
+        try { const r = await PS.put(p, sp[p], base, body.who); PS.pv[p] = r.ver; PS.sig[p] = JSON.stringify(sp[p]); }
+        catch (e) { if (e.conflict) throw conflictErr(cur); throw e; }
+      }
+      const r = await bump(meta, cur, !!body.force, body.who);
+      if (ch.some(p => p !== 'core')) { try { ME.soon(); } catch (e) { } }
+      return r;
+    } catch (e) { if (e.conflict) throw e; throw FB.err(e); }
+  };
+  /* Admin mở app (bản này) mà dữ liệu chưa chuyển → tự chuyển 1 lần khi máy rảnh */
+  setInterval(() => {
+    try {
+      if (PS.on || PS.tried || !GS.on || GS.busy || Store.dirty || GS.cfg().mode !== 'fb' || !Auth.user || Auth.user.role !== 'admin' || (typeof UX !== 'undefined' && UX.busy())) return;
+      PS.tried = true; PS.want = true; GS.push();
+    } catch (e) { }
+  }, 15000);
+}
+
 /* ===== MÁY CHỦ DỰ PHÒNG CLOUDFLARE (Workers + R2) =====
    - Dữ liệu được NÉN (gzip) + MÃ HÓA AES-256-GCM trên máy trước khi gửi; khóa sinh từ "mã kết nối Cloudflare" (PBKDF2-SHA256, 210.000 vòng).
    - Mỗi yêu cầu ký HMAC-SHA256 bằng khóa riêng (WORKER_SECRET) + thời điểm + mã dùng một lần. Mã kết nối không bao giờ đi qua mạng.
@@ -12018,13 +12106,13 @@ const PARTS = {
 /* trường nhạy cảm của nhân viên: chỉ nằm ở phần nhansu; danh bạ rút gọn (nvPub) ở core bỏ các trường này */
 const NV_PRIV = /^(luong|hd(AnTrua|Xang|DienThoai|Khac|Tu|Den)$|pc[A-Z]|phuCap|mst$|soNPT|soBHXH|bhxh|cccd|diaChi|stk|nganHang|soHD$|loaiHD$|moTaCV|ketHon|conKetHon|trinhDo|pw$|matKhau|ghiChuRieng|khongLuong|thaiSan|kyLuat|nangLuong)/;
 const PS = {
-  on: false, VER: 1,
+  on: false, VER: 1, have: null, pv: {}, sig: {}, emp: '', want: false, tried: false,
   partOf(k) { for (const [p, d] of Object.entries(PARTS)) { if (p === 'core') continue; if (d.keys.includes(k) || (d.match && d.match.test(k))) return p; } return 'core'; },
   pub: e => { const o = {}; Object.keys(e || {}).forEach(k => { if (!NV_PRIV.test(k)) o[k] = e[k]; }); return o; },
   /* tách khối dữ liệu (đã bỏ vé/hồ sơ/lệnh) thành các phần */
   split(data) {
     const out = {}; Object.keys(PARTS).forEach(p => out[p] = {});
-    Object.keys(data || {}).forEach(k => { if (k === '_meta' || k === 'nvPub') return; out[PS.partOf(k)][k] = data[k]; });
+    Object.keys(data || {}).forEach(k => { if (k[0] === '_' || k === 'nvPub') return; out[PS.partOf(k)][k] = data[k]; });
     out.core.nvPub = (data.employees || []).map(PS.pub);
     return out;
   },
@@ -12067,7 +12155,7 @@ const PS = {
   },
   /* kiểm tra tách-ghép không mất dữ liệu (dùng trước khi chuyển) */
   selfTest(data) {
-    const src = JSON.parse(JSON.stringify(data)); delete src._meta; const P = PS.split(src), back = PS.join(P);
+    const src = JSON.parse(JSON.stringify(data)); Object.keys(src).forEach(k => { if (k[0] === '_') delete src[k]; }); const P = PS.split(src), back = PS.join(P);
     const a = JSON.stringify(Object.keys(src).sort().reduce((o, k) => (o[k] = src[k], o), {})), b = JSON.stringify(Object.keys(back).sort().reduce((o, k) => (o[k] = back[k], o), {}));
     const size = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, JSON.stringify(v).length]));
     const leak = JSON.stringify(P.core.nvPub).match(/"(luongCB|cccd|soBHXH|stk|mst)"/);
@@ -12125,7 +12213,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T09:10';
+const APP_BUILD = '2026-11-06T09:40';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
