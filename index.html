@@ -12071,7 +12071,44 @@ Object.assign(MODL.parts, { dashboard: ['core', 'vanhanh'], lichchay: ['core', '
   phuongtien: ['core', 'vanhanh'], nhienlieu: ['core', 'vanhanh'], suachua: ['core', 'vanhanh'], kmxe: ['core', 'vanhanh'], lylich: ['core', 'vanhanh'], hdvc: ['core', 'vanhanh'],
   nhanvien: ['core', 'nhansu'], hopdong: ['core', 'nhansu'], chamcong: ['core', 'luong'], bangluong: ['core', 'luong', 'nhansu'], thue: ['core', 'luong', 'nhansu'],
   cuatoi: ['core', 'vanhanh', 'luong'], hoso: ['core'], scan: ['core'], users: ['core'], caidat: ['core'], data: ['core'] });
-const APP_BUILD = '2026-11-06T07:20';
+
+/* ===== MỨC 2 · phiên (c): TỜ CÁ NHÂN (ME) + TẢI THEO KHOẢNG NGÀY — mới có code, chưa bật (theo PS.on) =====
+   Tờ cá nhân 'me_<mã NV>': chỉ những gì liên quan tới chính người đó → lái xe / nhân viên chỉ tải tờ này + dữ liệu chung rút gọn.
+   Khoảng ngày: lịch chạy chỉ giữ trong phần 'vanhanh' từ 31 ngày trước tới 90 ngày tới; cũ hơn cất theo tháng, mở báo cáo mới tải. */
+const ME = {
+  BACK: 7, FWD: 14, last: {}, t: 0,
+  build(e) {
+    if (!e) return null; const td = D.today(), from = D.add(td, -ME.BACK), to = D.add(td, ME.FWD), cur = td.slice(0, 7), prev = D.ymAdd(cur, -1);
+    const bks = id => ((DB.vehicles || []).find(v => v.id === id) || {}).bks || '', mine = l => [l.laiXe, l.laiXe2, l.phuXe].includes(e.id);
+    const trips = (DB.lichchay || []).filter(l => l.ngay >= from && l.ngay <= to && mine(l)).sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio))
+      .map(l => ({ id: l.id, ngay: l.ngay, gio: l.gio, tuyen: l.tuyen, xe: bks(l.xeId), xeId: l.xeId, laiXe: l.laiXe || '', laiXe2: l.laiXe2 || '', ve: (DB.datve || []).filter(v => v.chuyen === l.id && !v.huy).length }));
+    const pay = {}, cham = {}; [prev, cur].forEach(m => { try { pay[m] = calcPay(e, m); } catch (x) { } const a = (DB.cham[m] || {})[e.id]; if (a) cham[m] = a; });
+    let sk = null, th = null; try { sk = llLatest(e.id, 'sk'); th = llLatest(e.id, 'th'); } catch (x) { }
+    return { v: 1, id: e.id, nv: e, trips, cham, pay, gt: { bangHetHan: e.bangHetHan || '', sk: sk ? { ngay: sk.ngay, han: llHan(sk) } : null, th: th ? { ngay: th.ngay, han: th.hetHan || '' } : null } };
+  },
+  /* chỉ máy có đủ dữ liệu (Admin / điều hành / kế toán) mới soạn tờ; ghi tờ nào có thay đổi */
+  canBuild: () => PS.on && ['vanhanh', 'luong', 'nhansu'].every(p => PS.readable().includes(p)),
+  async sync(ids) {
+    if (!ME.canBuild() || !FB.db) return 0; let n = 0;
+    for (const e of (DB.employees || []).filter(x => !ids || ids.includes(x.id))) {
+      const d = ME.build(e), j = JSON.stringify(Object.assign({}, d, { at: undefined })); if (ME.last[e.id] === j) continue;
+      try { await FB.col().doc('me_' + e.id).set({ t: 'me', emp: e.id, at: new Date().toISOString(), d: JSON.stringify(d) }); ME.last[e.id] = j; n++; } catch (x) { console.warn('ME.sync', e.id, x); }
+    }
+    return n;
+  },
+  async load(id) { const s = await FB.col().doc('me_' + id).get(); return s.exists ? JSON.parse(s.data().d) : null; },
+  soon() { clearTimeout(ME.t); ME.t = setTimeout(() => ME.sync().catch(() => { }), 5000); }
+};
+{ const ch0 = App.changed; App.changed = function () { const r = ch0.apply(this, arguments); try { if (PS.on) ME.soon(); } catch (e) { } return r; }; }
+Object.assign(PS, {
+  HOT_BACK: 31, HOT_FWD: 90,
+  /* tách lịch chạy: phần nóng (đang làm việc) + các tháng cũ/xa cất riêng */
+  lcSplit(list) { const td = D.today(), a = D.add(td, -PS.HOT_BACK), b = D.add(td, PS.HOT_FWD), hot = [], arc = {}; (list || []).forEach(l => { const d = String(l.ngay || ''); if (d >= a && d <= b) hot.push(l); else (arc[d.slice(0, 7) || 'khac'] = arc[d.slice(0, 7) || 'khac'] || []).push(l); }); return { hot, arc }; },
+  lcJoin(hot, arc) { const out = (hot || []).slice(); Object.values(arc || {}).forEach(L => out.push(...L)); return out; },
+  async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
+  async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
+});
+const APP_BUILD = '2026-11-06T07:35';
 addCSS(`
 /* ===== Đặt vé: bố cục rộng, cân đối (máy tính) ===== */
 @media(min-width:901px){
