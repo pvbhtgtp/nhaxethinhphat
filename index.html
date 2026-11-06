@@ -12926,7 +12926,96 @@ const RULES = {
 };
 ACT.rulesGo = () => { if (!PERM.admin()) return toast('Chỉ Admin cập nhật được luật bảo mật', 'err'); RULES.go(); };
 setTimeout(() => RULES.check(), 15000);
-const APP_BUILD = '2026-11-06T19:10';
+/* ===== Đặt vé: dán tin nhắn khách → tự điền form · mã QR chuyển khoản đúng số tiền vé =====
+   - Dán tin nhắn Zalo / SMS của khách: AI (hoặc tự tách nếu chưa cài AI) lấy SĐT, tên, số khách, điểm đón, điểm trả, ghi chú rồi điền vào form đặt vé.
+   - QR: dùng tài khoản công ty (Cài đặt › Công ty: Số tài khoản, Ngân hàng), số tiền = tiền vé + phụ thu − đã cọc; khách quét bằng app ngân hàng. */
+const DVP = {
+  attach(m, trip, seats) {
+    if (!m || !m.el || m.el.querySelector('.dvp-bar')) return;
+    const b = m.el.querySelector('.modal-b'); if (!b) return;
+    b.insertAdjacentHTML('afterbegin', `<div class="dvp-bar"><button type="button" class="btn sm" data-dvp>${ic('copy')} Dán tin nhắn khách</button><span class="muted small">Dán tin nhắn Zalo / SMS, app tự điền số điện thoại, điểm đón, điểm trả</span></div>`);
+    b.querySelector('[data-dvp]').onclick = () => DVP.paste(m, trip, seats);
+  },
+  paste(m, trip, seats) {
+    const d = Modal.open({ title: 'Dán tin nhắn của khách', width: 520, body: `<textarea class="inp" id="dvpT" rows="6" style="width:100%" placeholder="VD: Cho chị đặt 2 vé chuyến 5h30 sáng mai, đón ngã tư Vũng Tàu, xuống Biên Hòa. Chị Lan 0909 123 456"></textarea>
+      <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn sm" data-clip>${ic('copy')} Lấy từ bộ nhớ tạm</button><span class="muted small">Chỉ dùng để điền form, không lưu tin nhắn</span></div>`,
+      foot: `<button class="btn" data-no>Hủy</button><button class="btn pri" data-go>${ic('sparkle')} Điền vào form</button>` });
+    const q = s => d.el.querySelector(s), ta = q('#dvpT'); setTimeout(() => ta.focus(), 50);
+    q('[data-no]').onclick = () => d.close();
+    q('[data-clip]').onclick = async () => { try { ta.value = await navigator.clipboard.readText(); } catch (e) { toast('Máy không cho đọc bộ nhớ tạm, bấm giữ vào ô rồi chọn Dán', 'err'); } };
+    q('[data-go]').onclick = async () => {
+      const txt = ta.value.trim(); if (!txt) return toast('Dán tin nhắn vào ô trước', 'err');
+      const go = q('[data-go]'); go.disabled = true; go.textContent = 'Đang đọc…';
+      const r = await DVP.read(txt, trip); go.disabled = false; d.close(); DVP.fill(m, r, seats);
+    };
+  },
+  /* tự tách khi không có AI: số điện thoại, số khách */
+  rough(txt) {
+    const ph = (String(txt).replace(/[.\s-]/g, '').match(/(?:\+?84|0)\d{9,10}/) || [''])[0].replace(/^\+?84/, '0');
+    const n = (String(txt).match(/(\d+)\s*(?:vé|ghế|khách|người|ng\b|chỗ)/i) || [])[1];
+    return { sdt: ph, soKhach: n ? +n : 0 };
+  },
+  async read(txt, trip) {
+    const r0 = DVP.rough(txt); let r = {};
+    try {
+      const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
+      if (sample && lim) {
+        const pts = bgPoints(trip.tuyen).concat(LT.get(trip.tuyen).map(x => x.ten));
+        r = await sample.json(`Đây là tin nhắn khách gửi nhà xe để đặt vé xe khách tuyến "${trip.tuyen}" (chuyến đang chọn: ${trip.gio} ngày ${trip.ngay}). Trích thông tin, trả JSON một object:
+- "sdt": số điện thoại của khách (chỉ chữ số, bắt đầu bằng 0);
+- "ten": tên / cách xưng hô của khách nếu có (VD "Chị Lan");
+- "soKhach": số vé / số khách (số), không nói thì 1;
+- "diemDon", "diemTra": nơi đón và nơi xuống; nếu khớp một điểm trong danh sách sau thì ghi đúng tên đó: ${JSON.stringify([...new Set(pts)].slice(0, 80))};
+- "gio": giờ chuyến khách muốn đi nếu có (HH:MM, 24h), "ngay": ngày đi nếu có (YYYY-MM-DD, hôm nay là ${D.today()});
+- "ghiChu": yêu cầu khác ngắn gọn (hành lý, trẻ em, ngồi đầu…).
+Không bịa: không có thì để chuỗi rỗng.
+
+Tin nhắn:
+${txt}`, { modelTier: 'default', cache: false }) || {};
+      }
+    } catch (e) { console.warn('DVP.read', e); }
+    const ph = String(r.sdt || '').replace(/\D/g, '');
+    return { sdt: ph.length >= 9 ? ph.replace(/^84/, '0') : r0.sdt, ten: String(r.ten || '').trim(), soKhach: +r.soKhach || r0.soKhach || 0, diemDon: String(r.diemDon || '').trim(), diemTra: String(r.diemTra || '').trim(), ghiChu: String(r.ghiChu || '').trim(), gio: String(r.gio || ''), ngay: String(r.ngay || '') };
+  },
+  fill(m, r, seats) {
+    if (!m || !document.body.contains(m.el)) return; const got = [];
+    const set = (k, v, lb) => { const el = m.el.querySelector(`[name="${k}"]`); if (!el || !v) return; el.value = v; el.style.background = '#fef9c3'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); got.push(lb); };
+    set('sdt', r.sdt, 'số điện thoại'); set('ten', r.ten, 'tên'); set('diemDon', r.diemDon, 'điểm đón'); set('diemTra', r.diemTra, 'điểm trả'); set('ghiChu', r.ghiChu, 'ghi chú');
+    const warn = []; const n = (seats || []).length || 1;
+    if (r.soKhach && r.soKhach !== n) warn.push(`Khách đặt ${r.soKhach} vé, đang chọn ${n} ghế`);
+    if (r.gio || r.ngay) { const t = m._trip; if (t && ((r.gio && r.gio !== t.gio) || (r.ngay && r.ngay !== t.ngay))) warn.push(`Khách hỏi chuyến ${r.gio || t.gio} ${r.ngay ? F.date(r.ngay) : ''}, khác chuyến đang mở`); }
+    toast((got.length ? 'Đã điền ' + got.join(', ') + ' (tô vàng), kiểm tra rồi bấm Đặt vé' : 'Không tìm thấy thông tin trong tin nhắn') + (warn.length ? '. Lưu ý: ' + warn.join('; ') : ''), warn.length ? 'err' : got.length ? 'ok' : 'err', 9000);
+  },
+  /* ---------- QR chuyển khoản (VietQR) ---------- */
+  BANK: [[/vietcom|vcb/, 'VCB'], [/vietin|ctg|icb/, 'ICB'], [/bidv/, 'BIDV'], [/agri|vba/, 'VBA'], [/techcom|tcb/, 'TCB'], [/\bacb\b|a ?chau/, 'ACB'], [/\bmb\b|quan doi|mbbank/, 'MB'], [/sacom|stb/, 'STB'], [/vpbank|vp bank|thinh vuong/, 'VPB'], [/tpbank|tp bank|tien phong/, 'TPB'], [/\bvib\b|quoc te/, 'VIB'], [/\bshb\b|sai gon ha noi/, 'SHB'], [/hdbank|hd bank|phat trien/, 'HDB'], [/\bocb\b|phuong dong/, 'OCB'], [/\bmsb\b|hang hai|maritime/, 'MSB'], [/seabank|dong nam a/, 'SEAB'], [/eximbank|exim/, 'EIB'], [/lpbank|lienviet|loc phat/, 'LPB'], [/nam a|nab/, 'NAB'], [/bac a|bab/, 'BAB'], [/pvcom/, 'PVCB'], [/kienlong|klb/, 'KLB'], [/abbank|an binh/, 'ABB'], [/viet a|vab/, 'VAB'], [/bao viet|bvb/, 'BVB'], [/saigonbank|sai gon cong thuong/, 'SGICB'], [/\bncb\b|quoc dan/, 'NCB'], [/dong a|dab/, 'DOB'], [/gpbank|dau khi/, 'GPB'], [/\bscb\b|sai gon\b/, 'SCB'], [/cake/, 'CAKE'], [/timo/, 'TIMO']],
+  bank(c) { const n = TTT.nm(c.nganHangDN || '').toLowerCase(); const f = DVP.BANK.find(([re]) => re.test(n)); return f ? f[1] : ''; },
+  qr(G) {
+    const c = S().company || {}, acc = String(c.stkDN || '').replace(/\s/g, ''), bk = DVP.bank(c);
+    if (!acc || !bk) return toast('Chưa có tài khoản công ty: vào Cài đặt › Công ty, nhập Số tài khoản và Ngân hàng (VD: Vietcombank)', 'err', 8000);
+    const t = dvTripOf(G[0]), amt = Math.max(0, G.reduce((a, x) => a + dvTot(x) - (+x.coc || 0), 0)), info = `VE ${dvSeatsTxt(G)} ${String(t.gio || '').replace(':', 'H')} ${String(G[0].sdt || '').slice(-4)}`.replace(/[^0-9A-Za-z ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 25);
+    const url = `https://img.vietqr.io/image/${bk}-${encodeURIComponent(acc)}-compact2.png?amount=${amt}&addInfo=${encodeURIComponent(info)}&accountName=${encodeURIComponent(TTT.nm(c.ten || ''))}`;
+    const paid = G.every(x => x.tt === 'tra');
+    const m = Modal.open({ title: 'QR chuyển khoản · ghế ' + esc(dvSeatsTxt(G)), width: 420, body: `<div style="text-align:center"><img src="${url}" alt="QR" style="width:100%;max-width:320px;border-radius:12px;border:1px solid #e4e7ec;background:#fff" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'muted',textContent:'Không tải được mã QR (kiểm tra mạng hoặc số tài khoản)'}))">
+      <div style="font-size:22px;font-weight:800;margin-top:8px">${F.money(amt)} đ</div><div class="muted small">${esc(c.nganHangDN || '')} · ${esc(acc)} · ${esc(c.ten || '')}<br>Nội dung: <b>${esc(info)}</b></div>${paid ? '<div class="badge b-green" style="margin-top:8px">Vé đã thanh toán</div>' : ''}</div>`,
+      foot: `<button class="btn" data-no>Đóng</button>${paid || !Auth.can('lichchay', 'edit') ? '' : `<button class="btn pri" data-ok>${ic('check')} Đã nhận tiền</button>`}` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    const ok = m.el.querySelector('[data-ok]'); if (ok) ok.onclick = () => { const tg = dvLog.now(), who = dvLog.who(); G.forEach(x => { x.tt = 'tra'; x.httt = 'ck'; (x.lichSu = x.lichSu || []).push({ tg, nguoi: who, nd: 'Đã nhận chuyển khoản qua mã QR ' + F.money(amt) + 'đ' }); }); App.changed(); m.close(); toast('Đã ghi nhận thanh toán chuyển khoản', 'ok'); };
+  }
+};
+addCSS(`.dvp-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:8px 10px;border:1px dashed #c7d2fe;border-radius:10px;background:#f5f7ff}.dvp-bar .btn svg{width:15px;height:15px}`);
+{
+  const fm0 = dvFormMulti; dvFormMulti = function (trip, seats) { const r = fm0.apply(this, arguments); try { const m = [...document.querySelectorAll('.modal-wrap')].pop(); if (m) { const o = { el: m, _trip: trip }; DVP.attach(o, trip, seats); } } catch (e) { } return r; };
+  const f0 = dvForm; dvForm = function (trip, b, seat) {
+    const r = f0.apply(this, arguments);
+    try {
+      const m = [...document.querySelectorAll('.modal-wrap')].pop(); if (!m) return r;
+      if (!b) DVP.attach({ el: m, _trip: trip }, trip, [seat]);
+      else if (!b.huy) { const G = arguments[3] ? [b] : dvGrp(b), ft = m.querySelector('.modal-f'); if (ft && !ft.querySelector('[data-dvqr]')) { ft.insertAdjacentHTML('afterbegin', `<button type="button" class="btn left" data-dvqr>${ic('wallet')} QR chuyển khoản</button>`); ft.querySelector('[data-dvqr]').onclick = () => DVP.qr(G); } }
+    } catch (e) { console.warn('DVP', e); }
+    return r;
+  };
+}
+const APP_BUILD = '2026-11-06T19:15';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
