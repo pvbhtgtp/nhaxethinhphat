@@ -2468,7 +2468,7 @@ function slipHTML(x) {
     </div>
     <div class="ps-pay">Hình thức nhận lương: <b>${e.stk ? `Chuyển khoản ${esc(e.nganHang || '')} - STK ${esc(e.stk)}` : 'Tiền mặt'}</b></div>
     <div class="ps-date">Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</div>
-    <div class="ps-sign"><div><b>Người lập phiếu</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div></div><div><b>Kế toán trưởng</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div></div><div><b>Người nhận lương</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div>${esc(x.ten)}</div></div>
+    <div class="ps-sign"><div><b>Người lập phiếu</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div></div><div><b>Kế toán trưởng</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div></div><div><b>Người nhận lương</b><i>(Ký, ghi rõ họ tên)</i><div class="sp"></div></div></div>
     <div class="ps-foot">Phiếu lương là thông tin cá nhân, vui lòng không chia sẻ. Có thắc mắc xin phản hồi phòng Kế toán - Nhân sự trong vòng 03 ngày kể từ ngày nhận phiếu.</div>
   </div>`;
 }
@@ -2751,7 +2751,7 @@ function hdHTML(e) {
   const ten = esc(String(e.ten || '').toUpperCase()), ba = e.gioiTinh === 'Nữ' ? 'Bà' : 'Ông';
   const cv = String(e.moTaCV || '').split('\n').map(x => x.trim()).filter(Boolean);
   const pc = (v, dk) => +v > 0 ? `${F.money(v)} đồng/tháng` : 'Không áp dụng';
-  const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký tên, đóng dấu)</i>${Auth.can('users', 'view') && (c.chuKyGD || c.conDau) ? `<div style="position:relative;height:92px;margin-top:4px">${c.conDau ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:50%;top:0;transform:translateX(-42%);height:86px;max-width:42%;object-fit:contain;opacity:.85;mix-blend-mode:multiply;z-index:2">` : ''}${c.chuKyGD ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:50%;top:12px;transform:translateX(-62%);height:68px;max-width:46%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}</div><b>${esc(c.daiDien || '')}</b>` : ''}</td></tr></table>`;
+  const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.on() ? SIGN.gd(92) : '<div style="height:92px"></div>'}<b>${esc(c.daiDien || '')}</b></td></tr></table>`;
   return `<div class="hd" data-hdid="${esc(e.id || '')}">
   <table class="hd-top"><tr><td style="width:40%"><b>${coHead(c.ten)}</b><br><b><i>Số: ${R.SOHD}</i></b></td><td><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>-----***-----</td></tr></table>
   <div style="margin-top:8px">${HD_CANCU.map(x => `<p>- ${x}</p>`).join('')}</div>
@@ -3013,9 +3013,9 @@ function tvDonHTML(e, q) {
     <li>Bàn giao đầy đủ công việc, tài sản, hồ sơ, tài liệu và công cụ làm việc cho ${nhan}${x.bg ? ' trước ngày <b>' + F.date(x.bg) + '</b>' : ''}${x.items.length ? ', gồm:<ul style="margin:2px 0;padding-left:20px">' + x.items.map(i => `<li>${esc(i)}</li>`).join('') + '</ul>' : '.'}</li>
     <li>Thanh toán dứt điểm các khoản tạm ứng, công nợ (nếu có) với Công ty.</li></ol>
     <p style="margin:8px 0;text-align:justify">Kính mong Ban Giám đốc và Trưởng bộ phận xem xét, chấp thuận. Tôi xin chân thành cảm ơn!</p>
-    <table style="width:100%;border:0;page-break-inside:avoid"><tr><td style="width:50%;border:0"></td><td style="text-align:center;vertical-align:top;border:0;color:#000"><b>NGƯỜI LÀM ĐƠN</b><br><i>(Ký và ghi rõ họ tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:6px auto 0;height:64px;max-width:70%;object-fit:contain">` : '<div style="height:70px"></div>'}<b>${esc(e.ten || '')}</b></td></tr></table>
-    <table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr><td style="width:50%;text-align:center;vertical-align:top;border:0;color:#000"><b>Ý KIẾN CỦA TRƯỞNG BỘ PHẬN</b><br><i>(Ký và ghi rõ họ tên)</i><div style="height:78px"></div><b>${esc(q.truongBP || '')}</b></td>
-    <td style="text-align:center;vertical-align:top;border:0;color:#000"><b>PHÊ DUYỆT CỦA BAN GIÁM ĐỐC</b><br><i>(Ký, ghi rõ họ tên)</i><div style="height:78px"></div><b>${esc(c.daiDien || '')}</b></td></tr></table></div>`;
+    <table style="width:100%;border:0;page-break-inside:avoid"><tr><td style="width:50%;border:0"></td><td style="text-align:center;vertical-align:top;border:0;color:#000"><b>NGƯỜI LÀM ĐƠN</b><br><i>(Ký và ghi rõ họ tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:6px auto 0;height:64px;max-width:70%;object-fit:contain">` : '<div style="height:70px"></div>'}</td></tr></table>
+    <table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr><td style="width:50%;text-align:center;vertical-align:top;border:0;color:#000"><b>Ý KIẾN CỦA TRƯỞNG BỘ PHẬN</b><br><i>(Ký và ghi rõ họ tên)</i><div style="height:78px"></div></td>
+    <td style="text-align:center;vertical-align:top;border:0;color:#000"><b>PHÊ DUYỆT CỦA BAN GIÁM ĐỐC</b><br><i>(Ký, ghi rõ họ tên)</i><div style="height:78px"></div></td></tr></table></div>`;
 }
 function tvQdHTML(e, q) {
   const x = tvCtx(e, q), { c, ong, dots, dm, dd } = x, li = (t, v) => `<li style="margin:2px 0">${t}: ${v}</li>`;
@@ -3613,10 +3613,15 @@ const dShort = d => d ? F.date(d) : '..../..../........';
 const vcLai = c => [c.laiXe1, c.laiXe2].map(id => (DB.employees.find(e => e.id === id) || {}).ten).filter(Boolean).join(', ');
 const vcXe = c => DB.vehicles.find(v => v.id === c.xeId) || {};
 const vcDrivers = () => { const a = DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'); const d = a.filter(e => /lái\s*xe/i.test(String(e.chucVu || ''))); return d.length ? d : a.filter(e => e.bangHang); };
-const vcSign = () => {
-  const co = S().company || {};
-  return Auth.can('users', 'view') && (co.chuKyGD || co.conDau) ? `<div style="position:relative;height:92px;margin-top:4px">${co.conDau ? `<img class="sig-img" src="${co.conDau}" style="position:absolute;left:50%;top:0;transform:translateX(-42%);height:86px;max-width:42%;object-fit:contain;opacity:.85;mix-blend-mode:multiply;z-index:2">` : ''}${co.chuKyGD ? `<img class="sig-img" src="${co.chuKyGD}" style="position:absolute;left:50%;top:12px;transform:translateX(-62%);height:68px;max-width:46%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}</div><b>${esc(co.daiDien || '')}</b>` : '';
+/* Chữ ký giám đốc + dấu công ty dùng chung cho mọi văn bản: dấu nằm trên, chữ ký nằm dưới. Bật/tắt: Cài đặt › Công ty › "Chèn chữ ký giám đốc và con dấu" */
+const SIGN = {
+  on() { const c = S().company || {}; return c.chenKy !== false && !!(c.chuKyGD || c.conDau); },
+  gd(h = 96) {
+    if (!SIGN.on()) return ''; const c = S().company || {};
+    return `<div class="sig-gd" style="position:relative;height:${h}px;margin:4px auto 0;width:100%">${c.chuKyGD ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:50%;top:${Math.round(h * .16)}px;transform:translateX(-50%);height:${Math.round(h * .72)}px;max-width:62%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}${c.conDau ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:50%;top:0;transform:translateX(-88%);height:${Math.round(h * .96)}px;max-width:50%;object-fit:contain;opacity:.88;mix-blend-mode:multiply;z-index:2">` : ''}</div>`;
+  }
 };
+const vcSign = () => { const co = S().company || {}; return SIGN.on() ? SIGN.gd() + `<b>${esc(co.daiDien || '')}</b>` : ''; };
 const vcCheck = (v, who) => v === who ? '☒' : '☐';
 const vcPax = c => String(c.dsKhach || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => l.split(/\s*[|\t]\s*/));
 function vcHead(c, co, soText) {
@@ -10264,7 +10269,7 @@ const V2U = {
   ends(t) { const p = String(t.tuyen || '').split(/\s*[-–→>]\s*/).map(s => s.trim()).filter(Boolean); return { di: p[0] || '', den: p[p.length - 1] || '' }; },
   ngayDai: iso => { const d = D.parse(iso); return `ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}`; },
   head(title, sub) { const c = V2U.co(); return `<table style="width:100%;border:0;border-collapse:collapse"><tr><td style="width:44%;text-align:center;vertical-align:top;border:0"><b>${esc(String(c.ten || '').toUpperCase())}</b><br><span style="font-size:11.5px">${esc(c.diaChi || '')}</span></td><td style="text-align:center;vertical-align:top;border:0"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><div style="width:140px;border-top:1px solid #000;margin:3px auto"></div></td></tr></table><h2 style="text-align:center;margin:14px 0 2px;font-size:19px;letter-spacing:.5px">${title}</h2>${sub ? `<div style="text-align:center;margin-bottom:8px">${sub}</div>` : ''}`; },
-  sig(cols) { return `<table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr>${cols.map(c => `<td style="text-align:center;vertical-align:top;border:0;width:${100 / cols.length}%"><b>${c[0]}</b><br><i>${c[1] || '(Ký tên)'}</i><div style="height:70px"></div>${c[2] ? `<b>${esc(c[2])}</b>` : ''}</td>`).join('')}</tr></table>`; }
+  sig(cols) { return `<table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr>${cols.map(c => { const dd = /đóng dấu/i.test(c[1] || ''); return `<td style="text-align:center;vertical-align:top;border:0;width:${100 / cols.length}%"><b>${c[0]}</b><br><i>${dd ? c[1] : '(Ký và ghi rõ họ tên)'}</i>${dd ? (SIGN.gd(90) || '<div style="height:70px"></div>') + (c[2] ? `<b>${esc(c[2])}</b>` : '') : '<div style="height:70px"></div>'}</td>`; }).join('')}</tr></table>`; }
 };
 
 /* ===================== LỆNH VẬN CHUYỂN ĐIỆN TỬ ===================== */
@@ -10341,7 +10346,7 @@ const LVC = {
           ${r('Biển số đăng ký: ', ln(xe.bks, 140) + ' Số ghế: ' + ln(xe.soCho, 44) + ' Loại xe: khách')}
           <div style="padding:3px 0;text-align:left"><b>Tuyến: ${esc(ti.ten || o.tuyen || '')} - Cự Ly: ${ti.cuLy ? esc(ti.cuLy) + 'km' : '……km'}</b> &nbsp; &nbsp; Mã Số Tuyến: ${ti.maTuyen ? esc(ti.maTuyen) : '…………………'}</div>
           <div style="padding:3px 0;text-align:left">Hành trình chạy xe: ${esc(ti.hanhTrinh || '')} và Ngược Lại</div>
-        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i><div style="position:relative;height:34mm;margin-top:4px">${img(c.conDau, 120) ? `<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.85">${img(c.conDau, 120)}</div>` : ''}${img(c.chuKyGD, 70) ? `<div style="position:absolute;left:50%;top:24px;transform:translateX(-60%)">${img(c.chuKyGD, 70)}</div>` : ''}</div><b><i>${esc(gd)}</i></b></td></tr>
+        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i>${SIGN.gd(120) || '<div style="height:34mm"></div>'}<b><i>${esc(gd)}</i></b></td></tr>
         <tr><td style="${C}"><b>Lượt xe thực hiện</b></td><td style="${C}"><b>Bến xe đi, đến</b></td><td style="${C}"><b>Giờ xe chạy</b></td><td style="${C}"><b>Số Khách</b></td><td style="${C}"><b>Bến xe</b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i></td></tr>
         ${leg('Lượt đi', benDi, benDen, gn(o.gio, o.ngay), gn('', ''))}
         ${leg('Lượt về', benDen, benDi, ret ? gn(ret.gio, ret.ngay) : gn('', ''), gn('', ''))}
@@ -10557,7 +10562,7 @@ const ATG = {
       <p style="margin:4px 0"><b>Điều 2.</b> Nhiệm vụ của ${esc(q.ten)}:</p>${nv.map((x, i) => `<p style="margin:2px 0 2px 18px;text-align:justify">${i + 1}. ${esc(x)}</p>`).join('')}
       <p style="margin:4px 0"><b>Điều 3.</b> Quyết định này có hiệu lực kể từ ngày ký. Ban hoạt động theo nhiệm vụ được giao và chịu sự chỉ đạo trực tiếp của Giám đốc.</p>
       <p style="margin:4px 0"><b>Điều 4.</b> Các ông (bà) có tên tại Điều 1, các bộ phận có liên quan chịu trách nhiệm thi hành quyết định này.</p>
-      <table style="width:100%;border:0;margin-top:14px;page-break-inside:avoid"><tr><td style="width:50%;vertical-align:top;border:0;font-size:13px"><b><i>Nơi nhận:</i></b><br>- Như Điều 4;<br>- Lưu: VT.</td><td style="text-align:center;vertical-align:top;border:0"><b>GIÁM ĐỐC</b><br><i>(Ký tên, đóng dấu)</i><div style="height:78px"></div><b>${esc(c.daiDien || '')}</b></td></tr></table></div>`;
+      <table style="width:100%;border:0;margin-top:14px;page-break-inside:avoid"><tr><td style="width:50%;vertical-align:top;border:0;font-size:13px"><b><i>Nơi nhận:</i></b><br>- Như Điều 4;<br>- Lưu: VT.</td><td style="text-align:center;vertical-align:top;border:0"><b>GIÁM ĐỐC</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.gd(90) || '<div style="height:78px"></div>'}<b>${esc(c.daiDien || '')}</b></td></tr></table></div>`;
   },
 };
 
@@ -12230,7 +12235,7 @@ Object.assign(PS, {
   async arcGet(ym) { const s = await FB.col().doc('pa_lc_' + ym).get(); return s.exists ? JSON.parse(s.data().d) : []; },
   async arcPut(ym, L) { return FB.col().doc('pa_lc_' + ym).set({ t: 'pa', part: 'vanhanh', ym, at: new Date().toISOString(), d: JSON.stringify(L) }); }
 });
-const APP_BUILD = '2026-11-06T12:15';
+const APP_BUILD = '2026-11-06T12:35';
 /* mục "Thông tin của tôi" trên menu: dùng ảnh đại diện của người đang đăng nhập */
 const MEAV = {
   paint() {

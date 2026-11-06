@@ -22,7 +22,7 @@ function nl80HTML(r, led) {
     ${r.ghiChu ? `<div class="sm" style="margin-top:4px">Ghi chú: ${esc(r.ghiChu)}</div>` : ''}
     ${k !== 'ngoai' ? `<div class="hr"></div>${kv('Tồn bồn sau phiếu', nlL(x.ton) + ' lít')}` : ''}
     <div class="hr"></div>
-    <table class="sg"><tr><td><b>${k === 'nhap' ? 'Người giao' : k === 'bon' ? 'Người cấp' : 'Người duyệt'}</b><i>(Ký, họ tên)</i></td><td><b>${k === 'nhap' ? 'Thủ kho' : 'Lái xe nhận'}</b><i>(Ký, họ tên)</i><div class="nm">${k === 'nhap' ? '' : esc(r.lai || '')}</div></td></tr></table>
+    <table class="sg"><tr><td><b>${k === 'nhap' ? 'Người giao' : k === 'bon' ? 'Người cấp' : 'Người duyệt'}</b><i>(Ký, họ tên)</i></td><td><b>${k === 'nhap' ? 'Thủ kho' : 'Lái xe nhận'}</b><i>(Ký, họ tên)</i><div class="nm"></div></td></tr></table>
     <div class="c sm ft">${r.nguoiTao ? 'Lập: ' + esc(r.nguoiTao) + ' · ' : ''}In: ${pad(now.getDate())}/${pad(now.getMonth() + 1)} ${pad(now.getHours())}:${pad(now.getMinutes())}</div>
   </div>`;
 }
