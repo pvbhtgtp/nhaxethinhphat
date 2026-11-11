@@ -13152,16 +13152,35 @@ const ME = {
   canBuild: () => PS.on && ['vanhanh', 'luong', 'nhansu'].every(p => PS.readable().includes(p)),
   async sync(ids) {
     if (!ME.canBuild() || !FB.db) return 0; let n = 0;
+    const bad = [];
     for (const e of (DB.employees || []).filter(x => !ids || ids.includes(x.id))) {
-      let d = ME.build(e); try { if (typeof IMGX !== 'undefined' && IMGX.strip) d = IMGX.strip(d); } catch (x) { }   // ảnh → tham chiếu Drive (tờ nhỏ, dưới giới hạn 1 MB)
-      const j = JSON.stringify(Object.assign({}, d, { at: undefined })); if (ME.last[e.id] === j) continue; if (j.length > 900000) { console.warn('ME.sync: tờ quá lớn', e.id, j.length); continue; }
-      try { await FB.col().doc('me_' + e.id).set({ t: 'me', emp: e.id, at: new Date().toISOString(), d: JSON.stringify(d) }); ME.last[e.id] = j; n++; } catch (x) { console.warn('ME.sync', e.id, x); }
+      let d = ME.build(e);
+      try {   // ảnh chưa lên Drive: đưa lên ngay để tờ cá nhân chỉ còn mã tham chiếu (dưới giới hạn 1 MB của Firestore)
+        if (typeof IMGX !== 'undefined') { await IMGX.open(); const neu = new Set(); IMGX.walk(d, v => { if (IMGX.big(v) && !IMGX.map.has(v)) neu.add(v); }); if (neu.size && IMGX.on()) await IMGX.pool([...neu], 2, async v => { try { await IMGX.upload(v); } catch (x) { } }); d = IMGX.strip(d); }
+      } catch (x) { }
+      let j = JSON.stringify(Object.assign({}, d, { at: undefined })); if (ME.last[e.id] === j) continue;
+      if (j.length > 900000) {   // vẫn quá lớn (ảnh chưa tải lên được): bỏ ảnh khỏi tờ, giữ đủ chữ để lái xe vẫn thấy thông tin
+        d = JSON.parse(JSON.stringify(d, (k, v) => (typeof v === 'string' && v.startsWith('data:') && v.length > 2048) ? '' : v)); j = JSON.stringify(Object.assign({}, d, { at: undefined }));
+        bad.push(e.ten || e.id);
+      }
+      try { await FB.col().doc('me_' + e.id).set({ t: 'me', emp: e.id, at: new Date().toISOString(), d: JSON.stringify(d) }); ME.last[e.id] = j; n++; } catch (x) { console.warn('ME.sync', e.id, x); try { SYS.add('Phiếu cá nhân nhân viên', 'Không gửi được thông tin của ' + (e.ten || e.id) + ' cho nhân viên: ' + ((x && (x.code || x.message)) || x)); } catch (y) { } }
     }
+    if (bad.length) try { SYS.add('Phiếu cá nhân nhân viên', 'Ảnh giấy tờ chưa tải lên kho Drive nên tạm chưa gửi kèm cho: ' + bad.join(', ') + '. Kiểm tra cấu hình Kho hồ sơ (Drive).'); } catch (y) { }
     return n;
   },
   async load(id) { const s = await FB.col().doc('me_' + id).get(); return s.exists ? jsonSafe(s.data().d, null) : null; },
   soon() { clearTimeout(ME.t); ME.t = setTimeout(() => ME.sync().catch(() => { }), 5000); }
 };
+/* Tờ cá nhân luôn đủ và mới: máy văn phòng soạn lại toàn bộ khi mở app và mỗi 10 phút (chỉ ghi tờ nào thay đổi);
+   máy nhân viên nghe tờ của chính mình theo thời gian thực, có thay đổi là tự cập nhật. */
+setTimeout(() => { try { ME.sync().catch(() => { }); } catch (e) { } }, 15000);
+setInterval(() => { try { if (!document.hidden) ME.sync().catch(() => { }); } catch (e) { } }, 10 * 60000);
+setInterval(() => {
+  try {
+    if (ME._un || !PS.emp || ME.canBuild() || !FB.db) return; let first = true, at = '';
+    ME._un = FB.col().doc('me_' + PS.emp).onSnapshot(s => { const a = s.exists ? s.data().at || '' : ''; if (first) { first = false; at = a; return; } if (a && a !== at) { at = a; GS.pull(false).catch(() => { }); } }, () => { ME._un = null; });
+  } catch (e) { }
+}, 10000);
 { const ch0 = App.changed; App.changed = function () { const r = ch0.apply(this, arguments); try { if (PS.on) ME.soon(); } catch (e) { } return r; }; }
 Object.assign(PS, {
   HOT_BACK: 31, HOT_FWD: 90,
@@ -13599,7 +13618,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-11T23:50';
+const APP_BUILD = '2026-11-11T23:58';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
