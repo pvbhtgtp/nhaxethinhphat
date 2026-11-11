@@ -10120,7 +10120,7 @@ const LCR = {
       let fs; try { const j = await Q.call({ action: 'list' }, undefined, 20000); fs = (j.files || []).filter(f => !from || !f.at || f.at.slice(0, 10) >= D.add(from, -1)).sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 40); } catch (e) { info.push({ name: label, err: String(e.message || e) }); return []; }
       nAll += fs.length; tick(); const out = new Array(fs.length); let k = 0;
       await Promise.all(Array.from({ length: Math.min(12, fs.length) }, async () => { while (k < fs.length) { const i = k++, f = fs[i], dt = f.at ? new Date(f.at) : null, t = dt && !isNaN(dt) ? pad(dt.getDate()) + '/' + pad(dt.getMonth() + 1) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes()) : (f.label || f.name);
-        try { const g = await Q.call({ action: 'getbk', name: f.name }, undefined, 30000); out[i] = { t, L: (g && g.data && g.data.lichchay) || [] }; } catch (e) { out[i] = { t, err: String(e.message || e) }; }
+        try { const g = await Q.call({ action: 'getbk', name: f.name }, undefined, 30000); out[i] = { t, L: (g && g.data && g.data.lichchay) || [], D: g && g.data }; } catch (e) { out[i] = { t, err: String(e.message || e) }; }
         nDone++; tick(); } }));
       return out.map(o => ({ ...o, label, name }));
     };
@@ -10145,11 +10145,27 @@ const LCR = {
     const [rB, rC] = await Promise.all([pB, pC, pL]);
     [...rB, ...rC].forEach(o => { if (o.err) info.push({ name: o.label + ' ' + o.t, err: o.err }); else { stat(o.L, o.label + ' ' + o.t); take0(o.L, o.name); } });   // bản mới nhất trước
     Q2.forEach(([L, name]) => take0(L, name));
-    return { list: [...got.values()].sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)), src, info, up: [...got.keys()].filter(id => cur.has(id)).length };
+    return { list: [...got.values()].sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)), src, info, up: [...got.keys()].filter(id => cur.has(id)).length, oth: LCR.other([...rB, ...rC].filter(o => o.D).map(o => o.D)) };
+  },
+  /* các mục khác (cùng bị mất khi dữ liệu Vận hành bị ghi đè): có trong bản sao lưu nhưng máy chủ hiện không còn — lấy bản mới nhất */
+  OK: [['lylich', 'Lý lịch hành nghề (khám sức khỏe, tập huấn, vi phạm, tai nạn)'], ['datve', 'Vé đã bán'], ['phanAnh', 'Phản ánh & sự cố'], ['nhienlieu', 'Nhiên liệu'], ['suachua', 'Sửa chữa'], ['kmxe', 'Km xe'], ['guihang', 'Gửi hàng'], ['hdvc', 'Hợp đồng vận chuyển'], ['choVe', 'Khách chờ vé']],
+  other(raw) {
+    const out = {}; LCR.OK.forEach(([k]) => {
+      if (DB[k] !== undefined && !Array.isArray(DB[k])) return; const cur = new Set((DB[k] || []).map(r => r && r.id).filter(Boolean)), f = new Map();
+      raw.forEach(D => (Array.isArray(D && D[k]) ? D[k] : []).forEach(r => { if (r && r.id && !cur.has(r.id) && !f.has(r.id)) f.set(r.id, r); }));
+      if (f.size) out[k] = [...f.values()];
+    });
+    return out;
+  },
+  lab(k, r) {
+    const nv = id => ((DB.employees || []).find(e => String(e.id) === String(id)) || {}).ten || '', d = x => x ? F.date(String(x).slice(0, 10)) : '';
+    if (k === 'lylich') return [nv(r.lai), (typeof LL !== 'undefined' && LL[r.loai] ? LL[r.loai].label : r.loai), d(r.ngay)].filter(Boolean).join(' · ');
+    if (k === 'datve') { const t = (DB.lichchay || []).find(l => l.id === r.chuyen); return [t ? d(t.ngay) + ' ' + t.gio + ' ' + t.tuyen : 'chuyến chưa có', 'ghế ' + (r.ghe || ''), r.ten || '', r.sdt || ''].filter(Boolean).join(' · '); }
+    return [d(r.ngay || r.tg), r.so, r.ten || r.tenKhach, r.xe || r.bks, r.noiDung || r.loai].filter(Boolean).map(String).join(' · ').slice(0, 120);
   },
   async open() {
     if (!PERM.admin()) return toast('Chỉ Admin dùng được', 'err');
-    const td = D.today(), m = Modal.open({ title: 'Khôi phục chuyến bị thiếu', width: 560, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: `<button class="btn" data-cl>Dọn chuyến trùng${LCR.dups().length ? ' (' + LCR.dups().length + ')' : ''}</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>` });
+    const td = D.today(), m = Modal.open({ title: 'Khôi phục dữ liệu bị thiếu', width: 600, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: `<button class="btn" data-cl>Dọn chuyến trùng${LCR.dups().length ? ' (' + LCR.dups().length + ')' : ''}</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>` });
     const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close(); q('[data-cl]').onclick = () => { m.close(); LCR.clean(); };
     q('[data-go]').onclick = async () => {
       q('[data-out]').innerHTML = 'Đang rà…'; q('[data-go]').disabled = true;
@@ -10157,6 +10173,9 @@ const LCR = {
       const by = {}; R.list.forEach(l => { by[l.ngay] = (by[l.ngay] || 0) + 1; });
       const nA = R.list.filter(l => l.laiXe || l.xeId).length, inf = (R.info || []).length ? `<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">Đã đọc ${R.info.length} bản sao lưu</summary><div style="max-height:180px;overflow:auto;margin-top:4px">${R.info.map(x => `<div>${esc(x.name)}: ${x.err ? '<span class="sc-bad">' + esc(x.err) + '</span>' : '<b>' + x.n + '</b> chuyến, ' + x.a + ' đã gán lái xe/xe'}</div>`).join('')}</div></details>` : '';
       q('[data-out]').innerHTML = (R.list.length ? `<b>Tìm thấy ${R.list.length} chuyến (${nA} đã gán lái xe/xe${R.up ? ', trong đó ' + R.up + ' chuyến bổ sung lái xe/xe cho chuyến đang trống' : ''})</b><div class="muted">Nguồn: ${Object.entries(R.src).map(([k, v]) => esc(k) + ' ' + v).join(' · ')}</div><div style="margin-top:6px">${Object.entries(by).sort().map(([d, n]) => F.date(d) + ': <b>' + n + '</b>').join(' · ')}</div>` : '<span style="color:#15803d;font-weight:700">Không thiếu chuyến nào trong khoảng ngày này.</span>') + inf;
+      const O = R.oth || {}, ks = LCR.OK.filter(([k]) => O[k]);
+      q('[data-out]').insertAdjacentHTML('beforeend', ks.length ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #e5e7eb"><b>Dữ liệu khác có trong bản sao lưu nhưng hiện đang thiếu</b><div class="muted">Tick mục cần lấy lại (bấm từng dòng để xem danh sách). Mục nào anh đã chủ động xóa thì bỏ tick.</div>${ks.map(([k, n]) => `<details style="margin-top:6px"><summary style="cursor:pointer"><label onclick="event.stopPropagation()" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-ok2k="${k}" checked> ${esc(n)}: <b>${O[k].length}</b></label></summary><div style="max-height:160px;overflow:auto;margin:4px 0 0 22px">${O[k].slice(0, 300).map(r => `<div>${esc(LCR.lab(k, r))}</div>`).join('')}</div></details>`).join('')}<button class="btn pri" data-ok2 style="margin-top:8px">${ic('check')} Khôi phục dữ liệu đã tick</button></div>` : '<div class="muted" style="margin-top:8px">Các dữ liệu khác (lý lịch, vé, phản ánh, nhiên liệu…) không thiếu.</div>');
+      const b2 = q('[data-ok2]'); if (b2) b2.onclick = () => { const at = new Date().toISOString(), done = []; m.el.querySelectorAll('[data-ok2k]:checked').forEach(c => { const k = c.dataset.ok2k, L = DB[k] || (DB[k] = []), ids = new Set(L.map(r => r && r.id)); let n = 0; (O[k] || []).forEach(r => { if (!ids.has(r.id)) { L.push(Object.assign({}, r, { _rec: at })); n++; } }); if (n) done.push((LCR.OK.find(x => x[0] === k) || [k, k])[1].split(' (')[0] + ' ' + n); }); if (!done.length) return toast('Chưa tick mục nào', 'err'); App.changed(); b2.disabled = true; b2.textContent = 'Đã khôi phục: ' + done.join(' · '); m.el.querySelectorAll('[data-ok2k]').forEach(c => c.disabled = true); toast(ic('check') + ' Đã khôi phục: ' + done.join(' · '), 'ok', 7000); };
       q('[data-ok]').disabled = !R.list.length;
     };
     q('[data-ok]').onclick = () => { if (!R || !R.list.length) return; const at = new Date().toISOString(); let n = 0, u = 0; R.list.forEach(l => { const k = DB.lichchay.findIndex(x => x.id === l.id), o = Object.assign({}, l, { _rec: at }); if (k < 0) { DB.lichchay.push(o); n++; } else if (!DB.lichchay[k].laiXe && !DB.lichchay[k].xeId) { DB.lichchay[k] = Object.assign({}, DB.lichchay[k], o); u++; } }); App.changed(); m.close(); toast(ic('check') + ' Đã khôi phục ' + n + ' chuyến' + (u ? ', bổ sung lái xe/xe cho ' + u + ' chuyến' : '') + (LCR.dups().length ? '. Còn ' + LCR.dups().length + ' chuyến trùng giờ để trống, bấm Dọn chuyến trùng nếu muốn bỏ' : ''), 'ok', 7000); };
@@ -13854,7 +13873,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T07:20';
+const APP_BUILD = '2026-11-12T07:35';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
