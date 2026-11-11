@@ -10082,17 +10082,36 @@ const TK = {
 /* ===== KHÔI PHỤC CHUYẾN BỊ THIẾU: gom chuyến từ mọi nguồn còn lưu (tài liệu từng chuyến, khối dữ liệu cũ và 5 bản trước,
    lịch chạy đã cất theo tháng, bản sao lưu Drive) → chỉ THÊM chuyến máy này đang thiếu (theo mã chuyến), không ghi đè, không xóa. ===== */
 const LCR = {
-  async collect(from, to) {
-    const have = new Set((DB.lichchay || []).map(l => l.id)), got = new Map(), src = {}, slot = new Set((DB.lichchay || []).map(l => l.ngay + '|' + l.tuyen + '|' + l.gio));
-    const better = (a, b) => (!!(b.laiXe) - !!(a.laiXe)) || (!!(b.xeId) - !!(a.xeId));   // cùng giờ: ưu tiên bản đã gán lái xe, xe
-    const take = (L, name) => (Array.isArray(L) ? L : []).forEach(l => { if (!l || !l.id || have.has(l.id)) return; if (got.has(l.id)) { if (better(got.get(l.id), l) > 0) got.set(l.id, l); return; } if (slot.has(l.ngay + '|' + l.tuyen + '|' + l.gio) && !l.laiXe) return; if (from && (l.ngay || '') < from) return; if (to && (l.ngay || '') > to) return; got.set(l.id, l); src[name] = (src[name] || 0) + 1; });
+  async collect(from, to, prog) {
+    const cur = new Map((DB.lichchay || []).map(l => [l.id, l])), got = new Map(), src = {}, info = [], slot = new Set((DB.lichchay || []).map(l => l.ngay + '|' + l.tuyen + '|' + l.gio));
+    const asg = l => !!(l && (l.laiXe || l.xeId)), inR = l => !(from && (l.ngay || '') < from) && !(to && (l.ngay || '') > to);
+    const better = (a, b) => (!!(b.laiXe) - !!(a.laiXe)) || (!!(b.xeId) - !!(a.xeId));   // cùng chuyến: ưu tiên bản đã gán lái xe, xe
+    const take = (L, name) => (Array.isArray(L) ? L : []).forEach(l => {
+      if (!l || !l.id || !inR(l)) return; const ex = cur.get(l.id);
+      if (ex && (asg(ex) || !asg(l))) return;                       // máy đã có đủ, hoặc bản tìm được không hơn bản đang có
+      if (got.has(l.id)) { if (better(got.get(l.id), l) > 0) got.set(l.id, l); return; }
+      if (!ex && slot.has(l.ngay + '|' + l.tuyen + '|' + l.gio) && !l.laiXe) return;
+      got.set(l.id, l); src[name] = (src[name] || 0) + 1;
+    });
+    const stat = (L, name) => { const R = (Array.isArray(L) ? L : []).filter(l => l && inR(l)); info.push({ name, n: R.length, a: R.filter(asg).length }); };
+    const say = t => { try { prog && prog(t); } catch (e) { } };
+    /* các bản sao lưu theo ngày trên Google Drive / Cloudflare: đọc từ mới đến cũ, bản mới nhất có gán lái xe được ưu tiên */
+    const many = async (Q, label, name) => {
+      try { const j = await Q.call({ action: 'list' }), fs = (j.files || []).filter(f => !from || !f.at || f.at.slice(0, 10) >= D.add(from, -1)).sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 40);
+        for (let i = 0; i < fs.length; i++) { const f = fs[i], dt = f.at ? new Date(f.at) : null, t = dt && !isNaN(dt) ? pad(dt.getDate()) + '/' + pad(dt.getMonth() + 1) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes()) : (f.label || f.name);
+          say(`Đang đọc ${label} ${i + 1}/${fs.length} (${t})…`);
+          try { const g = await Q.call({ action: 'getbk', name: f.name }), L = g && g.data && g.data.lichchay; stat(L, label + ' ' + t); take(L, name); } catch (e) { info.push({ name: label + ' ' + t, err: String(e.message || e) }); } } } catch (e) { info.push({ name: label, err: String(e.message || e) }); }
+    };
+    if (typeof BK !== 'undefined' && BK.ok(BK.cfg())) await many(BK, 'Drive', 'Bản sao lưu Drive');
+    if (typeof CF !== 'undefined' && CF.ok(CF.cfg())) await many(CF, 'Cloudflare', 'Bản lưu Cloudflare');
+    say('Đang rà dữ liệu trên Firebase và máy này…');
     const col = FB.col();
     try { const sn = await col.where('t', '==', 'c').get(); take(sn.docs.map(d => jsonSafe(d.data().d, null)).filter(Boolean), 'Tài liệu từng chuyến'); } catch (e) { }
     try { const m = await col.doc('meta').get(), md = m.exists ? m.data() : {}, V = [{ p: md.p || 'c', n: +md.n || 0 }, ...((md.hist || []))];
       for (const h of V) { if (!h.n) continue; try { const D2 = await Promise.all(Array.from({ length: h.n }, (_, i) => col.doc((h.p || 'c') + i).get())); if (D2.some(x => !x.exists)) continue; const d = jsonSafe(D2.map(x => x.data().d).join(''), null); take(d && d.lichchay, 'Khối dữ liệu cũ'); } catch (e) { } } } catch (e) { }
     try { const ym = new Set([from, to, D.today()].filter(Boolean).map(x => x.slice(0, 7))); for (const m of ym) { try { take(await PS.arcGet(m), 'Lịch chạy đã cất theo tháng'); } catch (e) { } } } catch (e) { }
     try { if (typeof PS !== 'undefined') { const r = await PS.get('vanhanh'); take(r && r.data && r.data.lichchay, 'Phần Vận hành trên máy chủ'); } } catch (e) { }
-    try { if (typeof BK !== 'undefined' && BK.ok(BK.cfg())) { const j = await BK.call({ action: 'get' }); take(j && j.data && j.data.lichchay, 'Bản sao lưu Drive'); } } catch (e) { }
+    try { if (typeof BK !== 'undefined' && BK.ok(BK.cfg())) { const j = await BK.call({ action: 'get' }); stat(j && j.data && j.data.lichchay, 'Drive bản mới nhất'); take(j && j.data && j.data.lichchay, 'Bản sao lưu Drive'); } } catch (e) { }
     try {   // bộ nhớ đệm Firebase trên chính máy này: còn giữ các bản dữ liệu cũ đã đọc trước đó (ghép lại từng khối)
       const sn = await col.get({ source: 'cache' }), G = {};
       sn.docs.forEach(d => { const m = d.id.match(/^(p[a-z]+_[a-z0-9]+_|v[a-z0-9]+_|c)(\d+)$/); if (!m) return; (G[m[1]] = G[m[1]] || []).push([+m[2], d.data().d]); });
@@ -10100,7 +10119,7 @@ const LCR = {
       sn.docs.forEach(d => { if (/^pa_lc_/.test(d.id)) take(jsonSafe(d.data().d, []), 'Bộ nhớ đệm máy này'); });
     } catch (e) { }
     try { const dr = Store.draft && Store.draft(); take(dr && dr.data && dr.data.lichchay, 'Bản nháp trên máy'); } catch (e) { }
-    return { list: [...got.values()].sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)), src };
+    return { list: [...got.values()].sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)), src, info, up: [...got.keys()].filter(id => cur.has(id)).length };
   },
   async open() {
     if (!PERM.admin()) return toast('Chỉ Admin dùng được', 'err');
@@ -10108,12 +10127,13 @@ const LCR = {
     const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close(); q('[data-cl]').onclick = () => { m.close(); LCR.clean(); };
     q('[data-go]').onclick = async () => {
       q('[data-out]').innerHTML = 'Đang rà…'; q('[data-go]').disabled = true;
-      try { R = await LCR.collect(q('[data-f]').value, q('[data-t]').value); } catch (e) { q('[data-out]').innerHTML = '<span class="sc-bad">' + esc(e.message || e) + '</span>'; return; } finally { q('[data-go]').disabled = false; }
+      try { R = await LCR.collect(q('[data-f]').value, q('[data-t]').value, t => { q('[data-out]').textContent = t; }); } catch (e) { q('[data-out]').innerHTML = '<span class="sc-bad">' + esc(e.message || e) + '</span>'; return; } finally { q('[data-go]').disabled = false; }
       const by = {}; R.list.forEach(l => { by[l.ngay] = (by[l.ngay] || 0) + 1; });
-      q('[data-out]').innerHTML = R.list.length ? `<b>Tìm thấy ${R.list.length} chuyến máy này đang thiếu</b><div class="muted">Nguồn: ${Object.entries(R.src).map(([k, v]) => esc(k) + ' ' + v).join(' · ')}</div><div style="margin-top:6px">${Object.entries(by).sort().map(([d, n]) => F.date(d) + ': <b>' + n + '</b>').join(' · ')}</div>` : '<span style="color:#15803d;font-weight:700">Không thiếu chuyến nào trong khoảng ngày này.</span>';
+      const nA = R.list.filter(l => l.laiXe || l.xeId).length, inf = (R.info || []).length ? `<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">Đã đọc ${R.info.length} bản sao lưu</summary><div style="max-height:180px;overflow:auto;margin-top:4px">${R.info.map(x => `<div>${esc(x.name)}: ${x.err ? '<span class="sc-bad">' + esc(x.err) + '</span>' : '<b>' + x.n + '</b> chuyến, ' + x.a + ' đã gán lái xe/xe'}</div>`).join('')}</div></details>` : '';
+      q('[data-out]').innerHTML = (R.list.length ? `<b>Tìm thấy ${R.list.length} chuyến (${nA} đã gán lái xe/xe${R.up ? ', trong đó ' + R.up + ' chuyến bổ sung lái xe/xe cho chuyến đang trống' : ''})</b><div class="muted">Nguồn: ${Object.entries(R.src).map(([k, v]) => esc(k) + ' ' + v).join(' · ')}</div><div style="margin-top:6px">${Object.entries(by).sort().map(([d, n]) => F.date(d) + ': <b>' + n + '</b>').join(' · ')}</div>` : '<span style="color:#15803d;font-weight:700">Không thiếu chuyến nào trong khoảng ngày này.</span>') + inf;
       q('[data-ok]').disabled = !R.list.length;
     };
-    q('[data-ok]').onclick = () => { if (!R || !R.list.length) return; const have = new Set(DB.lichchay.map(l => l.id)); let n = 0; const at = new Date().toISOString(); R.list.forEach(l => { if (!have.has(l.id)) { DB.lichchay.push(Object.assign({}, l, { _rec: at })); n++; } }); App.changed(); m.close(); toast(ic('check') + ' Đã khôi phục ' + n + ' chuyến', 'ok', 4000); };
+    q('[data-ok]').onclick = () => { if (!R || !R.list.length) return; const at = new Date().toISOString(); let n = 0, u = 0; R.list.forEach(l => { const k = DB.lichchay.findIndex(x => x.id === l.id), o = Object.assign({}, l, { _rec: at }); if (k < 0) { DB.lichchay.push(o); n++; } else if (!DB.lichchay[k].laiXe && !DB.lichchay[k].xeId) { DB.lichchay[k] = Object.assign({}, DB.lichchay[k], o); u++; } }); App.changed(); m.close(); toast(ic('check') + ' Đã khôi phục ' + n + ' chuyến' + (u ? ', bổ sung lái xe/xe cho ' + u + ' chuyến' : '') + (LCR.dups().length ? '. Còn ' + LCR.dups().length + ' chuyến trùng giờ để trống, bấm Dọn chuyến trùng nếu muốn bỏ' : ''), 'ok', 7000); };
   }
 };
 LCR.dups = function () {
@@ -13792,7 +13812,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T02:50';
+const APP_BUILD = '2026-11-12T03:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
