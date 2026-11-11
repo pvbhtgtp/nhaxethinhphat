@@ -3515,9 +3515,38 @@ function vehForm(v) {
     const c = m.el.querySelector('[data-cancel]'); if (c) c.textContent = 'Đóng';
   }
 }
+/* Xem PDF ngay trong app bằng pdf.js (vẽ từng trang): điện thoại không hiển thị được PDF trong iframe */
+const PDFV = {
+  M: new Map(), n: 0,
+  box(f, h = 520) { const id = 'pv' + (++PDFV.n); PDFV.M.set(id, f); return `<div class="pdfv" data-pv="${id}" style="max-height:${h}px"><div class="pdfv-p muted small">Đang mở PDF…</div></div><div class="row pdfv-a"><button type="button" class="btn sm" data-pvfull="${id}">${ic('eye')} Xem lớn</button><button type="button" class="btn sm" data-pvdl="${id}">${ic('download')} Tải về</button></div>`; },
+  u8(f) { const b = atob(String(f).split(',')[1]), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; },
+  async draw(el) {
+    const f = PDFV.M.get(el.dataset.pv); el.dataset.done = '1'; if (!f) return;
+    try {
+      await vehPdfToBlob(null); const pdf = await pdfjsLib.getDocument({ data: PDFV.u8(f) }).promise, n = Math.min(pdf.numPages, 40);
+      el.innerHTML = ''; const W = Math.max(280, el.clientWidth || 600), dpr = Math.min(2, window.devicePixelRatio || 1);
+      for (let i = 1; i <= n; i++) {
+        if (!el.isConnected) return;
+        const pg = await pdf.getPage(i), v0 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(3, W * dpr / v0.width) }), c = document.createElement('canvas');
+        c.width = vp.width; c.height = vp.height; c.className = 'pdfv-c'; await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise; el.appendChild(c);
+      }
+      if (pdf.numPages > n) el.insertAdjacentHTML('beforeend', `<div class="muted small" style="padding:6px">Còn ${pdf.numPages - n} trang, bấm Tải về để xem đủ</div>`);
+    } catch (e) { console.warn('PDFV', e); el.innerHTML = '<div class="pdfv-p muted small">Không hiển thị được PDF. Bấm Tải về để mở bằng ứng dụng khác</div>'; }
+  },
+  scan(root) { (root || document).querySelectorAll('.pdfv[data-pv]:not([data-done])').forEach(el => PDFV.draw(el)); },
+  show(f, title) { const m = Modal.open({ title: esc(title || 'Xem PDF'), width: 900, body: PDFV.box(f, 100000), foot: '<button class="btn" data-no>Đóng</button>' }); m.el.querySelector('[data-no]').onclick = () => m.close(); PDFV.scan(m.el); },
+  dl(f, name) { download(new Blob([PDFV.u8(f)], { type: 'application/pdf' }), name || 'tai-lieu.pdf'); }
+};
+addCSS('.pdfv{overflow:auto;border:1px solid #bae6fd;border-radius:8px;background:#f1f5f9;-webkit-overflow-scrolling:touch}.pdfv-c{display:block;width:100%;height:auto;background:#fff;margin:0 0 6px}.pdfv-c:last-child{margin:0}.pdfv-p{padding:24px;text-align:center}.pdfv-a{gap:8px;margin:6px 0 0}');
+new MutationObserver(() => { if (document.querySelector('.pdfv[data-pv]:not([data-done])')) PDFV.scan(); }).observe(document.documentElement, { childList: true, subtree: true });
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('[data-pvfull],[data-pvdl]'); if (!a) return; e.preventDefault(); e.stopPropagation();
+  const id = a.dataset.pvfull || a.dataset.pvdl, f = PDFV.M.get(id); if (!f) return;
+  if (a.dataset.pvfull) PDFV.show(f); else PDFV.dl(f);
+}, true);
 function docPrev(f, urls, h = 520) {
   if (!f) return '<div class="muted small">Chưa tải lên</div>';
-  if (fileIsPdf(f)) { try { const b = atob(f.split(',')[1]), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); const u = URL.createObjectURL(new Blob([a], { type: 'application/pdf' })); urls.push(u); return `<iframe src="${u}" style="width:100%;height:${h}px;border:1px solid #bae6fd;border-radius:8px"></iframe>`; } catch (e) { return '<div class="muted small">Không hiển thị được file PDF</div>'; } }
+  if (fileIsPdf(f)) return PDFV.box(f, h);
   return `<img src="${f}" style="max-width:100%;border:1px solid #bae6fd;border-radius:8px">`;
 }
 function vehDocs(v) {
@@ -5609,7 +5638,7 @@ const scNext = () => 'PSX' + String(Math.max(0, ...DB.suachua.map(p => parseInt(
 const scMoney = n => F.money(n || 0);
 function scList() { return DB.suachua.filter(p => (!SC.thang || String(p.ngay).slice(0, 7) === SC.thang) && (!SC.xe || p.xe === SC.xe)); }
 function scView(files, idx = 0) {
-  const urls = []; const one = f => { if (fileIsPdf(f)) { try { const b = atob(f.split(',')[1]), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); const u = URL.createObjectURL(new Blob([a], { type: 'application/pdf' })); urls.push(u); return `<iframe src="${u}" style="width:100%;height:70vh;border:1px solid #bae6fd;border-radius:8px"></iframe>`; } catch (e) { return '<div class="muted">Không mở được PDF</div>'; } } return `<img src="${f}" style="max-width:100%;border:1px solid #bae6fd;border-radius:8px;display:block;margin:0 auto">`; };
+  const urls = []; const one = f => { if (fileIsPdf(f)) return PDFV.box(f, Math.round(window.innerHeight * 0.7)); return `<img src="${f}" style="max-width:100%;border:1px solid #bae6fd;border-radius:8px;display:block;margin:0 auto">`; };
   const m = Modal.open({ title: `Hóa đơn / phiếu mua đồ (${files.length})`, width: 860, body: files.map((f, i) => `<div id="scv${i}" style="margin-bottom:14px"><b>Tệp ${i + 1}</b>${one(f)}</div>`).join(''), foot: '<button class="btn" data-no>Đóng</button>', onClose: () => urls.forEach(u => URL.revokeObjectURL(u)) });
   m.el.querySelector('[data-no]').onclick = () => m.close();
   setTimeout(() => { const t = m.el.querySelector('#scv' + idx); if (t && t.scrollIntoView) t.scrollIntoView(); }, 50);
@@ -10118,6 +10147,7 @@ const HS = {
       else { if (!FB.db) throw new Error('Chưa kết nối máy chủ'); const parts = await Promise.all(Array.from({ length: h.n || 1 }, (_, i) => FB.col().doc('hf_' + h.id + '_' + i).get())); if (parts.some(p => !p.exists)) throw new Error('Tệp chưa được lưu đủ'); b64 = parts.map(p => p.data().d).join(''); }
       const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       const blob = new Blob([u], { type: h.mime || 'application/octet-stream' });
+      if (h.mime === 'application/pdf') { PDFV.show('data:application/pdf;base64,' + b64, h.ten || h.tenFile); return; }
       if (/^(image\/|application\/pdf|text\/plain|text\/html)/.test(h.mime || '')) { const w = window.open(URL.createObjectURL(blob), '_blank'); if (w) return; }
       download(blob, h.tenFile || h.ten);
     } catch (e) { toast('Không mở được: ' + esc(e.message || e), 'err', 6000); }
