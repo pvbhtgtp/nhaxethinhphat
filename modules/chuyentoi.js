@@ -87,7 +87,8 @@ const CT = {
     const nm = id => ((DB.employees || []).find(e => String(e.id) === String(id)) || {}).ten || '';
     if (!L.length) return `<div class="ct-empty sm">${ic('bus')}<b>Không có chuyến ngày ${F.date(d)}</b></div>`;
     return `<div class="ct-lbl">${L.length} chuyến ngày ${F.date(d)}</div>` + L.map(l => { const v = (DB.vehicles || []).find(x => x.id === l.xeId) || {}, mates = [l.laiXe, l.laiXe2, l.phuXe].filter(x => x && String(x) !== me).map(nm).filter(Boolean);
-      return `<div class="ct-card sm"><div class="ct-h"><b class="ct-time">${esc(l.gio || '')}</b><span class="ct-when">${l.phuXe && String(l.phuXe) === me ? 'Phụ xe' : 'Lái xe'}</span></div><div class="ct-route">${esc(l.tuyen || '')}</div><div class="ct-sub">${ic('bus')} ${esc(v.bks || 'Chưa gán xe')}${mates.length ? ' · Cùng: ' + esc(mates.join(', ')) : ''}</div></div>`; }).join('');
+      let xc = null; try { xc = XC.of(l).find(z => z.kind === 'lx' && String(z.id) === me); } catch (e) { }
+      return `<div class="ct-card sm${xc ? ' cheo' : ''}"><div class="ct-h"><b class="ct-time">${esc(l.gio || '')}</b><span class="ct-when">${l.phuXe && String(l.phuXe) === me ? 'Phụ xe' : 'Lái xe'}</span></div><div class="ct-route">${esc(l.tuyen || '')}${xc ? ` <span class="ct-tag cheo">⇄ Chạy chéo · tuyến chính ${esc(xc.main.s)}</span>` : ''}</div><div class="ct-sub">${ic('bus')} ${esc(v.bks || 'Chưa gán xe')}${mates.length ? ' · Cùng: ' + esc(mates.join(', ')) : ''}</div></div>`; }).join('');
   },
   /* ---------- màn hình danh sách chuyến ---------- */
   list(el, T) {
@@ -95,9 +96,9 @@ const CT = {
     if (d !== td0 && !(d === D.add(td0, 1) && T.some(t => t.ngay === d))) { el.innerHTML = `<div class="ct">${CT.cal()}${CT.dayList(d)}</div>`; return CT.bindCal(el); }
     if (d === D.add(td0, 1)) T = T.filter(t => t.ngay === d);
     const td = D.today(), nx = T.find(t => CT.mins(t) > -180) || T[T.length - 1];
-    const card = (t, big) => { const s = CT.sum(t), m = CT.mins(t); return `<button class="ct-card${big ? ' big' : ''}${m < -180 ? ' gone' : ''}" data-ct="${esc(t.id)}">
+    const card = (t, big) => { const s = CT.sum(t), m = CT.mins(t); return `<button class="ct-card${big ? ' big' : ''}${m < -180 ? ' gone' : ''}${t.cheo ? ' cheo' : ''}" data-ct="${esc(t.id)}">
       <div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when ${m > 0 && m <= 60 ? 'soon' : ''}">${t.ngay === td ? '' : 'Ngày mai · '}${CT.when(t)}</span></div>
-      <div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
+      <div class="ct-route">${esc(t.tuyen)}${t.cheo ? ` <span class="ct-tag cheo">⇄ Chạy chéo · tuyến chính ${esc(t.cheo)}</span>` : ''}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
       <div class="ct-kpi"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Cần thu</span></div></div></button>`; };
     el.innerHTML = `<div class="ct">${CT.cal()}${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
     el.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { CT.trip = b.dataset.ct; CT.tab = 'don'; App.render(); window.scrollTo(0, 0); });
@@ -177,7 +178,7 @@ addCSS(`.ct{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap
 .ct-ph{margin-top:10px;cursor:pointer}.ct-inc{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ct-inc .ct-b{min-height:48px;font-size:13.5px;padding:4px 8px;text-align:center}
 .ct-cal{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:8px 10px}.ct-calh{display:flex;align-items:center;gap:6px;margin-bottom:4px}.ct-calh b{flex:1;text-align:center;font-size:15px}.ct-calh button{border:0;background:#f1f5f9;border-radius:10px;min-width:34px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font:inherit;font-weight:700;font-size:13px}.ct-calh .nx svg{transform:rotate(180deg)}.ct-calh svg{width:16px;height:16px}.ct-calh .ct-today{padding:0 10px;background:#eff6ff;color:#1d4ed8}
 .ct-calg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}.ct-calg small{font-size:11px;color:#98a2b3;padding:2px 0}.ct-cal.wk .ct-calg button{height:40px}.ct-calg button{position:relative;border:0;background:none;border-radius:10px;height:34px;font:inherit;font-size:14px;font-weight:600;color:#1f2937;cursor:pointer}.ct-calg button.has{background:#eef2ff;color:#3730a3;font-weight:800}.ct-calg button.td{box-shadow:inset 0 0 0 2px #93c5fd}.ct-calg button.sel{background:var(--p);color:#fff}.ct-calg i{position:absolute;top:1px;right:3px;font-style:normal;font-size:9.5px;font-weight:800;color:#dc2626}.ct-calg button.sel i{color:#fff}
-.ct-card.sm{cursor:default;padding:10px 14px}.ct-card.sm .ct-time{font-size:18px}`);
+.ct-tag.cheo{background:#ffedd5;color:#c2410c;border:1px solid #fdba74}.ct-card.cheo,.ct-card.big.cheo{border-left:5px dashed #ea580c}.ct-card.sm{cursor:default;padding:10px 14px}.ct-card.sm .ct-time{font-size:18px}`);
 MODL.def('chuyentoi', {
   title: 'Chuyến của tôi', icon: 'bus', desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền',
   render(el) {

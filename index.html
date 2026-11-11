@@ -1878,6 +1878,25 @@ const MRT = {
 };
 MRT.list[0].o = MRT.list[1]; MRT.list[1].o = MRT.list[0];
 /* Tuyến chính: đặt cố định trong hồ sơ, hoặc tự động = nhóm tuyến có nhiều công nhất trong tháng. Lương CK và BHXH chỉ trừ ở tuyến chính */
+/* ===== CHẠY CHÉO: lái xe / xe chạy tuyến khác tuyến chính của mình (cố định trong hồ sơ, hoặc tự động: tuyến chạy nhiều nhất trong tháng) ===== */
+const XC = {
+  _c: null, _t: 0,
+  maps(ym) {
+    if (XC._c && XC._c.ym === ym && XC._c.n === (DB.lichchay || []).length && Date.now() - XC._t < 5000) return XC._c;
+    const E = {}, V = {}, add = (o, id, k, w) => { if (!id) return; const x = o[id] = o[id] || {}; x[k] = (x[k] || 0) + w; };
+    (DB.lichchay || []).forEach(l => { if (!String(l.ngay).startsWith(ym)) return; const m = MRT.of(l.tuyen); if (!m) return; const w = congTuyen(l.tuyen) * (+l.soChuyen || 1); add(E, l.laiXe, m.k, w); add(E, l.laiXe2, m.k, w); add(V, l.xeId, m.k, w); });
+    XC._c = { ym, E, V, n: (DB.lichchay || []).length }; XC._t = Date.now(); return XC._c;
+  },
+  top(o) { let b = null, bv = 0; MRT.list.forEach(m => { const v = (o || {})[m.k] || 0; if (v > bv) { bv = v; b = m; } }); return b; },
+  main(x, ym, kind) { if (!x) return null; const fx = x.tuyenChinh && MRT.of(x.tuyenChinh); if (fx) return { m: fx, fixed: 1 }; const m = XC.top(XC.maps(ym)[kind][x.id]); return m ? { m, fixed: 0 } : null; },
+  of(l) {
+    const m = l && MRT.of(l.tuyen); if (!m) return []; const ym = String(l.ngay).slice(0, 7), out = [];
+    [l.laiXe, l.laiXe2].filter(Boolean).forEach(id => { const e = (DB.employees || []).find(x => x.id === id), mm = XC.main(e, ym, 'E'); if (mm && mm.m.k !== m.k) out.push({ kind: 'lx', id, ten: e.ten || '', main: mm.m, fixed: mm.fixed }); });
+    const v = l.xeId && (DB.vehicles || []).find(x => x.id === l.xeId), mv = XC.main(v, ym, 'V'); if (mv && mv.m.k !== m.k) out.push({ kind: 'xe', id: v.id, ten: v.bks || '', main: mv.m, fixed: mv.fixed });
+    return out;
+  },
+  tip(L) { return L.map(x => (x.kind === 'lx' ? 'Lái xe ' : 'Xe ') + x.ten + ' chạy chéo: tuyến chính ' + x.main.n + (x.fixed ? '' : ' (tự động theo tháng)') + (x.kind === 'xe' ? '. Kiểm tra xe đã đăng ký khai thác tuyến này chưa' : '')).join('\n'); }
+};
 function tuyenChinh(e, ym) { if (!e) return ''; if (e.tuyenChinh) return e.tuyenChinh; const T = empTuyen(ym, e.id); return T.length ? T[0].t : ''; }
 function calcPay(e, ym) {
   const s = S(), a = summarize(ym, e.id), ex = (DB.extra[ym] || {})[e.id] || {};
@@ -3404,6 +3423,7 @@ const VEH_FIELDS = () => [
   { type: 'section', label: 'Hồ sơ lý lịch phương tiện (dùng cho mẫu Lý lịch xe)' },
   { key: 'nuocSX', label: 'Nước sản xuất', list: [...new Set(['Việt Nam', ...DB.vehicles.map(x => x.nuocSX).filter(Boolean)])], hint: 'Mặc định Việt Nam. Gõ nước khác thì lần sau sẽ có trong danh sách' }, { key: 'taiTrong', label: 'Tải trọng cho phép chở (kg)', type: 'number' },
   { key: 'loaiHinh', label: 'Loại hình kinh doanh vận tải', type: 'select', options: [{ value: '', label: '— Chưa chọn —' }, ...['Tuyến cố định', 'Xe buýt', 'Xe taxi', 'Xe hợp đồng', 'Xe du lịch', 'Tuyến cố định + Xe hợp đồng'].map(x => ({ value: x, label: x }))] },
+  { key: 'tuyenChinh', label: 'Tuyến chính (đăng ký khai thác)', type: 'select', blank: 'Tự động: tuyến xe chạy nhiều nhất trong tháng', options: () => allNhom(), hint: 'Xe chạy tuyến khác sẽ được đánh dấu "chạy chéo" trong Điều hành để kiểm tra đăng ký khai thác' },
   { key: 'dkSo', label: 'Giấy đăng ký xe: số' }, { key: 'dkNgay', label: 'Ngày cấp giấy đăng ký', type: 'date' }, { key: 'dkNoi', label: 'Nơi cấp giấy đăng ký' }, { key: 'kdSo', label: 'Số giấy chứng nhận kiểm định' },
   { key: 'gpsModel', label: 'GPS: nhãn hiệu / model' }, { key: 'gpsNcc', label: 'GPS: nhà cung cấp dịch vụ', list: [...new Set(['Công ty Cổ phần Công nghệ Trực tuyến Skysoft', ...DB.vehicles.map(x => x.gpsNcc).filter(Boolean)])], hint: 'Chọn trong danh sách hoặc gõ tên nhà cung cấp khác' }, { key: 'gpsTk', label: 'GPS: tài khoản truy cập' }, { key: 'hhPhuHieu', label: 'Hạn phù hiệu / biển hiệu', type: 'date' }, { key: 'phuHieuF', label: 'Phù hiệu / biển hiệu (ảnh hoặc PDF)', type: 'file' },
   { key: 'ngayHD', label: 'Ngày đưa xe vào hoạt động', type: 'date' }, { key: 'ngayNgung', label: 'Ngày ngừng hoạt động / thanh lý', type: 'date' },
@@ -13399,7 +13419,7 @@ const TX = {
   },
   build(emp) {
     const [a, b] = TX.win();
-    return (DB.lichchay || []).filter(l => l.ngay >= a && l.ngay <= b && !l._me && TX.mine(l, emp)).sort((x, y) => (x.ngay + x.gio).localeCompare(y.ngay + y.gio)).map(l => Object.assign(TX.trip(l), { vai: l.phuXe === emp ? 'Phụ xe' : 'Lái xe' }));
+    return (DB.lichchay || []).filter(l => l.ngay >= a && l.ngay <= b && !l._me && TX.mine(l, emp)).sort((x, y) => (x.ngay + x.gio).localeCompare(y.ngay + y.gio)).map(l => Object.assign(TX.trip(l), { vai: l.phuXe === emp ? 'Phụ xe' : 'Lái xe', cheo: (() => { try { const x = XC.of(l).find(z => z.kind === 'lx' && String(z.id) === String(emp)); return x ? x.main.s : ''; } catch (e) { return ''; } })() }));
   },
   push() {
     if (!NOTI.can()) return; const [a, b] = TX.win(), E = new Set(Object.keys(TX.sent));
