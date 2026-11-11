@@ -5399,26 +5399,45 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
       // Ảnh dài: đọc từng nhóm 2 đoạn, lần lượt; mỗi phần: AI thứ nhất 15 giây, quá hạn đổi AI khác 20 giây
       const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [], TO = 40000;
       for (let i = 0; i < parts.length; i += 2) G.push(parts.slice(i, i + 2));
-      const one = async (imgs, hint) => {
-        for (let a = 0; a < 1; a++) {
-          const c = new AbortController(), tm = setTimeout(() => c.abort(), TO), up = () => c.abort(); self.ctl.signal.addEventListener('abort', up);
-          try { return await sample.json(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: c.signal, modelTier: 'default', cache: false }); }
-          catch (e) { if (!self.ctl.signal.aborted && e && e.code === 'cancelled') e.code = 'timeout'; throw e; }
-          finally { clearTimeout(tm); self.ctl.signal.removeEventListener('abort', up); }
-        }
+      // Nhiều AI (số lẻ) cùng đọc từng phần; mỗi chuyến, mỗi ô xe / lái xe lấy theo đa số. Không đủ đa số thì báo đỏ, không áp dụng
+      const V = AIX.ok() ? AIX.voters(sample.raw ? [{ lb: 'Claude', run: (pr, o) => sample.raw.json(pr, o) }] : []) : [{ lb: 'AI', run: (pr, o) => sample.json(pr, o) }];
+      const vote = async (imgs, hint, lastRoute) => {
+        const L = await Promise.all(V.map(v => AIX.timed(sg => v.run(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: sg, modelTier: 'default', cache: false }), AIX.T1 + AIX.T2, self.ctl.signal)
+          .then(r => Array.isArray(r) ? r : [], e => { if (self.ctl.signal.aborted) throw AIX.err('cancelled'); return { e }; })));
+        const ok = L.filter(x => Array.isArray(x)), M = ok.length; if (!M) throw (L[0] && L[0].e) || AIX.err('timeout');
+        const S = new Map();
+        ok.forEach((lst, vi) => {
+          let lr = lastRoute; const cnt = {};
+          lst.forEach(x => { if (!x || typeof x !== 'object') return; if (!x.tuyen && lr) x.tuyen = lr; if (x.tuyen) lr = x.tuyen;
+            const t = dhFindRoute(x.tuyen, routes) || dhNorm(x.tuyen), g = dhTime(x.gio); if (!g) return; const b = t + '|' + g; cnt[b] = (cnt[b] || 0) + 1;
+            const k = b + '|' + cnt[b]; if (!S.has(k)) S.set(k, []); S.get(k).push({ vi, x }); });
+        });
+        const maj = (E, f) => { const C = new Map(); E.forEach(({ x }) => { const k = f(x); C.set(k, (C.get(k) || 0) + 1); }); let best, bc = 0; C.forEach((c, k) => { if (c > bc) { best = k; bc = c; } }); return bc * 2 > M ? best : undefined; };
+        const vk = x => { const v = dhFindVeh(x.bks); return v ? 'v:' + v.id : 'r:' + dhNorm(x.bks); }, ek = x => { const e = dhFindEmp(x.laiXe); return e ? 'e:' + e.id : 'r:' + dhNorm(x.laiXe); };
+        const out = [];
+        S.forEach(E => {
+          if (E.length * 2 <= M) return;                                 // đa số AI không thấy chuyến này: bỏ
+          const bv = maj(E, vk), be = maj(E, ek), pick = (k, f) => (E.find(({ x }) => f(x) === k) || E[0]).x, r = { ...E[0].x, _v: E.length + '/' + M, _alt: [] }, bad = [];
+          if (bv === undefined) bad.push('xe'); else r.bks = pick(bv, vk).bks;
+          if (be === undefined) bad.push('lái xe'); else r.laiXe = pick(be, ek).laiXe;
+          if (bad.length) { r._bad = bad; r._alt = E.map(({ x }) => (x.bks || '—') + ' / ' + (x.laiXe || '—')); }
+          out.push(r);
+        });
+        return { out, M, n: V.length };
       };
       try {
-        res = []; let lastRoute = '', fail = 0, err = null;
+        res = []; let lastRoute = '', fail = 0, err = null, few = 0;
         const seen = new Set(), key = r => [dhNorm(dhFindRoute(r.tuyen, routes) || r.tuyen), dhTime(r.gio), dhNorm(r.bks), dhNorm(r.laiXe)].join('|');
         for (let g = 0; g < G.length; g++) {
           const pg = out.querySelector('[data-pg]'); if (pg) pg.textContent = G.length > 1 ? ` · phần ${g + 1}/${G.length}` : '';
           const hint = G.length > 1 ? `\nĐây là phần ${g + 1}/${G.length} của một ảnh chụp màn hình dài, cắt từ trên xuống (các đoạn chồng mép nhau một chút)${G[g].length > 1 ? `, gồm ${G[g].length} đoạn liên tiếp: gộp lại, không lặp chuyến ở chỗ chồng mép` : ''}.${lastRoute ? ` Các chuyến ở đầu phần này, trước tiêu đề tuyến mới đầu tiên, thuộc tuyến "${lastRoute}".` : ''}` : '';
-          let r; try { r = await one(G[g], hint); } catch (e) { if (self.ctl.signal.aborted) throw e; fail++; err = e; continue; }
-          (Array.isArray(r) ? r : []).forEach(x => { if (!x || typeof x !== 'object') return; if (!x.tuyen && lastRoute) x.tuyen = lastRoute; if (x.tuyen) lastRoute = x.tuyen; const k = key(x); if (seen.has(k)) return; seen.add(k); res.push(x); });
+          let r; try { r = await vote(G[g], hint, lastRoute); } catch (e) { if (self.ctl.signal.aborted) throw e; fail++; err = e; continue; }
+          if (r.M < r.n) few++;
+          r.out.forEach(x => { if (x.tuyen) lastRoute = x.tuyen; const k = key(x); if (seen.has(k)) return; seen.add(k); res.push(x); });
         }
         clearInterval(tick);
         if (!res.length && err) throw err;
-        toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây` + (fail ? ` · ${fail}/${G.length} phần không đọc được, kiểm tra lại các chuyến thiếu` : ''), fail ? 'err' : 'ok', fail ? 7000 : 3000);
+        toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây` + ` · ${V.length} AI bỏ phiếu` + (few ? ` · ${few} phần có AI không trả lời kịp` : '') + (fail ? ` · ${fail}/${G.length} phần không đọc được, kiểm tra lại các chuyến thiếu` : ''), fail ? 'err' : 'ok', fail ? 7000 : 3000);
       }
       catch (e) { clearInterval(tick); const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'timeout' ? esc(AIX.msg(e)) : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
@@ -5428,13 +5447,14 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         const tuyen = dhFindRoute(r.tuyen, routes), gio = dhTime(r.gio), v = dhFindVeh(r.bks), e = dhFindEmp(r.laiXe);
         const trip = tuyen && gio ? T.find(l => l.tuyen === tuyen && l.gio === gio) : null;
         let st, ok = false;
-        if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ'; else if (!v && !e) st = 'Không khớp xe / lái xe nào';
+        if (r._bad) st = 'Các AI đọc không thống nhất ' + r._bad.join(', ') + ', nhập tay'; else if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ'; else if (!v && !e) st = 'Không khớp xe / lái xe nào';
+        else if ((r.bks && !v) || (r.laiXe && !e)) st = 'Có ' + [r.bks && !v && 'xe', r.laiXe && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
         else if (trip && !lcCan(trip)) st = 'Chuyến đã khóa (đã xuất bến)'; else if (trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; }
         else if (canAdd) { st = 'Tạo chuyến mới'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
-        return { tuyen, gio, v, e, trip, rb: r.bks || '', rl: r.laiXe || '', st, ok };
+        return { tuyen, gio, v: r._bad && r._bad.includes('xe') ? null : v, e: r._bad && r._bad.includes('lái xe') ? null : e, trip, rb: r.bks || '', rl: r.laiXe || '', st, ok, vt: r._v || '', alt: r._alt || [], hold: !ok && trip };
       });
       const cell = (m, raw) => m ? `<span class="sc-ok">${esc(m)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
-      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chữ đỏ là chỗ không khớp danh sách nên sẽ không được điền.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}</td></tr>`).join('')}</tbody></table></div>`;
+      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chữ đỏ là chỗ không khớp danh sách nên sẽ không được điền.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>AI</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="small" title="${esc(r.alt.join('\n'))}">${esc(r.vt)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}${r.alt.length ? `<div class="small muted">${r.alt.map(esc).join('<br>')}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
       ap.hidden = !self.rows.some(r => r.ok);
     };
     ap.onclick = () => {
@@ -5450,7 +5470,8 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
       if (Auth.can('lichchay', 'del')) {   // tự xóa giờ không có tên lái xe, không hỏi
         const rs = new Set(self.rows.filter(r => r.tuyen).map(r => r.tuyen));
         const busy = l => { try { return (typeof dvBook === 'function' ? dvBook(l.id).length : DB.datve.filter(x => x.chuyen === l.id).length) || (typeof GH !== 'undefined' && GH.list ? GH.list(l.id).length : 0); } catch (e) { return 1; } };
-        const del = DB.lichchay.filter(l => l.ngay === day && rs.has(l.tuyen) && !l.laiXe && (!lcGone(l) || lcAdmin()));
+        const hold = new Set(self.rows.filter(r => r.hold).map(r => r.trip));
+        const del = DB.lichchay.filter(l => l.ngay === day && rs.has(l.tuyen) && !l.laiXe && !hold.has(l) && (!lcGone(l) || lcAdmin()));
         const gone = new Set(del.filter(l => { if (busy(l)) { kp++; return false; } return true; }));
         dl = gone.size; if (dl) { gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); }
       }
@@ -8465,6 +8486,15 @@ const AIX = {
     } catch (e) { }
     try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), m })); } catch (e) { } return m;
   },
+  /* Bỏ phiếu: số lẻ AI (3, đủ nguồn thì 5) cùng đọc một ảnh, ý kiến nhiều hơn thắng */
+  voters(extra) {
+    const P = AIX.provs(), c = AIX.cfg(); let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
+    const gm = P.includes('gemini') ? [...new Set([c.model, AIX._good, ...disc, ...AIX.MODELS].filter(m => m && !AIX.PRO.includes(m) && !/image|tts|embed|live|audio/i.test(m)))] : [];
+    const one = (p, model) => ({ lb: model || p, run: (pr, o) => AIX.one(p, pr, { ...o, _t: 1, model }) });
+    const V = [...(gm[0] ? [one('gemini', gm[0])] : []), ...(extra || []), ...P.filter(p => p !== 'gemini').map(p => one(p)), ...gm.slice(1).map(m => one('gemini', m))];
+    const n = V.length >= 5 && (extra || []).length + P.length >= 3 ? 5 : V.length >= 3 ? 3 : 1;
+    return V.slice(0, n);
+  },
   /* Quét ảnh: AI thứ nhất tối đa 15 giây, quá hạn đổi sang AI khác (hoặc model khác) thêm tối đa 20 giây */
   T1: 15000, T2: 20000,
   timed(fn, ms, signal) {
@@ -8523,13 +8553,14 @@ const AIX = {
       AIX._good = l[0]; return AIX.json0(prompt, opt);
     }
   },
-  async json0(prompt, { images, signal, deep, avoid } = {}) {
+  async json0(prompt, { images, signal, deep, avoid, model } = {}) {
     const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
     const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
     for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
     let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
     let list = [...new Set([...(deep ? AIX.PRO : []), c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];
-    if (avoid && avoid.length && list.some(m => !avoid.includes(m))) list = list.filter(m => !avoid.includes(m));   // đổi sang model khác khi model trước quá hạn   // đọc giấy tờ: thử model Pro trước
+    if (avoid && avoid.length && list.some(m => !avoid.includes(m))) list = list.filter(m => !avoid.includes(m));
+    if (model) list = [model];                       // bỏ phiếu: mỗi AI một model cố định   // đổi sang model khác khi model trước quá hạn   // đọc giấy tờ: thử model Pro trước
     let last;
     for (let round = 0; round < 3; round++) {
       if (round) await AIX.wait(round * 3000, signal);
@@ -8602,7 +8633,7 @@ async function aiSampler() {
   const s = (typeof claude !== 'undefined' && claude.use) ? await claude.use('sample').catch(() => null) : null;
   if (s) { const lim = await s.limits().catch(() => null); if (lim && lim.images) {
     if (!AIX.ok()) return s;
-    return { limits: () => s.limits(), json: (p, o = {}) => AIX.steps([{ ms: AIX.T1, run: sg => s.json(p, { ...o, signal: sg }) }, { ms: AIX.T2, run: sg => AIX.one(AIX.provs()[0], p, { ...o, _t: 1, signal: sg }) }], o.signal), gemini: true };
+    return { raw: s, limits: () => s.limits(), json: (p, o = {}) => AIX.steps([{ ms: AIX.T1, run: sg => s.json(p, { ...o, signal: sg }) }, { ms: AIX.T2, run: sg => AIX.one(AIX.provs()[0], p, { ...o, _t: 1, signal: sg }) }], o.signal), gemini: true };
   } }
   return AIX.ok() ? AIX.sampler() : null;
 }
