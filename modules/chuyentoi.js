@@ -80,7 +80,7 @@ const CT = {
       cells = [...Array(lead).fill(''), ...Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'))]; }
     else { const base = CT.wk || d, mon = D.add(base, -((D.parse(base).getDay() + 6) % 7)); cells = Array.from({ length: 7 }, (_, i) => D.add(mon, i)); title = 'Tháng ' + (+cells[3].slice(5, 7)) + '/' + cells[3].slice(0, 4); }
     return `<div class="ct-cal${CT.full ? '' : ' wk'}"><div class="ct-calh"><button type="button" data-cm="-1">${ic('back')}</button><b>${title}</b><button type="button" data-cm="1" class="nx">${ic('back')}</button>${d !== td ? '<button type="button" class="ct-today" data-cd="' + td + '">Hôm nay</button>' : ''}<button type="button" class="ct-today" data-cf>${CT.full ? 'Thu gọn' : 'Cả tháng'}</button></div>
-      <div class="ct-calg">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small>${x}</small>`).join('')}${cells.map(x => x ? `<button type="button" data-cd="${x}" class="${x === d ? 'sel' : ''}${x === td ? ' td' : ''}${cnt[x] ? ' has' : ''}${xcd[x] ? ' xc' : ''}" ${xcd[x] ? 'title="Có chuyến chạy chéo"' : ''}>${+x.slice(8)}${cnt[x] ? `<i>${cnt[x]}</i>` : ''}</button>` : '<span></span>').join('')}</div><div class="ct-calk"><span><i class="h"></i>Có chuyến</span><span><i class="x"></i>Có chạy chéo (khác tuyến chính)</span></div>${CT.xsum(CT.full ? (CT.mon || d.slice(0, 7)) : cells[3].slice(0, 7))}</div>`;
+      <div class="ct-calg">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small>${x}</small>`).join('')}${cells.map(x => x ? `<button type="button" data-cd="${x}" class="${x === d ? 'sel' : ''}${x === td ? ' td' : ''}${cnt[x] ? ' has' : ''}${xcd[x] ? ' xc' : ''}" ${xcd[x] ? 'title="Có chuyến chạy chéo"' : ''}>${+x.slice(8)}${cnt[x] ? `<i>${cnt[x]}</i>` : ''}</button>` : '<span></span>').join('')}</div>${cells.some(x => xcd[x]) ? '<div class="ct-calk"><span><i class="h"></i>Có chuyến</span><span><i class="x"></i>Có chạy chéo (khác tuyến chính)</span></div>' : ''}${CT.xsum(CT.full ? (CT.mon || d.slice(0, 7)) : cells[3].slice(0, 7))}</div>`;
   },
   /* tổng kết tháng: số chuyến chạy chéo / tổng chuyến, công chạy chéo theo tuyến */
   xsum(ym) {
@@ -88,6 +88,7 @@ const CT = {
     let n = 0, cong = 0, main = ''; const by = {};
     L.forEach(l => { let x = null; try { x = XC.of(l).find(z => z.kind === 'lx' && String(z.id) === me); } catch (e) { } if (!x) return; n++; main = x.main.s; const w = (() => { try { return congTuyen(l.tuyen) * (+l.soChuyen || 1); } catch (e) { return 1; } })(); cong += w; const k = typeof dhAbbr === 'function' ? dhAbbr(l.tuyen) : l.tuyen; by[k] = (by[k] || 0) + 1; });
     const f = v => (F.num ? F.num(v) : v);
+    if (!n) return '';                       // không chạy chéo: ẩn hẳn
     return `<div class="ct-xs${n ? ' on' : ''}"><b>Tháng ${+ym.slice(5)}/${ym.slice(0, 4)}:</b> ${L.length} chuyến${n ? ` · <span class="x">${n} chạy chéo</span> (${f(cong)} công${main ? ', tuyến chính ' + esc(main) : ''})${Object.keys(by).length ? ' · ' + Object.entries(by).map(([k, v]) => esc(k) + ': ' + v).join(', ') : ''}` : ' · không chạy chéo'}</div>`;
   },
   dayList(d) {
