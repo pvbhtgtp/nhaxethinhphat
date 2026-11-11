@@ -10083,8 +10083,9 @@ const TK = {
    lịch chạy đã cất theo tháng, bản sao lưu Drive) → chỉ THÊM chuyến máy này đang thiếu (theo mã chuyến), không ghi đè, không xóa. ===== */
 const LCR = {
   async collect(from, to) {
-    const have = new Set((DB.lichchay || []).map(l => l.id)), got = new Map(), src = {};
-    const take = (L, name) => (Array.isArray(L) ? L : []).forEach(l => { if (!l || !l.id || have.has(l.id) || got.has(l.id)) return; if (from && (l.ngay || '') < from) return; if (to && (l.ngay || '') > to) return; got.set(l.id, l); src[name] = (src[name] || 0) + 1; });
+    const have = new Set((DB.lichchay || []).map(l => l.id)), got = new Map(), src = {}, slot = new Set((DB.lichchay || []).map(l => l.ngay + '|' + l.tuyen + '|' + l.gio));
+    const better = (a, b) => (!!(b.laiXe) - !!(a.laiXe)) || (!!(b.xeId) - !!(a.xeId));   // cùng giờ: ưu tiên bản đã gán lái xe, xe
+    const take = (L, name) => (Array.isArray(L) ? L : []).forEach(l => { if (!l || !l.id || have.has(l.id)) return; if (got.has(l.id)) { if (better(got.get(l.id), l) > 0) got.set(l.id, l); return; } if (slot.has(l.ngay + '|' + l.tuyen + '|' + l.gio) && !l.laiXe) return; if (from && (l.ngay || '') < from) return; if (to && (l.ngay || '') > to) return; got.set(l.id, l); src[name] = (src[name] || 0) + 1; });
     const col = FB.col();
     try { const sn = await col.where('t', '==', 'c').get(); take(sn.docs.map(d => jsonSafe(d.data().d, null)).filter(Boolean), 'Tài liệu từng chuyến'); } catch (e) { }
     try { const m = await col.doc('meta').get(), md = m.exists ? m.data() : {}, V = [{ p: md.p || 'c', n: +md.n || 0 }, ...((md.hist || []))];
@@ -10092,12 +10093,19 @@ const LCR = {
     try { const ym = new Set([from, to, D.today()].filter(Boolean).map(x => x.slice(0, 7))); for (const m of ym) { try { take(await PS.arcGet(m), 'Lịch chạy đã cất theo tháng'); } catch (e) { } } } catch (e) { }
     try { if (typeof PS !== 'undefined') { const r = await PS.get('vanhanh'); take(r && r.data && r.data.lichchay, 'Phần Vận hành trên máy chủ'); } } catch (e) { }
     try { if (typeof BK !== 'undefined' && BK.ok(BK.cfg())) { const j = await BK.call({ action: 'get' }); take(j && j.data && j.data.lichchay, 'Bản sao lưu Drive'); } } catch (e) { }
+    try {   // bộ nhớ đệm Firebase trên chính máy này: còn giữ các bản dữ liệu cũ đã đọc trước đó (ghép lại từng khối)
+      const sn = await col.get({ source: 'cache' }), G = {};
+      sn.docs.forEach(d => { const m = d.id.match(/^(p[a-z]+_[a-z0-9]+_|v[a-z0-9]+_|c)(\d+)$/); if (!m) return; (G[m[1]] = G[m[1]] || []).push([+m[2], d.data().d]); });
+      Object.values(G).forEach(L => { L.sort((a, b) => a[0] - b[0]); if (L[0][0] !== 0 || L.some((x, i) => x[0] !== i)) return; const d = jsonSafe(L.map(x => x[1]).join(''), null); if (d) take(d.lichchay, 'Bộ nhớ đệm máy này'); });
+      sn.docs.forEach(d => { if (/^pa_lc_/.test(d.id)) take(jsonSafe(d.data().d, []), 'Bộ nhớ đệm máy này'); });
+    } catch (e) { }
+    try { const dr = Store.draft && Store.draft(); take(dr && dr.data && dr.data.lichchay, 'Bản nháp trên máy'); } catch (e) { }
     return { list: [...got.values()].sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)), src };
   },
   async open() {
     if (!PERM.admin()) return toast('Chỉ Admin dùng được', 'err');
-    const td = D.today(), m = Modal.open({ title: 'Khôi phục chuyến bị thiếu', width: 560, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: '<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>' });
-    const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close();
+    const td = D.today(), m = Modal.open({ title: 'Khôi phục chuyến bị thiếu', width: 560, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: `<button class="btn" data-cl>Dọn chuyến trùng${LCR.dups().length ? ' (' + LCR.dups().length + ')' : ''}</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>` });
+    const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close(); q('[data-cl]').onclick = () => { m.close(); LCR.clean(); };
     q('[data-go]').onclick = async () => {
       q('[data-out]').innerHTML = 'Đang rà…'; q('[data-go]').disabled = true;
       try { R = await LCR.collect(q('[data-f]').value, q('[data-t]').value); } catch (e) { q('[data-out]').innerHTML = '<span class="sc-bad">' + esc(e.message || e) + '</span>'; return; } finally { q('[data-go]').disabled = false; }
@@ -10105,8 +10113,18 @@ const LCR = {
       q('[data-out]').innerHTML = R.list.length ? `<b>Tìm thấy ${R.list.length} chuyến máy này đang thiếu</b><div class="muted">Nguồn: ${Object.entries(R.src).map(([k, v]) => esc(k) + ' ' + v).join(' · ')}</div><div style="margin-top:6px">${Object.entries(by).sort().map(([d, n]) => F.date(d) + ': <b>' + n + '</b>').join(' · ')}</div>` : '<span style="color:#15803d;font-weight:700">Không thiếu chuyến nào trong khoảng ngày này.</span>';
       q('[data-ok]').disabled = !R.list.length;
     };
-    q('[data-ok]').onclick = () => { if (!R || !R.list.length) return; const have = new Set(DB.lichchay.map(l => l.id)); let n = 0; R.list.forEach(l => { if (!have.has(l.id)) { DB.lichchay.push(l); n++; } }); App.changed(); m.close(); toast(ic('check') + ' Đã khôi phục ' + n + ' chuyến', 'ok', 4000); };
+    q('[data-ok]').onclick = () => { if (!R || !R.list.length) return; const have = new Set(DB.lichchay.map(l => l.id)); let n = 0; const at = new Date().toISOString(); R.list.forEach(l => { if (!have.has(l.id)) { DB.lichchay.push(Object.assign({}, l, { _rec: at })); n++; } }); App.changed(); m.close(); toast(ic('check') + ' Đã khôi phục ' + n + ' chuyến', 'ok', 4000); };
   }
+};
+LCR.dups = function () {
+  const by = {}; (DB.lichchay || []).forEach(l => { if (!l || l.huy) return; const k = l.ngay + '|' + l.tuyen + '|' + l.gio; (by[k] = by[k] || []).push(l); });
+  const rm = []; Object.values(by).forEach(L => { if (L.length < 2) return; const keep = L.find(l => l.laiXe || l.xeId) || L[0]; L.forEach(l => { if (l === keep) return; const empty = !l.laiXe && !l.laiXe2 && !l.phuXe && !l.xeId && !dvBook(l.id).length && !((typeof GH !== 'undefined' && GH.list) ? GH.list(l.id).length : 0); if (empty) rm.push(l); }); });
+  return rm;
+};
+LCR.clean = async function () {
+  const rm = LCR.dups(); if (!rm.length) return toast('Không có chuyến trùng giờ nào cần dọn', 'ok', 3000);
+  if (!await Modal.confirm(`Bỏ <b>${rm.length}</b> chuyến trùng giờ (bản trống: không lái xe, không xe, không vé, không hàng; luôn giữ lại bản đã gán)?`, { ok: 'Dọn', danger: true })) return;
+  const S = new Set(rm); DB.lichchay = DB.lichchay.filter(l => !S.has(l)); App.changed(); toast(ic('check') + ' Đã dọn ' + rm.length + ' chuyến trùng', 'ok', 3000);
 };
 ACT.lcRestore = () => LCR.open();
 /* Lịch chạy theo chuyến: nếu Rules chưa cho phép (Admin chưa Publish luật mới) thì tạm chạy như cũ, cứ 2 phút thử lại; được là tự chuyển */
@@ -13774,7 +13792,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T02:35';
+const APP_BUILD = '2026-11-12T02:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

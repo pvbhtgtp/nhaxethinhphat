@@ -65,7 +65,7 @@ const BDK = {
     const ok = (b, t, f) => `<li class="${b ? 'ok' : 'bad'}">${b ? t : f}</li>`; let L = '';
     try { L += ok(GS.on, 'Đã kết nối máy chủ dữ liệu', 'Chưa kết nối máy chủ dữ liệu'); } catch (e) { }
     try { L += ok(TK.live, 'Đồng bộ thời gian thực đang chạy', 'Đồng bộ thời gian thực chưa chạy'); } catch (e) { }
-    try { L += ok(TK.lcOn(), 'Lịch chạy lưu theo từng chuyến', 'Lịch chạy chưa lưu theo chuyến (cần Publish luật Firebase mới)'); } catch (e) { }
+    
     try { L += ok(!Store.dirty, 'Mọi thay đổi đã lưu', 'Đang có thay đổi chờ lưu'); } catch (e) { }
     try { L += ok(!SYS.L.length, 'Không có lỗi', SYS.L.length + ' lỗi trong Tình trạng hệ thống'); } catch (e) { }
     try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
