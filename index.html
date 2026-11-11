@@ -5748,6 +5748,82 @@ const LINK = {
   tnOfVeh: v => (DB.lylich || []).filter(r => r.loai === 'tn' && r.xe && LINK.bk(r.xe) === LINK.bk(v.bks)).map(r => ({ ngay: r.ngay, diaDiem: r.diaDiem || '', tomTat: [(DB.employees.find(e => e.id === r.lai) || {}).ten ? 'Lái xe ' + DB.employees.find(e => e.id === r.lai).ten : '', r.nguyenNhan || ''].filter(Boolean).join(' · '), thietHai: r.thietHai || '', xuLy: '', ll: 1 })),
   xeOnDay: (empId, ngay) => { const l = (DB.lichchay || []).find(x => x.ngay === ngay && [x.laiXe, x.laiXe2, x.phuXe].includes(empId) && x.xeId); const v = l && (DB.vehicles || []).find(x => x.id === l.xeId); return v ? v.bks : ''; }
 };
+/* ===== KẾT DÍNH DỮ LIỆU GIỮA CÁC MOD =====
+   - Đổi biển số xe / tên nhân viên ở hồ sơ gốc → tự cập nhật mọi nơi đang ghi bằng chữ (sửa chữa, nhiên liệu, km xe, phản ánh, lý lịch), không đứt liên kết.
+   - Rà liên kết hỏng (xe, lái xe, chuyến không còn tồn tại; biển số / tên ghi lệch) khi mở app và mỗi 10 phút; báo về Tình trạng hệ thống
+     và thẻ Hệ thống của Bảng điều khiển; chỗ nào khớp được thì "Sửa tự động" (chỉ chuẩn hóa chữ, không xóa dữ liệu). */
+const REFX = {
+  R: [
+    ['Lịch chạy', 'lichchay', [['xeId', 'V'], ['laiXe', 'E'], ['laiXe2', 'E'], ['phuXe', 'E']]],
+    ['Giờ chạy', 'giochay', [['xeId', 'V'], ['laiXe', 'E']]],
+    ['Đặt vé', 'datve', [['chuyen', 'T']]],
+    ['Gửi hàng', 'guihang', [['chuyen', 'T']]],
+    ['Lệnh vận chuyển', 'lenhVC', [['chuyen', 'T'], ['laiXe', 'E'], ['xeId', 'V']]],
+    ['Hợp đồng vận chuyển', 'hdvc', [['xeId', 'V'], ['laiXe1', 'E'], ['laiXe2', 'E']]],
+    ['Phương tiện (lái xe gán)', 'vehicles', [['laiXe1', 'E'], ['laiXe2', 'E']]],
+    ['Sửa chữa', 'suachua', [['xe', 'B']]],
+    ['Nhiên liệu', 'nhienlieu', [['xe', 'B'], ['lai', 'N']]],
+    ['Km xe', 'kmxe', [['bks', 'B']]],
+    ['Phản ánh & sự cố', 'phanAnh', [['xe', 'B'], ['lai', 'E']]],
+    ['Lý lịch hành nghề', 'lylich', [['lai', 'E'], ['xe', 'B']]]
+  ],
+  bk: s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, ''),
+  nm: s => String(s || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim(),
+  ok: () => { try { return PERM.admin() && (typeof PS === 'undefined' || !PS.on || Object.keys(PARTS).every(p => PS.readable().includes(p))); } catch (e) { return false; } },
+  scan() {
+    const V = new Set((DB.vehicles || []).map(v => v.id)), E = new Set((DB.employees || []).map(e => e.id)), Tt = new Set((DB.lichchay || []).map(l => l.id));
+    const B = new Map((DB.vehicles || []).map(v => [REFX.bk(v.bks), v.bks])), N = new Map((DB.employees || []).map(e => [REFX.nm(e.ten), e.ten]));
+    const old = D.add(D.today(), -30), out = [];
+    REFX.R.forEach(([name, key, F]) => {
+      const L = DB[key]; if (!Array.isArray(L)) return;
+      F.forEach(([f, t]) => {
+        let n = 0, fix = 0; const smp = new Set();
+        L.forEach(r => {
+          const v = r && r[f]; if (!v) return;
+          if (t === 'V' && !V.has(v)) { n++; smp.add('mã xe ' + v); }
+          else if (t === 'E' && !E.has(v)) { n++; smp.add('mã NV ' + v); }
+          else if (t === 'T' && !Tt.has(v) && !(r.ngay && r.ngay < old) && !r.huy) { n++; smp.add('chuyến ' + v); }   // vé / hàng của chuyến cũ đã cất kho: bỏ qua
+          else if (t === 'B') { const k = B.get(REFX.bk(v)); if (!k) { n++; smp.add(v); } else if (k !== v) { n++; fix++; smp.add(v + ' → ' + k); } }
+          else if (t === 'N') { const k = N.get(REFX.nm(v)); if (!k) { n++; smp.add(v); } else if (k !== v) { n++; fix++; smp.add(v + ' → ' + k); } }
+        });
+        if (n) out.push({ name, key, f, t, n, fix, smp: [...smp].slice(0, 6) });
+      });
+    });
+    return out;
+  },
+  fix() {   // chỉ chuẩn hóa chữ cho khớp hồ sơ gốc (biển số, tên); không xóa, không đoán mã
+    const B = new Map((DB.vehicles || []).map(v => [REFX.bk(v.bks), v.bks])), N = new Map((DB.employees || []).map(e => [REFX.nm(e.ten), e.ten])); let n = 0;
+    REFX.R.forEach(([, key, F]) => (DB[key] || []).forEach(r => F.forEach(([f, t]) => { const v = r && r[f]; if (!v) return; const k = t === 'B' ? B.get(REFX.bk(v)) : t === 'N' ? N.get(REFX.nm(v)) : null; if (k && k !== v) { r[f] = k; n++; } })));
+    if (n) App.changed(); return n;
+  },
+  /* đổi biển số / tên ở hồ sơ gốc → cập nhật mọi nơi ghi bằng chữ */
+  sv: null, se: null,
+  snap() { REFX.sv = new Map((DB.vehicles || []).map(v => [v.id, v.bks])); REFX.se = new Map((DB.employees || []).map(e => [e.id, e.ten])); },
+  follow() {
+    if (!REFX.sv) return REFX.snap(); let n = 0;
+    (DB.vehicles || []).forEach(v => { const o = REFX.sv.get(v.id); if (o && v.bks && o !== v.bks) REFX.R.forEach(([, key, F]) => (DB[key] || []).forEach(r => F.forEach(([f, t]) => { if (t === 'B' && r && r[f] && REFX.bk(r[f]) === REFX.bk(o)) { r[f] = v.bks; n++; } }))); });
+    (DB.employees || []).forEach(e => { const o = REFX.se.get(e.id); if (o && e.ten && o !== e.ten) REFX.R.forEach(([, key, F]) => (DB[key] || []).forEach(r => F.forEach(([f, t]) => { if (t === 'N' && r && r[f] && REFX.nm(r[f]) === REFX.nm(o)) { r[f] = e.ten; n++; } }))); });
+    REFX.snap(); return n;
+  },
+  last: '', res: [],
+  run() {
+    if (!REFX.ok()) return; let L = []; try { L = REFX.scan(); } catch (e) { return; } REFX.res = L;
+    const sig = L.map(x => x.key + x.f + x.n).join('|'); if (!L.length || sig === REFX.last) { REFX.last = sig; return; } REFX.last = sig;
+    try { SYS.add('Kết dính dữ liệu', 'Có ' + L.reduce((a, x) => a + x.n, 0) + ' liên kết hỏng giữa các mod: ' + L.map(x => x.name + ' (' + x.n + ')').join(', ') + '. Xem Bảng điều khiển › Hệ thống.'); } catch (e) { }
+  },
+  show() {
+    const L = REFX.scan(); REFX.res = L; const fx = L.reduce((a, x) => a + x.fix, 0), T = { V: 'xe', E: 'nhân viên', T: 'chuyến', B: 'biển số', N: 'tên lái xe' };
+    const m = Modal.open({ title: 'Kết dính dữ liệu giữa các mod', width: 620, body: L.length ? `<div class="small muted" style="margin-bottom:8px">Mục ghi tới xe / nhân viên / chuyến không còn khớp hồ sơ gốc. "Sửa tự động" chỉ chuẩn hóa biển số, tên cho khớp (${fx} chỗ); chỗ còn lại cần sửa tay ở mod đó.</div><table class="tbl compact"><thead><tr><th>Mod</th><th>Trường</th><th>Số chỗ</th><th>Ví dụ</th></tr></thead><tbody>${L.map(x => `<tr><td><b>${esc(x.name)}</b></td><td>${T[x.t]} (${esc(x.f)})</td><td>${x.n}${x.fix ? ` <span class="badge b-green">${x.fix} sửa được</span>` : ''}</td><td class="small">${x.smp.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>` : '<div class="bdk-ok" style="color:#15803d;font-weight:700">Mọi liên kết giữa các mod đều khớp.</div>',
+      foot: `<button class="btn" data-no>Đóng</button>${fx ? '<button class="btn pri" data-fx>Sửa tự động</button>' : ''}` });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    const b = m.el.querySelector('[data-fx]'); if (b) b.onclick = () => { const n = REFX.fix(); m.close(); toast(ic('check') + ' Đã chuẩn hóa ' + n + ' chỗ', 'ok', 3000); REFX.last = ''; REFX.run(); };
+  }
+};
+ACT.refx = () => REFX.show();
+{ const ch = App.changed; App.changed = function () { try { REFX.follow(); } catch (e) { } return ch.apply(this, arguments); }; }
+{ const rr = App.render; App.render = function () { try { if (!REFX.sv && DB && DB.vehicles && DB.vehicles.length) REFX.snap(); } catch (e) { } return rr.apply(this, arguments); }; }
+setTimeout(() => { try { REFX.run(); } catch (e) { } }, 20000);
+setInterval(() => { try { if (!document.hidden) REFX.run(); } catch (e) { } }, 10 * 60000);
 /* ===== Lý lịch hành nghề (chỉ dành cho lái xe) ===== */
 ICONS.idcard = '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M14 10h5M14 14h5M5 16c.6-1.5 1.8-2 3-2s2.4.5 3 2"/>';
 const LL_SK_MONTHS = 12;
@@ -13650,7 +13726,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T01:55';
+const APP_BUILD = '2026-11-12T02:10';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

@@ -68,6 +68,7 @@ const BDK = {
     try { L += ok(TK.lcOn(), 'Lịch chạy lưu theo từng chuyến', 'Lịch chạy chưa lưu theo chuyến (cần Publish luật Firebase mới)'); } catch (e) { }
     try { L += ok(!Store.dirty, 'Mọi thay đổi đã lưu', 'Đang có thay đổi chờ lưu'); } catch (e) { }
     try { L += ok(!SYS.L.length, 'Không có lỗi', SYS.L.length + ' lỗi trong Tình trạng hệ thống'); } catch (e) { }
+    try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
     return `<ul class="bdk-ul">${L}</ul>`;
   },
   /* ---------- tùy biến ---------- */
@@ -117,6 +118,7 @@ const BDK = {
       }
     });
     el.querySelectorAll('[data-go]').forEach(x => x.onclick = e => { if (BDK.edit || e.target.closest('button')) return; App.go(x.dataset.go); });
+    el.querySelectorAll('[data-rx]').forEach(x => x.onclick = () => { if (!BDK.edit) REFX.show(); });
     el.querySelectorAll('[data-pa]').forEach(x => x.onclick = () => { const r = (DB.phanAnh || []).find(z => z.id === x.dataset.pa); if (r) { r.tt = 'dang'; r.nguoiNhan = r.nguoiNhan || dvLog.who(); App.changed(); App.render(); toast('Đã nhận xử lý', 'ok', 2000); } });
   }
 };
