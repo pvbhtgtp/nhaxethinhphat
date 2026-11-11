@@ -13781,6 +13781,28 @@ setInterval(() => UX.tick(), 2000);
   UPD.banner = function (b) { UX.pend.upd = b; };                                        // không hiện thanh "có bản mới": chờ rảnh tự cập nhật
   const ck = UPD.check; UPD.check = async function (force) { if (UX.busy() && !document.querySelector('.au-wrap')) { try { const b = await UPD.remote(); if (b && b > APP_BUILD) UX.pend.upd = b; } catch (e) { } return; } return ck.apply(this, arguments); };
 }
+/* ===== THỜI GIAN THỰC THẬT SỰ: dữ liệu máy khác lưu được nhận NGAY, kể cả khi máy này đang thao tác =====
+   - Lớp dữ liệu luôn cập nhật ngay (gộp 3 chiều nếu máy này đang có thay đổi chưa lưu, rồi lưu tiếp) — không còn chờ "rảnh 10 giây" hay bỏ cuộc sau 2 phút.
+   - Chỉ việc VẼ LẠI màn hình mới chờ: đang mở hộp thoại, đang gõ, hoặc vừa chạm trong 3 giây → vẽ lại ngay khi xong, không làm gián đoạn. */
+{
+  const busyDraw = () => !!document.querySelector('.modal-wrap') || UX.typing() || Date.now() - UX.t < 3000;
+  let bg = 0; const r0 = App.render;
+  App.render = function () { if (bg && busyDraw()) { UX.pend.render = true; return; } return r0.apply(this, arguments); };
+  const tk = UX.tick; UX.tick = function () { if (UX.pend.render && !busyDraw()) { UX.pend.render = false; const y = window.scrollY; try { r0.call(App); } catch (e) { } window.scrollTo(0, y); } return tk.apply(this, arguments); };
+  let run = null, again = false, fails = 0;
+  TK.pullSoon = function () {
+    if (!GS.on || !(TK.latest > GS.ver)) return;
+    if (run) { again = true; return; }
+    if (GS.busy) { setTimeout(() => TK.pullSoon(), 500); return; }
+    bg++;
+    run = (Store.dirty ? GS.conflict() : GS.pull(false))       // đang có thay đổi chưa lưu: gộp với bản mới rồi lưu, không mất của ai
+      .then(() => { fails = 0; }, e => { fails++; console.warn('sync', e); if (fails === 5) try { SYS.add('Đồng bộ dữ liệu', e); } catch (x) { } setTimeout(() => TK.pullSoon(), Math.min(30000, 1500 * fails)); })
+      .finally(() => { bg--; run = null; if (again || TK.latest > GS.ver) { again = false; setTimeout(() => TK.pullSoon(), 300); } });
+  };
+  const sync = () => { try { if (GS.on && FB.db) { FB.col().doc('meta').get().then(s => { const v = s.exists ? +s.data().ver || 0 : 0; if (v > TK.latest) TK.latest = v; TK.pullSoon(); }).catch(() => { }); } } catch (e) { } };
+  window.addEventListener('online', sync);                                  // có mạng lại: lấy bù ngay
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });   // mở lại app / màn hình sáng lại
+}
 addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
 window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
 
