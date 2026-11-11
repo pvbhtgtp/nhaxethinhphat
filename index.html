@@ -5721,12 +5721,15 @@ function bgBind(m, trip, auto) {
   if (!g || !a || !z) return;
   const hint = document.createElement('small'); hint.className = 'bg-hint'; g.parentNode.appendChild(hint);
   const bg = bgFind(trip.tuyen, trip.ngay); let ch = null;
-  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); ch.value = i >= 0 ? String(i) : (!a.value.trim() && !z.value.trim() && ch.dataset.def) ? ch.dataset.def : ''; };
+  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); ch.value = i >= 0 ? String(i) : 'all'; };
   if (bg && bg.chang.some(c => c.don || c.tra)) {
     const lab = document.createElement('label'); lab.className = 'field full';
-    const E = dvEnds(trip), all = bg.chang.find(c => !c.don && !c.tra), defV = all ? 'all' : E.ch >= 0 ? String(E.ch) : '';
-    lab.innerHTML = `<span>Chặng (mặc định toàn tuyến · chọn chặng khác để tự điền điểm đón, điểm trả và giá)</span><select class="inp" id="bgCh">${all ? `<option value="all">Toàn tuyến${E.di && E.den ? ': ' + esc(E.di) + ' → ' + esc(E.den) : ''} · ${F.money(all.gia)}</option>` : defV ? '' : '<option value="">(Chọn chặng)</option>'}${bg.chang.map((c, i) => (c.don || c.tra) ? `<option value="${i}">${esc(c.don)} → ${esc(c.tra)} · ${F.money(c.gia)}${String(i) === defV ? ' (mặc định)' : ''}</option>` : '').join('')}</select>`;
+    /* luôn gắn sẵn chặng toàn tuyến (điểm đầu → điểm cuối); giá: dòng toàn tuyến của bảng giá, không có thì chặng trùng 2 đầu tuyến, không nữa thì chặng giá cao nhất */
+    const E = dvEnds(trip), all0 = bg.chang.find(c => !c.don && !c.tra), lm = c => { const d = bgNorm(c.don), t = bgNorm(c.tra), x = bgNorm(E.di), y = bgNorm(E.den); return d && t && x && y && (d.includes(x) || x.includes(d)) && (t.includes(y) || y.includes(t)); };
+    const all = all0 || (E.ch >= 0 ? bg.chang[E.ch] : null) || bg.chang.find(lm) || bg.chang.slice().sort((p, q) => (+q.gia || 0) - (+p.gia || 0))[0] || { gia: 0 }, defV = 'all';
+    lab.innerHTML = `<span>Chặng (mặc định toàn tuyến · chọn chặng khác để tự điền điểm đón, điểm trả và giá)</span><select class="inp" id="bgCh"><option value="all">Toàn tuyến${E.di && E.den ? ': ' + esc(E.di) + ' → ' + esc(E.den) : ''} · ${F.money(all.gia)}</option>${bg.chang.map((c, i) => (c.don || c.tra) ? `<option value="${i}">${esc(c.don)} → ${esc(c.tra)} · ${F.money(c.gia)}</option>` : '').join('')}</select>`;
     a.closest('label').before(lab); ch = lab.querySelector('select'); ch.dataset.def = defV;
+    if (auto && !(DV.clone && +DV.clone.gia) && !a.value.trim() && !z.value.trim()) g.value = F.money(all.gia);
     ch.onchange = () => {
       if (ch.value === 'all') { a.value = ''; z.value = ''; g.value = F.money(all.gia); hint.textContent = 'Giá theo bảng giá · toàn tuyến'; [a, z].forEach(x => x.dispatchEvent(new Event('change', { bubbles: true }))); return; }
       const c = bg.chang[+ch.value]; if (!c || ch.value === '') return; a.value = c.don; z.value = c.tra; g.value = F.money(c.gia); hint.textContent = 'Giá theo bảng giá · chặng ' + c.don + ' → ' + c.tra; };
@@ -13851,7 +13854,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T06:50';
+const APP_BUILD = '2026-11-12T07:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
