@@ -8940,6 +8940,24 @@ const vMe = {
     const b = el.querySelector('#meSlip'); if (b) b.onclick = () => { const x = payroll(vMe.ym()).find(p => p.id === e.id); if (x) Print.run(`<div class="pr">${slipHTML(x)}</div>`, { title: 'Phieu luong ' + (x.ma || '') + ' ' + vMe.ym() }); };
   }
 };
+/* Thông tin của tôi: phản ánh & sự cố liên quan đến tôi, nhiên liệu tôi nhận (lái xe chỉ thấy của chính mình) */
+{
+  const r0 = vMe.render;
+  vMe.render = function (el) {
+    const r = r0.apply(this, arguments);
+    try {
+      const e = DRV.me(); if (!e) return r; const me = (DB._me && String(DB._me.id) === String(e.id)) ? DB._me : null, ym = vMe.ym(), nmN = x => String(x || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const PA = DB.phanAnh && DB.phanAnh.length ? DB.phanAnh.filter(x => String(x.lai) === String(e.id)) : ((me && me.pa) || []);
+      const NL = (DB.nhienlieu && DB.nhienlieu.length ? DB.nhienlieu.filter(x => x.loai !== 'nhap' && nmN(x.lai) === nmN(e.ten)) : ((me && me.nl) || [])).filter(x => String(x.ngay).startsWith(ym));
+      const TT = { moi: ['Mới tiếp nhận', 'b-red'], dang: ['Đang xử lý', 'b-amber'], xong: ['Đã xử lý', 'b-green'] };
+      let h = '';
+      if (PA.length) h += `<div class="card"><div class="card-h"><h3>Phản ánh & sự cố liên quan đến tôi</h3><span class="sub">${PA.length} mục · 6 tháng gần nhất</span></div><div class="card-b p0"><div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Xử lý</th><th>Trạng thái</th></tr></thead><tbody>${PA.slice().sort((a, b) => String(b.ngay).localeCompare(String(a.ngay))).map(x => { const t = TT[x.tt] || TT.moi; return `<tr><td>${F.date(x.ngay)}</td><td>${esc(x.loai || '')}</td><td>${esc(x.noiDung || '')}</td><td>${esc(x.xuLy || '')}</td><td><span class="badge ${t[1]}">${t[0]}</span></td></tr>`; }).join('')}</tbody></table></div></div></div>`;
+      if (NL.length) h += `<div class="card"><div class="card-h"><h3>Nhiên liệu tôi nhận · ${F.month(ym)}</h3><span class="sub">${NL.length} lần · ${F.num ? F.num(NL.reduce((a, x) => a + (+x.lit || 0), 0)) : ''} lít</span></div><div class="card-b p0"><div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Ngày</th><th>Giờ</th><th>Xe</th><th>Số lít</th><th>Km Odo</th><th>Loại</th></tr></thead><tbody>${NL.slice().sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio)).map(x => `<tr><td>${F.date(x.ngay)}</td><td>${esc(x.gio || '')}</td><td>${esc(x.xe || '')}</td><td>${esc(x.lit)}</td><td>${x.km ? F.money(+x.km) : ''}</td><td>${esc(x.loaiNL || '')}</td></tr>`).join('')}</tbody></table></div></div></div>`;
+      if (h) el.insertAdjacentHTML('beforeend', h);
+    } catch (x) { console.warn('vMe+', x); }
+    return r;
+  };
+}
 CFG.views.cuatoi = vMe;
 if (!CFG.nav.some(g => g.items.includes('cuatoi'))) CFG.nav.unshift({ group: 'Cá nhân', items: ['cuatoi'] });
 {
@@ -13125,7 +13143,10 @@ const ME = {
       .map(l => ({ id: l.id, ngay: l.ngay, gio: l.gio, tuyen: l.tuyen, xe: bks(l.xeId), xeId: l.xeId, laiXe: l.laiXe || '', laiXe2: l.laiXe2 || '', ve: (DB.datve || []).filter(v => v.chuyen === l.id && !v.huy).length }));
     const pay = {}, cham = {}; [prev, cur].forEach(m => { try { pay[m] = calcPay(e, m); } catch (x) { } const a = (DB.cham[m] || {})[e.id]; if (a) cham[m] = a; });
     let sk = null, th = null; try { sk = llLatest(e.id, 'sk'); th = llLatest(e.id, 'th'); } catch (x) { }
-    return { v: 1, id: e.id, nv: e, trips, cham, pay, gt: { bangHetHan: e.bangHetHan || '', sk: sk ? { ngay: sk.ngay, han: llHan(sk) } : null, th: th ? { ngay: th.ngay, han: th.hetHan || '' } : null }, ll: llRecs(e.id), hd: (DB.hdvc || []).filter(c => [c.laiXe1, c.laiXe2].map(String).includes(String(e.id)) && String(c.ngayTra || c.ngayDon || '9999') >= D.add(D.today(), -90)) };   // hợp đồng vận chuyển gắn tên mình (90 ngày gần đây + sắp tới)   // toàn bộ lý lịch hành nghề của chính người đó (khám SK, tập huấn, vi phạm, tai nạn)
+    const nmN = x => String(x || '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
+    const pa = (DB.phanAnh || []).filter(r => String(r.lai) === String(e.id) && String(r.ngay || '') >= D.add(td, -183)).map(r => ({ so: r.so || '', ngay: r.ngay || '', loai: r.loai || '', noiDung: r.noiDung || '', tt: r.tt || 'moi', xuLy: r.xuLy || '', ngayXong: r.ngayXong || '' }));
+    const nl = (DB.nhienlieu || []).filter(r => r.loai !== 'nhap' && r.lai && nmN(r.lai) === nmN(e.ten) && String(r.ngay || '') >= prev + '-01').map(r => ({ ngay: r.ngay || '', gio: r.gio || '', xe: r.xe || '', lit: +r.lit || 0, km: r.km || '', loaiNL: r.loaiNL || '' }));
+    return { v: 1, id: e.id, nv: e, trips, cham, pay, pa, nl, gt: { bangHetHan: e.bangHetHan || '', sk: sk ? { ngay: sk.ngay, han: llHan(sk) } : null, th: th ? { ngay: th.ngay, han: th.hetHan || '' } : null }, ll: llRecs(e.id), hd: (DB.hdvc || []).filter(c => [c.laiXe1, c.laiXe2].map(String).includes(String(e.id)) && String(c.ngayTra || c.ngayDon || '9999') >= D.add(D.today(), -90)) };   // hợp đồng vận chuyển gắn tên mình (90 ngày gần đây + sắp tới)   // toàn bộ lý lịch hành nghề của chính người đó (khám SK, tập huấn, vi phạm, tai nạn)
   },
   /* chỉ máy có đủ dữ liệu (Admin / điều hành / kế toán) mới soạn tờ; ghi tờ nào có thay đổi */
   canBuild: () => PS.on && ['vanhanh', 'luong', 'nhansu'].every(p => PS.readable().includes(p)),
@@ -13578,7 +13599,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-11T23:40';
+const APP_BUILD = '2026-11-11T23:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
