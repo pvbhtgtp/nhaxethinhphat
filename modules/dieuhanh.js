@@ -49,7 +49,7 @@ const dhHL = {
     const w = el.querySelector('.dx-wrap'); if (!w || !id) return;
     dhHL.off(el, true); dhHL.cur = { kind, id, pin };
     w.classList.add('dx-focus');
-    w.querySelectorAll('.dx-chip').forEach(c => { const v = kind === 'lx' ? (c.dataset.lx || '').split(' ') : [c.dataset.xe]; c.classList.toggle('dx-hl', v.includes(id)); });
+    w.querySelectorAll('.dx-chip,.dc-t').forEach(c => { const v = kind === 'lx' ? (c.dataset.lx || '').split(' ') : [c.dataset.xe]; c.classList.toggle('dx-hl', v.includes(id)); });
     const day = lcDay(), L = DB.lichchay.filter(l => l.ngay === day && !lcHide(l) && (kind === 'lx' ? [l.laiXe, l.laiXe2].includes(id) : l.xeId === id)).sort((a, b) => String(a.gio).localeCompare(String(b.gio)));
     const who = kind === 'lx' ? ((DB.employees.find(e => e.id === id) || {}).ten || '') : ((DB.vehicles.find(v => v.id === id) || {}).bks || '');
     const m = t => { const [h, mi] = String(t || '0:0').split(':').map(Number); return h * 60 + (mi || 0); }, hm = x => Math.floor(x / 60) + 'g' + String(x % 60).padStart(2, '0');
@@ -62,7 +62,7 @@ const dhHL = {
   off(el, keep) { const w = el.querySelector('.dx-wrap'); if (w) { w.classList.remove('dx-focus'); w.querySelectorAll('.dx-hl').forEach(c => c.classList.remove('dx-hl')); } if (!keep) { const b = el.querySelector('.dx-hlbar'); if (b) b.remove(); dhHL.cur = null; } },
   bind(el) {
     if (el._dxHl) return; el._dxHl = 1;
-    const tgt = e => { const c = e.target.closest && e.target.closest('.dx-chip'); if (!c) return null; if (e.target.closest('.nm')) return c.dataset.lx ? ['lx', c.dataset.lx.split(' ')[0]] : null; if (e.target.closest('.bk')) return c.dataset.xe ? ['xe', c.dataset.xe] : null; return null; };
+    const tgt = e => { const c = e.target.closest && e.target.closest('.dx-chip,.dc-t'); if (!c) return null; if (e.target.closest('.nm')) return c.dataset.lx ? ['lx', c.dataset.lx.split(' ')[0]] : null; if (e.target.closest('.bk')) return c.dataset.xe ? ['xe', c.dataset.xe] : null; return null; };
     let tm = null, swallow = false, lt = 0; const mouse = () => Date.now() - lt > 800;   // bỏ qua sự kiện chuột giả sau khi chạm màn hình
     el.addEventListener('mouseover', e => { if (!mouse() || (dhHL.cur && dhHL.cur.pin)) return; const t = tgt(e); if (t && !(dhHL.cur && dhHL.cur.kind === t[0] && dhHL.cur.id === t[1])) dhHL.on(el, t[0], t[1]); });
     el.addEventListener('mouseout', e => { if (!mouse() || !dhHL.cur || dhHL.cur.pin) return; const n = e.relatedTarget ? tgt({ target: e.relatedTarget }) : null; if (!n || n[0] !== dhHL.cur.kind || n[1] !== dhHL.cur.id) dhHL.off(el); });
@@ -75,10 +75,68 @@ const dhHL = {
     }, true);
   }
 };
-addCSS(`.dx-chip{transition:opacity .15s,box-shadow .15s}.dx-chip .nm,.dx-chip .bk{cursor:help}.dx-focus .dx-chip{opacity:.28}.dx-focus .dx-chip.dx-hl{opacity:1;box-shadow:0 0 0 3px #f59e0b,0 4px 14px rgba(245,158,11,.45);position:relative;z-index:1}
+addCSS(`.dx-chip{transition:opacity .15s,box-shadow .15s}.dx-chip .nm,.dx-chip .bk{cursor:help}.dx-focus .dx-chip,.dx-focus .dc-t{opacity:.28}.dx-focus .dx-chip.dx-hl,.dx-focus .dc-t.dx-hl{opacity:1;box-shadow:0 0 0 3px #f59e0b,0 4px 14px rgba(245,158,11,.45);position:relative;z-index:1}
 .dx-hlbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:60;max-width:min(760px,calc(100vw - 24px));background:#1e293b;color:#fff;border-radius:12px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.3);font-size:13px;pointer-events:auto}
-.dx-hlh{display:flex;align-items:center;gap:6px;margin-bottom:4px}.dx-hlx{margin-left:auto;background:none;border:0;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+.dx-hlh{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin-bottom:4px}.dx-hlh>b{white-space:nowrap}.dx-hlx{margin-left:auto;background:none;border:0;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
 .dx-hlr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}.dx-hlt.xc{background:#fdba74;box-shadow:inset 0 0 0 2px #c2410c}.dx-hlt{background:#f59e0b;color:#1e293b;border-radius:6px;padding:2px 7px;white-space:nowrap}.dx-gap{font-size:11px;color:#cbd5e1}.dx-gap.bad{color:#fca5a5;font-weight:700}
 @media(min-width:900px){.dx-hlbar{bottom:16px}}`);
 addCSS(`.dx-chip.dx-cross{border-left:4px dashed #ea580c!important;background:linear-gradient(90deg,#fff7ed,#fff 60%)}.dx-xc{display:block;width:max-content;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-top:4px;font-size:10.5px;font-weight:800;color:#c2410c;background:#ffedd5;border:1px solid #fdba74;border-radius:6px;padding:0 5px;cursor:help;white-space:nowrap}`);
 { const r2 = vDH.render; vDH.render = function (el) { r2.call(this, el); dhHL.cur = null; dhHL.bind(el); }; }
+/* ===== Dạng thẻ (điện thoại): mỗi tuyến 1 khối có vòng tỉ lệ lấp ghế, thống kê vé, nút Tăng cường; mỗi chuyến 1 ô:
+   giờ · vé/ghế · tuyến · lái xe · BIỂN SỐ ĐẦY ĐỦ (tự co chữ cho vừa ô, không viết tắt). Bấm ô = sửa nhanh như dạng bảng. ===== */
+const DC = {
+  open: new Set(), shut: new Set(),
+  mode() { let m = ''; try { m = localStorage.getItem('dh.view') || ''; } catch (e) { } return m || (window.innerWidth < 760 ? 'the' : 'bang'); },
+  set(m) { try { localStorage.setItem('dh.view', m); } catch (e) { } App.render(); },
+  ring(n, c) { const r = 26, L = 2 * Math.PI * r, p = c ? Math.min(1, n / c) : 0; return `<svg viewBox="0 0 64 64" class="dc-ring"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="6"/><circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--p)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(L * p).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 32 32)"/><text x="32" y="31" text-anchor="middle" class="a">${n}</text><text x="32" y="45" text-anchor="middle" class="b">|${c}</text></svg>`; },
+  tile(l) {
+    const v = lcXe(l) || {}, e = lcEmp(l) || {}, n = dvBook(l.id).length, c = dvCap(l), gone = lcGone(l), miss = !l.laiXe || !l.xeId;
+    let xc = []; try { xc = lcHide(l) ? [] : XC.of(l); } catch (x) { } const wn = (() => { try { return dhDocWarn(l).length + dhTimeWarn(l).length; } catch (x) { return 0; } })();
+    return `<button type="button" class="dc-t${gone ? ' gone' : ''}${miss ? ' miss' : ''}${xc.length ? ' dx-cross' : ''}" data-act="dhChip" data-id="${l.id}" data-lx="${lcHide(l) ? '' : esc([l.laiXe, l.laiXe2].filter(Boolean).join(' '))}" data-xe="${esc(l.xeId || '')}" ${xc.length ? `title="${esc(XC.tip(xc))}"` : ''}>
+      <div class="dc-h"><b>${esc(l.gio || '')}</b>${wn ? `<i class="dc-w">⚠${wn}</i>` : ''}<span><b>${n}</b>|${c}</span></div>
+      <div class="dc-r">${esc(dhAbbr(l.tuyen))}${xc.length ? ' <em>⇄ chéo</em>' : ''}</div>
+      <div class="dc-n nm">${e.ten ? esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</div>
+      <div class="dc-x bk">${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</div></button>`;
+  },
+  html(el) {
+    const day = lcDay(), routes = [...el.querySelectorAll('.dx tbody th.rt')].map(th => th.title).filter(Boolean);
+    if (!routes.length) return '';
+    const GC = (DB.giochay || []).filter(g => g.tt !== 'ĐÓNG' && g.tuyen && g.gio), can = Auth.can('dieuhanh', 'add');
+    return routes.map(r => {
+      const T = (DB.lichchay || []).filter(l => l.ngay === day && l.tuyen === r).sort((a, b) => String(a.gio).localeCompare(String(b.gio)));
+      let bk = 0, tt = 0, cap = 0; T.forEach(l => { const B = dvBook(l.id); bk += B.length; tt += B.filter(b => b.tt === 'tra').length; cap += dvCap(l) || 0; });
+      const miss = GC.filter(g => g.tuyen === r && !T.some(l => l.gio === g.gio)).sort((a, b) => String(a.gio).localeCompare(String(b.gio)));
+      const shut = DC.shut.has(r);
+      return `<section class="dc-rt"><div class="dc-hd" data-dcr="${esc(r)}">${DC.ring(bk, cap)}<div class="grow"><h3>${esc(r)}</h3><div class="dc-st">TT: <b>${tt}</b> · ĐC: <b>${bk - tt}</b> · Trống: <b>${Math.max(0, cap - bk)}</b> · Tổng ghế: <b>${cap}</b></div></div><span class="dc-cv${shut ? '' : ' up'}">${ic('back')}</span></div>
+        ${shut ? '' : `<div class="dc-bar"><span>${T.length} chuyến</span>${can ? `<button type="button" class="dc-add" data-act="dhAddGio" data-r="${esc(r)}">Tăng cường ${ic('plus')}</button>` : ''}</div>
+        <div class="dc-g">${T.map(DC.tile).join('')}${can ? miss.map(g => `<button type="button" class="dc-t dc-mk" data-act="dhMk" data-r="${esc(r)}" data-g="${esc(g.gio)}"><div class="dc-h"><b>${esc(g.gio)}</b></div><div class="dc-r">${ic('plus')} Tạo chuyến</div></button>`).join('') : ''}</div>`}</section>`;
+    }).join('');
+  },
+  fit(root) {   // biển số, tên lái xe: tự co chữ cho vừa ô, không cắt bớt
+    root.querySelectorAll('.dc-x').forEach(x => { x.style.fontSize = ''; let f = parseFloat(getComputedStyle(x).fontSize) || 15, i = 0; while (x.scrollWidth > x.clientWidth + 1 && f > 10 && i++ < 12) { f -= 0.5; x.style.fontSize = f + 'px'; } });
+  }
+};
+addCSS(`.dc-sw{display:inline-flex;border:1px solid #d0d5dd;border-radius:10px;overflow:hidden;margin:0 0 10px}.dc-sw button{border:0;background:#fff;font:inherit;font-size:13px;font-weight:700;padding:6px 14px;cursor:pointer;color:#475467}.dc-sw button.on{background:var(--p);color:#fff}
+.dc-wrap{display:flex;flex-direction:column;gap:12px}.dc-rt{background:#fff;border:1px solid #e4e7ec;border-radius:16px;box-shadow:0 1px 3px rgba(16,24,40,.06);overflow:hidden}
+.dc-hd{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;border-bottom:1px solid #eef2f6}.dc-hd h3{margin:0;color:var(--p);font-size:19px;line-height:1.2}.dc-st{font-size:13px;color:#344054;margin-top:3px}.dc-ring{width:62px;height:62px;flex:none}.dc-ring .a{font-size:17px;font-weight:800;fill:var(--p)}.dc-ring .b{font-size:11px;fill:#64748b}
+.dc-cv svg{width:20px;height:20px;color:var(--p);transform:rotate(-90deg);transition:transform .15s}.dc-cv.up svg{transform:rotate(90deg)}
+.dc-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px 4px;color:#64748b;font-size:14px}.dc-add{border:0;background:none;color:var(--p);font:inherit;font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;gap:4px;cursor:pointer}.dc-add svg{width:18px;height:18px}
+.dc-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 12px 14px}@media(min-width:760px){.dc-g{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+.dc-t{display:flex;flex-direction:column;align-items:stretch;text-align:left;width:auto;min-width:0;padding:0;margin:0;border:1.5px solid #d0d5dd;border-radius:10px;background:#fff;font:inherit;color:#1f2937;cursor:pointer;overflow:hidden;box-shadow:none}
+.dc-h{display:flex;align-items:center;gap:4px;background:#f2f4f7;padding:5px 7px}.dc-h>b{font-size:15.5px;font-weight:800}.dc-h span{margin-left:auto;font-size:12.5px;color:#475467}.dc-h span b{font-size:13.5px;color:#1f2937}.dc-w{font-style:normal;font-size:10.5px;font-weight:800;color:#b91c1c;background:#fee2e2;border-radius:5px;padding:0 4px}
+.dc-r{padding:5px 7px 0;font-size:13px;font-weight:700;color:#344054}.dc-r em{font-style:normal;font-size:10.5px;color:#c2410c;background:#ffedd5;border-radius:5px;padding:0 4px}
+.dc-n{padding:3px 7px 0;font-size:13px;line-height:1.25;color:#1f2937;min-height:2.5em;overflow-wrap:anywhere}.dc-x{padding:3px 7px 7px;font-size:15px;font-weight:800;letter-spacing:-.2px;white-space:nowrap;overflow:hidden}.dc-t .un{color:#b42318;font-weight:600;font-size:12px}
+.dc-t.gone{opacity:.6}.dc-t.gone .dc-h{background:#e5e7eb}.dc-t.miss{border:1.5px dashed #f04438}.dc-t.dx-cross{border-left:4px dashed #ea580c}.dc-mk{border:1.5px dashed #94a3b8!important;background:#f8fafc!important}.dc-mk .dc-r{display:flex;align-items:center;gap:4px;padding-bottom:10px;color:var(--p)}.dc-mk svg{width:15px;height:15px}`);
+{ const r3 = vDH.render; vDH.render = function (el) {
+  r3.call(this, el);
+  try {
+    const w = el.querySelector('.dx-wrap'); if (!w) return; const m = DC.mode();
+    w.insertAdjacentHTML('beforebegin', `<div class="dc-sw"><button type="button" data-dcm="the" class="${m === 'the' ? 'on' : ''}">Dạng thẻ</button><button type="button" data-dcm="bang" class="${m === 'bang' ? 'on' : ''}">Dạng bảng</button></div>`);
+    el.querySelectorAll('[data-dcm]').forEach(b => b.onclick = () => DC.set(b.dataset.dcm));
+    if (m !== 'the') return;
+    const h = DC.html(el); if (!h) return;
+    w.className = 'dx-wrap dc-wrap'; w.innerHTML = h;
+    w.querySelectorAll('[data-dcr]').forEach(x => x.onclick = () => { const r = x.dataset.dcr; DC.shut.has(r) ? DC.shut.delete(r) : DC.shut.add(r); App.render(); });
+    requestAnimationFrame(() => DC.fit(w));
+  } catch (e) { console.warn('DC', e); try { SYS.add('Điều hành dạng thẻ', e); } catch (x) { } }
+}; }
