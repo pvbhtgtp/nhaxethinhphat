@@ -7129,7 +7129,7 @@ const CFG = {
   views: { dashboard: vDash, nhanvien: vEmp, phuongtien: vVeh, giochay: MODL.stub('giochay', {"title": "Giờ chạy", "icon": "clock", "desc": "Lịch giờ chạy các tuyến, gán số xe và lái xe cho từng chuyến, mở hoặc đóng chuyến"}), banggia: MODL.stub('banggia', {"title": "Bảng giá vé", "icon": "tag", "desc": "Giá vé theo tuyến, theo khoảng ngày áp dụng và theo từng chặng đi"}), suachua: MODL.stub('suachua', {"title": "Sửa chữa", "icon": "wrench", "desc": "Phiếu sửa chữa phương tiện: nội dung, số lượng, đơn giá và chi phí theo xe"}), nhienlieu: MODL.stub('nhienlieu', { title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe' }), lylich: MODL.stub('lylich', {"title": "Lý lịch hành nghề", "icon": "idcard", "desc": "Hồ sơ hành nghề của lái xe: khám sức khỏe, vi phạm, tai nạn, tập huấn"}), kmxe: MODL.stub('kmxe', {"title": "Km xe", "icon": "trend", "desc": "Thống kê km mỗi xe đã chạy theo ngày, tuần, tháng, năm (nhập báo cáo từ Skysoft)"}), lichchay: MODL.stub('lichchay', {"title":"Đặt vé","icon":"calendar","desc":"Chọn ngày và chuyến, đặt vé theo sơ đồ ghế; quản lý lịch chạy từng ngày: tuyến, giờ, xe, lái xe"}), dieuhanh: MODL.stub('dieuhanh', {"title":"Điều hành xe","icon":"kanban","desc":"Bảng điều hành theo tuyến và giờ chạy: xe, lái xe và số vé của từng chuyến","print":false}), hdvc: vVC, hopdong: MODL.stub('hopdong', {"title":"Hợp đồng lao động","icon":"file","desc":"Soạn HĐLĐ tự động cho từng nhân viên từ hồ sơ nhân sự, bấm vào dòng để xem trước","print":false}), chamcong: MODL.stub('chamcong', {"title":"Bảng chấm công","icon":"calcheck","desc":"Lái xe tự tính công từ Lịch chạy · Văn phòng tự điền X ngày làm việc"}), bangluong: MODL.stub('bangluong', {"title": "Bảng lương", "icon": "wallet", "desc": "Tự tính lương theo công, OT, BHXH, thuế TNCN. Ô màu vàng nhập trực tiếp."}), thue: MODL.stub('thue', {"title": "Thuế TNCN & Bảo hiểm", "label": "Thuế & bảo hiểm", "icon": "percent", "desc": "Tổng hợp theo năm và công cụ tính lương Gross / Net"}), caidat: MODL.stub('caidat', {"title": "Cài đặt", "icon": "settings", "desc": "Thông tin công ty, công chuẩn, tỷ lệ bảo hiểm, biểu thuế TNCN", "print": false}), users: vUsers }
 };
 const Shell = {
-  ids: ['dashboard', 'dieuhanh', 'lichchay', 'chamcong'], short: { dashboard: 'Tổng quan', dieuhanh: 'Điều hành', lichchay: 'Đặt vé', chamcong: 'Chấm công' },
+  ids: ['dashboard', 'dieuhanh', 'lichchay', 'chamcong'], short: { bdk: 'Điều khiển', phananh: 'Sự cố', dashboard: 'Tổng quan', dieuhanh: 'Điều hành', lichchay: 'Đặt vé', chamcong: 'Chấm công' },
   setup() {
     try { if (localStorage.getItem('tgtp:sbmin') === '1') document.body.classList.add('sb-min'); } catch (e) { }
     if (!$('#btmNav')) {
@@ -7142,7 +7142,8 @@ const Shell = {
   },
   /* nút dưới do Admin chọn (tối đa 4 + Menu), lưu trên máy chủ theo vai trò; chưa chọn thì dùng mặc định */
   key: () => { const u = Auth.user; return !u ? '' : u.role === 'admin' ? 'admin' : (u.role || ''); },
-  list() { const c = ((DB && DB.settings && DB.settings.navBtm) || {})[Shell.key()]; return Array.isArray(c) && c.length ? c : Shell.ids; },
+  ADM: ['bdk', 'dieuhanh', 'lichchay', 'phananh'],   // nút dưới mặc định của Admin (Admin đổi được)
+  list() { const k = Shell.key(), c = ((DB && DB.settings && DB.settings.navBtm) || {})[k]; return Array.isArray(c) && c.length ? c : k === 'admin' ? Shell.ADM : Shell.ids; },
   html() { return Shell.list().filter(id => App.views[id]).slice(0, 4).map(id => { const v = App.views[id]; return `<a data-nav="${id}">${ic(v.icon)}<span>${esc(Shell.short[id] || v.label || v.title)}</span></a>`; }).join('') + `<a data-act="navOpen">${ic('menu')}<span>Menu</span></a>`; },
   sync() {
     const nv = $('#btmNav'), sig = Shell.key() + '|' + Shell.list().join(','); if (nv && nv.dataset.sig !== sig) { nv.dataset.sig = sig; nv.innerHTML = Shell.html(); }
@@ -7154,7 +7155,7 @@ ACT.btmCfg = () => {          // Admin chọn nút dưới cho mình hoặc cho 
   if (!PERM.admin()) return; const R = Object.entries(DB.roles || {}).filter(([k]) => k !== 'admin');
   let tg = 'admin', sel = [];
   const all = () => Object.keys(App.views).filter(id => App.views[id] && (App.views[id].title || App.views[id].label) && id !== 'login').sort((a, b) => String(App.views[a].title || a).localeCompare(String(App.views[b].title || b), 'vi'));
-  const cur = () => { const c = ((DB.settings.navBtm || {})[tg]); sel = Array.isArray(c) && c.length ? c.slice() : Shell.ids.slice(); };
+  const cur = () => { const c = ((DB.settings.navBtm || {})[tg]); sel = Array.isArray(c) && c.length ? c.slice() : (tg === 'admin' ? Shell.ADM : Shell.ids).slice(); };
   const m = Modal.open({ title: 'Nút dưới màn hình điện thoại', width: 520, body: `<div class="field"><label>Áp dụng cho</label><select class="inp" data-tg><option value="admin">Admin (tôi)</option>${R.map(([k, r]) => `<option value="${esc(k)}">${esc(r.name || k)}</option>`).join('')}</select></div><div class="small muted" style="margin:6px 0">Chọn tối đa 4 nút theo thứ tự bấm; nút thứ 5 luôn là Menu. Lưu trên máy chủ, đăng nhập máy nào cũng giống nhau.</div><div class="bn-pick" data-l></div>`,
     foot: '<button class="btn" data-def>Về mặc định</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>Lưu</button>' });
   const L = m.el.querySelector('[data-l]');
@@ -7162,7 +7163,7 @@ ACT.btmCfg = () => {          // Admin chọn nút dưới cho mình hoặc cho 
   cur(); draw();
   m.el.querySelector('[data-tg]').onchange = e => { tg = e.target.value; cur(); draw(); };
   L.onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; const id = b.dataset.id, i = sel.indexOf(id); if (i >= 0) sel.splice(i, 1); else { if (sel.length >= 4) return toast('Tối đa 4 nút, bỏ bớt 1 nút trước', 'err'); sel.push(id); } draw(); };
-  m.el.querySelector('[data-def]').onclick = () => { sel = Shell.ids.slice(); draw(); };
+  m.el.querySelector('[data-def]').onclick = () => { sel = (tg === 'admin' ? Shell.ADM : Shell.ids).slice(); draw(); };
   m.el.querySelector('[data-no]').onclick = () => m.close();
   m.el.querySelector('[data-ok]').onclick = () => { if (!sel.length) return toast('Chọn ít nhất 1 nút', 'err'); DB.settings.navBtm = Object.assign({}, DB.settings.navBtm || {}, { [tg]: sel.slice(0, 4) }); App.changed(); Shell.sync(); m.close(); toast(ic('check') + ' Đã lưu nút dưới', 'ok', 2500); };
 };
@@ -13648,7 +13649,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T00:30';
+const APP_BUILD = '2026-11-12T00:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -13770,7 +13771,7 @@ Auth.homeView = function () {
   const u = Auth.user; if (!u) return null; const r = (DB.roles || {})[u.role] || {};
   const dh = u.role === 'admin' || (!DRV.on() && (/dieu_?hanh/i.test(u.role) || /điều hành/i.test(r.name || '')));
   let lx = false; try { lx = !dh && LXV.is(); } catch (x) { }   // lái xe, phụ xe: mở thẳng Chuyến của tôi
-  return (lx ? ['chuyentoi', 'cuatoi'] : dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
+  return (lx ? ['chuyentoi', 'cuatoi'] : u.role === 'admin' ? ['bdk', 'dieuhanh', 'lichchay'] : dh ? ['dieuhanh', 'lichchay'] : ['lichchay', 'dieuhanh']).find(id => (App.views[id] || CFG.views[id]) && Auth.canView(id)) || Auth.firstView();
 };
 /* Mã QR trên lệnh / hợp đồng vận chuyển: mở văn bản trong app (phải đăng nhập) */
 const QR = {
