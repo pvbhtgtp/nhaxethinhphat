@@ -566,6 +566,7 @@ const Modal = {
 
 /* ---------- Form ---------- */
 function optList(o) { return (o || []).map(x => typeof x === 'object' ? x : { value: x, label: x }); }
+const IDC_KEYS = ['cccdTruoc', 'cccdSau', 'bangTruoc', 'bangSau'];   // ô ảnh thẻ có nút Đọc lại (AI đọc thông tin trên thẻ)
 function fieldHTML(f, v) {
   if (f.type === 'section') return `<div class="fsec">${f.label}</div>`;
   const nm = `name="${f.key}"`, req = f.required ? ' <i class="req">*</i>' : '';
@@ -579,7 +580,7 @@ function fieldHTML(f, v) {
     case 'money': input = `<input class="inp num" ${nm} data-money inputmode="numeric" value="${v === '' ? '' : F.money(v)}"${ph}>`; break;
     case 'number': input = `<input class="inp num" type="number" step="${f.step || 'any'}" ${f.min !== undefined ? `min="${f.min}"` : ''} ${nm} value="${esc(v)}"${ph}>`; break;
     case 'checkbox': return `<label class="${cls} chk"><input type="checkbox" ${nm} ${v ? 'checked' : ''}> <span>${f.label}</span></label>`;
-    case 'image': return `<div class="${cls}"><span>${f.label}</span><div class="img-pick"><div class="ph" data-ph>${v ? `<img src="${v}">` : ic('upload')}</div><div class="row"><label class="btn sm">${ic('upload')} Chọn ảnh<input type="file" accept="image/*" hidden data-img="${f.key}" data-max="${f.max || 240}"></label><button type="button" class="btn sm" data-imgclear="${f.key}">Bỏ ảnh</button></div><input type="hidden" ${nm} data-image value="${esc(v)}"></div>${f.hint ? `<small>${f.hint}</small>` : ''}</div>`;
+    case 'image': return `<div class="${cls}"><span>${f.label}</span><div class="img-pick"><div class="ph" data-ph>${v ? `<img src="${v}">` : ic('upload')}</div><div class="row"><label class="btn sm">${ic('upload')} Chọn ảnh<input type="file" accept="image/*" hidden data-img="${f.key}" data-max="${f.max || 240}"></label>${IDC_KEYS.includes(f.key) ? `<button type="button" class="btn sm" data-idcre="${f.key}">${ic('refresh')} Đọc lại</button>` : ''}<button type="button" class="btn sm" data-imgclear="${f.key}">Bỏ ảnh</button></div><input type="hidden" ${nm} data-image value="${esc(v)}"></div>${f.hint ? `<small>${f.hint}</small>` : ''}</div>`;
     default: { const tel = f.type === 'tel' || f.key === 'sdt' || /điện thoại/i.test(f.label || ''); input = `<input class="inp" type="${tel ? 'tel' : (f.type || 'text')}" ${tel ? 'inputmode="tel" autocomplete="tel" enterkeyhint="next"' : ''} ${nm} value="${esc(v)}"${ph}${f.list ? ` list="dl_${f.key}"` : ''}>${f.list ? `<datalist id="dl_${f.key}">${(typeof f.list === 'function' ? f.list() : f.list).map(x => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}`; }
   }
   return `<label class="${cls}"><span>${f.label}${req}</span>${input}${f.hint ? `<small>${f.hint}</small>` : ''}</label>`;
@@ -2022,25 +2023,28 @@ const vDash = {
 
 /* ---------- Nhân viên ---------- */
 const EMP_FIELDS = () => [
-  { type: 'section', label: 'Thông tin cá nhân' },
-  { key: 'ma', label: 'Mã nhân viên', required: true }, { key: 'ten', label: 'Họ và tên', required: true },
-  { key: 'gioiTinh', label: 'Giới tính', type: 'select', options: ['Nam', 'Nữ'] }, { key: 'ngaySinh', label: 'Ngày sinh', type: 'date' },
+  { type: 'section', label: 'Thông tin cá nhân (theo Căn cước công dân)' },
+  { key: 'ma', label: 'Mã nhân viên', required: true }, { key: 'cccd', label: 'Số định danh cá nhân (số CCCD)' },
+  { key: 'ten', label: 'Họ, chữ đệm và tên', required: true, full: true },
+  { key: 'ngaySinh', label: 'Ngày, tháng, năm sinh', type: 'date' }, { key: 'gioiTinh', label: 'Giới tính', type: 'select', options: ['Nam', 'Nữ'] },
+  { key: 'cccdQuocTich', label: 'Quốc tịch', list: ['Việt Nam'] }, { key: 'cccdHetHan', label: 'Có giá trị đến', type: 'date', hint: 'Để trống nếu thẻ ghi Không thời hạn' },
+  { key: 'cccdQueQuan', label: 'Quê quán / Nơi đăng ký khai sinh', full: true },
+  { key: 'diaChiTT', label: 'Nơi thường trú / Nơi cư trú', full: true },
+  { key: 'cccdDacDiem', label: 'Đặc điểm nhân dạng', full: true },
+  { key: 'cccdNgayCap', label: 'Ngày, tháng, năm cấp', type: 'date' }, { key: 'cccdNoiCap', label: 'Nơi cấp', list: ['CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI', 'BỘ CÔNG AN'] },
+  { key: 'cccdTruoc', label: 'Ảnh CCCD mặt trước', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ. Bấm Đọc lại để đọc lại thông tin từ ảnh' }, { key: 'cccdSau', label: 'Ảnh CCCD mặt sau', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ. Bấm Đọc lại để đọc lại thông tin từ ảnh' },
+  { type: 'section', label: 'Liên hệ' },
   { key: 'sdt', label: 'Số điện thoại', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' },
   { key: 'zaloId', label: 'Zalo Chat ID', hint: 'Dùng để gửi phiếu lương, thông báo qua Zalo' }, { key: 'mst', label: 'Mã số thuế cá nhân' },
-  { key: 'diaChiTT', label: 'Địa chỉ thường trú', full: true },
   { key: 'diaChiHN', label: 'Chỗ ở hiện nay', full: true },
   { key: 'avatar', label: 'Ảnh đại diện (avatar)', type: 'image', max: 200, hint: 'Chọn ảnh chân dung, tự thu nhỏ để nhẹ file' }, { key: 'chuKy', label: 'Chữ ký nhân viên', type: 'image', max: 400, hint: 'Chụp chữ ký trên giấy trắng, app tự tách nền và cắt sát, tự in vào ô ký của hợp đồng' },
-  { type: 'section', label: 'Căn cước công dân' },
-  { key: 'cccd', label: 'Số CCCD', full: true },
-  { key: 'cccdNgayCap', label: 'Ngày cấp CCCD', type: 'date' }, { key: 'cccdNoiCap', label: 'Nơi cấp CCCD' },
-  { key: 'cccdTruoc', label: 'Ảnh CCCD mặt trước', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ' }, { key: 'cccdSau', label: 'Ảnh CCCD mặt sau', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ' },
   { type: 'section', label: 'Công việc' },
   { key: 'phongBan', label: 'Phòng ban', type: 'select', options: () => S().phongBan }, { key: 'chucVu', label: 'Chức vụ' },
   { key: 'ngayVao', label: 'Ngày vào làm', type: 'date' }, { key: 'trangThai', label: 'Trạng thái', type: 'select', options: ['Đang làm', 'Thử việc', 'Nghỉ việc'] },
   { type: 'section', label: 'Giấy phép lái xe (dành cho lái xe)' },
   { key: 'bangHang', label: 'Hạng bằng', type: 'select', blank: '(Không có)', options: ['B1', 'B2', 'C', 'D', 'E', 'FB2', 'FC', 'FD', 'FE'] }, { key: 'bangSo', label: 'Số bằng lái' },
   { key: 'bangNgayCap', label: 'Ngày cấp', type: 'date' }, { key: 'bangHetHan', label: 'Ngày hết hạn', type: 'date' },
-  { key: 'bangTruoc', label: 'Ảnh bằng lái xe mặt trước', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ' }, { key: 'bangSau', label: 'Ảnh bằng lái xe mặt sau', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ' },
+  { key: 'bangTruoc', label: 'Ảnh bằng lái xe mặt trước', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ. Bấm Đọc lại để đọc lại thông tin từ ảnh' }, { key: 'bangSau', label: 'Ảnh bằng lái xe mặt sau', type: 'image', max: 1000, hint: 'Chụp rõ, đủ 4 góc thẻ. Bấm Đọc lại để đọc lại thông tin từ ảnh' },
   { key: 'bangNoiCap', label: 'Nơi cấp', s2: true, list: ['SỞ GTVT ĐỒNG NAI', 'SỞ GTVT TP.HỒ CHÍ MINH', 'SỞ GTVT BÀ RỊA - VŨNG TÀU'] },
   { key: 'theNVTruoc', label: 'Thẻ nghiệp vụ lái xe (mặt trước)', type: 'image', max: 1000, s2: true, hint: 'Chỉ dành cho lái xe' },
   { type: 'section', label: 'Hợp đồng lao động' },
@@ -2155,6 +2159,10 @@ const EIMP = [
   { key: 'hdDen', label: 'HĐ đến ngày', t: 'date', w: 12, alias: ['denngay', 'hddenngay'] },
   { key: 'cccdNgayCap', label: 'Ngày cấp CCCD', t: 'date', w: 12, alias: ['ngaycap', 'ngaycapcccd'] },
   { key: 'cccdNoiCap', label: 'Nơi cấp CCCD', w: 18, alias: ['noicap', 'noicapcccd'] },
+  { key: 'cccdHetHan', label: 'CCCD có giá trị đến', t: 'date', w: 12, alias: ['cogiatriden', 'hethancccd', 'cccdhethan'] },
+  { key: 'cccdQuocTich', label: 'Quốc tịch', w: 12, alias: ['quoctich'] },
+  { key: 'cccdQueQuan', label: 'Quê quán / Nơi ĐK khai sinh', w: 30, alias: ['quequan', 'noidangkykhaisinh', 'noidkkhaisinh', 'nguyenquan'] },
+  { key: 'cccdDacDiem', label: 'Đặc điểm nhân dạng', w: 24, alias: ['dacdiemnhandang', 'dacdiem'] },
   { key: 'diaChiTT', label: 'Địa chỉ thường trú', w: 30, alias: ['diachithuongtru', 'thuongtru'] },
   { key: 'diaChiHN', label: 'Chỗ ở hiện nay', w: 30, alias: ['choohiennay', 'diachihiennay'] },
   { key: 'soBHXH', label: 'Số BHXH', w: 14, alias: ['sobhxh'] }
@@ -2786,7 +2794,7 @@ function hdHTML(e) {
   <p>Người đại diện: Ông ${hv(c.daiDien)} &nbsp; Chức vụ: ${hv(c.chucVuDD)}</p><p>Địa chỉ: ${hv(c.diaChi)}</p><p>MST: ${hv(c.mst)}</p><p>Số điện thoại: ${hv(c.sdt)} &nbsp; Email: ${hv(c.email)}</p>
   <p>Số tài khoản: ${hv(c.stkDN)} &nbsp; Tại: ${hv(c.nganHangDN)}</p><p>ĐKKD số: ${hv(c.dkkd)}</p>
   <p><b>NGƯỜI LAO ĐỘNG (BÊN B):</b></p>
-  <p>Ông/Bà: <b>${ten}</b> &nbsp; Giới tính: ${up(e.gioiTinh)}</p><p>Sinh ngày: ${hd8(e.ngaySinh)} &nbsp; Quốc tịch: Việt Nam</p>
+  <p>Ông/Bà: <b>${ten}</b> &nbsp; Giới tính: ${up(e.gioiTinh)}</p><p>Sinh ngày: ${hd8(e.ngaySinh)} &nbsp; Quốc tịch: ${hv(e.cccdQuocTich || 'Việt Nam')}</p>
   <p>CMND/CCCD số: ${hv(e.cccd)} &nbsp; Ngày cấp: ${hd8(e.cccdNgayCap)} &nbsp; Nơi cấp: ${hv(e.cccdNoiCap)}</p>
   <p>Địa chỉ thường trú: ${hv(e.diaChiTT)}</p><p>Chỗ ở hiện nay: ${hv(e.diaChiHN)}</p><p>Số điện thoại: ${hv(e.sdt)}</p><p>Số sổ lao động/Sổ BHXH (nếu có): ${hv(e.soBHXH, '')} cấp ngày: ${hd8(e.bhxhNgayCap)}</p>
   <p>Sau khi trao đổi, hai bên đồng ý ký kết Hợp đồng lao động (“HĐLĐ”) và cam kết thực hiện đúng các điều khoản cụ thể sau đây:</p>
@@ -7072,8 +7080,8 @@ const BOT = {
   tables: { nhanvien: 'employees', phuongtien: 'vehicles', lichchay: 'lichchay', giochay: 'giochay', suachua: 'suachua', lylich: 'lylich', hdvc: 'hdvc', kmxe: 'kmxe' },
   names: { nhanvien: 'Nhân viên', phuongtien: 'Phương tiện', lichchay: 'Lịch chạy/đặt vé', giochay: 'Giờ chạy', suachua: 'Phiếu sửa chữa', lylich: 'Lý lịch hành nghề', hdvc: 'Hợp đồng vận chuyển', kmxe: 'Km xe' },
   drop: /^(avatar|hinhAnh|cavet|dangKiem|bhds|bhvc|files|zaloId|matKhau|pass|pw)$/i,
-  money: /^(luongCB|luongBH|pcChiuThue|pcKhongThue|soNPT|mst|stk|nganHang|cccd|cccdNgayCap|cccdNoiCap)$/i,
-  noEdit: /^(id|avatar|hinhAnh|cavet|dangKiem|bhds|bhvc|files|zaloId|matKhau|pass|pw|luongCB|luongBH|pcChiuThue|pcKhongThue|soNPT|mst|stk|nganHang|cccd|cccdNgayCap|cccdNoiCap)$/i,
+  money: /^(luongCB|luongBH|pcChiuThue|pcKhongThue|soNPT|mst|stk|nganHang|cccd\w*)$/i,
+  noEdit: /^(id|avatar|hinhAnh|cavet|dangKiem|bhds|bhvc|files|zaloId|matKhau|pass|pw|luongCB|luongBH|pcChiuThue|pcKhongThue|soNPT|mst|stk|nganHang|cccd\w*)$/i,
   hist: [], busy: false, ctl: null,
   norm: s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(),
   bksKey: s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
@@ -12356,16 +12364,16 @@ const IDC = {
   local(src) { try { const Q = SCN.detect(src); if (IDC.okQ(Q, src.width, src.height)) return IDC.flat(src, Q); } catch (e) { console.warn('IDC.detect', e); } return null; },
   GOC: ' Thêm khóa "goc": tọa độ 4 góc của tấm thẻ trong ảnh theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái (theo chiều chữ trên thẻ), dạng [[x,y],[x,y],[x,y],[x,y]] với x,y là số nguyên 0-1000 tính theo chiều rộng và chiều cao ảnh.',
   P: {
-    cccd1: 'Ảnh mặt trước Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số","hoTen":"","ngaySinh":"YYYY-MM-DD","gioiTinh":"Nam|Nữ","noiThuongTru":"","ngayCap":"YYYY-MM-DD nếu có trên mặt này","noiCap":""}. Trường không thấy để chuỗi rỗng.',
-    cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"mrz":"chép nguyên văn từng ký tự 3 dòng mã MRZ ở cuối thẻ (bắt đầu IDVNM), mỗi dòng cách nhau bằng \\n, giữ nguyên dấu <","so":"số CCCD 12 chữ số: ở dòng MRZ thứ nhất là 12 chữ số đứng NGAY SAU cụm IDVNM + 9 chữ số + 1 chữ số kiểm tra (không phải 9 chữ số liền sau IDVNM)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
+    cccd1: 'Ảnh mặt trước Căn cước công dân / Thẻ căn cước Việt Nam. Đọc chính xác từng ký tự, giữ đủ dấu tiếng Việt. Trả JSON: {"so":"Số / Số định danh cá nhân, 12 chữ số","hoTen":"Họ, chữ đệm và tên","ngaySinh":"YYYY-MM-DD","gioiTinh":"Nam|Nữ","quocTich":"","queQuan":"Quê quán hoặc Nơi đăng ký khai sinh","noiThuongTru":"Nơi thường trú hoặc Nơi cư trú","coGiaTriDen":"YYYY-MM-DD, rỗng nếu Không thời hạn","ngayCap":"YYYY-MM-DD nếu có trên mặt này","noiCap":""}. Trường không thấy để chuỗi rỗng.',
+    cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Đọc chính xác từng ký tự, giữ đủ dấu tiếng Việt. Trả JSON: {"dacDiem":"Đặc điểm nhân dạng","coGiaTriDen":"YYYY-MM-DD nếu có trên mặt này","queQuan":"Nơi đăng ký khai sinh nếu có trên mặt này","mrz":"chép nguyên văn từng ký tự 3 dòng mã MRZ ở cuối thẻ (bắt đầu IDVNM), mỗi dòng cách nhau bằng \\n, giữ nguyên dấu <","so":"số CCCD 12 chữ số: ở dòng MRZ thứ nhất là 12 chữ số đứng NGAY SAU cụm IDVNM + 9 chữ số + 1 chữ số kiểm tra (không phải 9 chữ số liền sau IDVNM)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
     gplx1: 'Ảnh mặt trước Giấy phép lái xe Việt Nam. Trả JSON: {"so":"số GPLX","hoTen":"","ngaySinh":"YYYY-MM-DD","hang":"hạng cao nhất, ví dụ B2, C, D, E","ngayCap":"YYYY-MM-DD","hetHan":"YYYY-MM-DD hoặc rỗng nếu không thời hạn","noiCap":"ví dụ SỞ GTVT ĐỒNG NAI"}. Trường không thấy để chuỗi rỗng.',
     gplx2: 'Ảnh mặt sau Giấy phép lái xe Việt Nam (bảng các hạng xe và ngày hết hạn). Trả JSON: {"so":"số GPLX nếu có","hang":"hạng cao nhất còn hạn","hetHan":"YYYY-MM-DD của hạng đó","ngayCap":"YYYY-MM-DD nếu có"}. Trường không thấy để chuỗi rỗng.'
   },
-  MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', noiThuongTru: 'diaChiTT', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh' },
+  MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', quocTich: 'cccdQuocTich', queQuan: 'cccdQueQuan', noiThuongTru: 'diaChiTT', coGiaTriDen: 'cccdHetHan', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT', queQuan: 'cccdQueQuan', coGiaTriDen: 'cccdHetHan', dacDiem: 'cccdDacDiem', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh' },
     gplx1: { so: 'bangSo', hoTen: 'ten', ngaySinh: 'ngaySinh', hang: 'bangHang', ngayCap: 'bangNgayCap', hetHan: 'bangHetHan', noiCap: 'bangNoiCap' }, gplx2: { so: 'bangSo', hang: 'bangHang', hetHan: 'bangHetHan', ngayCap: 'bangNgayCap' } },
-  LB: { cccd: 'Số CCCD', ten: 'Họ và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', diaChiTT: 'Địa chỉ thường trú', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
+  LB: { cccd: 'Số định danh cá nhân', ten: 'Họ, chữ đệm và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', cccdQuocTich: 'Quốc tịch', cccdQueQuan: 'Quê quán / Nơi đăng ký khai sinh', diaChiTT: 'Nơi thường trú / Nơi cư trú', cccdHetHan: 'Có giá trị đến', cccdDacDiem: 'Đặc điểm nhân dạng', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
   n: v => String(v || '').normalize('NFC').toUpperCase().replace(/[^\p{L}\p{N}]/gu, ''),
-  KEEP: { cccd2: ['cccd', 'diaChiTT', 'ngaySinh', 'gioiTinh'], gplx2: ['bangSo'] },   // mặt sau: chỉ điền khi ô còn trống, không ghi đè số đã có
+  KEEP: { cccd2: ['cccd', 'diaChiTT', 'cccdQueQuan', 'cccdHetHan', 'ngaySinh', 'gioiTinh'], gplx2: ['bangSo'] },   // mặt sau: chỉ điền khi ô còn trống, không ghi đè số đã có
   ck(t) { const W = [7, 3, 1]; let s = 0; for (let i = 0; i < t.length; i++) { const c = t[i]; s += (c === '<' ? 0 : /\d/.test(c) ? +c : c.charCodeAt(0) - 55) * W[i % 3]; } return String(s % 10); },
   mrz(raw) {                      // giải mã MRZ thẻ CCCD: dòng 1 IDVNM + 9 số + kiểm tra + 12 số CCCD; dòng 2 ngày sinh, giới tính
     const L = String(raw || '').toUpperCase().replace(/[«‹]/g, '<').split(/\\n|\n|\r/).map(x => x.replace(/\s+/g, '')).filter(Boolean), r = {};
@@ -12410,6 +12418,22 @@ document.addEventListener('change', e => {
   }).catch(err => { console.warn('IDC', err); resizeImage(file, +el.dataset.max || 1000).then(u => { box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; }).catch(() => toast('Không đọc được ảnh', 'err')); });
 }, true);
 
+document.addEventListener('click', async e => {         // Đọc lại thông tin từ ảnh thẻ đã lưu
+  const b = e.target.closest && e.target.closest('[data-idcre]'); if (!b) return; e.preventDefault();
+  const kind = IDC.K[b.dataset.idcre], box = b.closest('.img-pick'), root = b.closest('.modal-wrap') || document; if (!kind || !box || b.disabled) return;
+  let v = box.querySelector('[data-image]').value || '';
+  if (!v) return toast('Chưa có ảnh để đọc lại', 'err');
+  b.disabled = true;
+  try {
+    if (v.startsWith(IMGX.PRE)) { const id = v.slice(IMGX.PRE.length); if (!IMGX.img.has(id)) await IMGX.fetch([id]); v = IMGX.img.get(id) || ''; if (!v) throw new Error('Chưa tải được ảnh từ kho'); }
+    await MODL.load('scan'); const src = await SCN.load(await (await fetch(v)).blob());
+    const set = c => { const u = c.toDataURL('image/jpeg', 0.85); box.querySelector('[data-image]').value = u; box.querySelector('[data-ph]').innerHTML = `<img src="${u}">`; set.done = true; };
+    set.done = true;                                       // ảnh đã cắt thẳng khi tải lên: chỉ đọc lại thông tin
+    await IDC.read(kind, src, root, set);
+  } catch (err) { console.warn('IDC.re', err); toast('Không đọc lại được: ' + esc(err.message || err), 'err', 6000); }
+  finally { b.disabled = false; }
+}, true);
+
 /* ===== Zalo Bot: nhân viên nhắn tin cho bot (mã NV, SĐT hoặc họ tên) → tự điền Zalo Chat ID vào hồ sơ; ID đã có thì bỏ qua ===== */
 ZB.autoLink = async function (quiet) {
   if (ZB._al || !ZB.ready(ZB.cfg())) return 0; ZB._al = true;
@@ -12446,14 +12470,14 @@ setTimeout(() => ZB.autoLink(true), 8000); setInterval(() => ZB.autoLink(true), 
       /* việc cần chú ý */
       const W = [], soon = (d, t) => { const n = dl(d); if (n != null && n <= 30) W.push(`<li class="${n < 0 ? 'bad' : 'warn'}">${t}: ${n < 0 ? 'đã hết hạn ' + F.date(d) : 'còn ' + n + ' ngày (' + F.date(d) + ')'}</li>`); };
       if (drv) { soon(e.bangHetHan, 'Giấy phép lái xe'); soon(skH, 'Giấy khám sức khỏe'); soon(thH, 'Thẻ tập huấn nghiệp vụ'); if (!skH) W.push('<li class="warn">Chưa có giấy khám sức khỏe trong lý lịch hành nghề</li>'); }
-      soon(e.hdDen, 'Hợp đồng lao động');
+      soon(e.hdDen, 'Hợp đồng lao động'); soon(e.cccdHetHan, 'Căn cước công dân');
       all.filter(l => l.ngay === today).forEach(l => { try { dhDocWarn(l).forEach(x => W.push(`<li class="bad">Chuyến ${esc(l.gio)}: ${esc(x)}</li>`)); dhTimeWarn(l).forEach(x => W.push(`<li class="warn">Chuyến ${esc(l.gio)}: ${esc(x)}</li>`)); } catch (x) { } });
       if (!e.zaloId) W.push('<li class="info">Chưa liên kết Zalo: nhắn mã nhân viên ' + esc(e.ma || '') + ' cho Zalo Bot của công ty để nhận phiếu lương, thông báo</li>');
       /* Bố cục một trang, không lặp: đầu trang (thông tin người) → việc cần chú ý → chuyến của tôi → giấy tờ cá nhân → phương tiện của tôi */
       const doc = (n, a, b, c, k) => `<tr class="me-row" data-me="${k}" title="Bấm để xem chi tiết"><td><b>${n}</b><div class="muted small">${[a, b].filter(Boolean).join(' · ') || '—'}</div></td><td class="r" style="width:1%;white-space:nowrap">${c || ''} <span class="me-go">›</span></td></tr>`;
       const yr = today.slice(0, 4), cnt = k => { try { return llRecs(e.id, k).filter(x => String(x.ngay || '').startsWith(yr)).length; } catch (x) { return 0; } };
       const rows = [
-        doc('Căn cước công dân', e.cccd ? 'Số ' + esc(e.cccd) : '', e.cccdNgayCap ? 'Cấp ' + F.date(e.cccdNgayCap) + (e.cccdNoiCap ? ' · ' + esc(e.cccdNoiCap) : '') : '', '', 'cccd'),
+        doc('Căn cước công dân', e.cccd ? 'Số ' + esc(e.cccd) : '', e.cccdNgayCap ? 'Cấp ' + F.date(e.cccdNgayCap) + (e.cccdNoiCap ? ' · ' + esc(e.cccdNoiCap) : '') : '', e.cccdHetHan ? st(e.cccdHetHan) : '', 'cccd'),
         drv || e.bangSo || e.bangHang ? doc('Giấy phép lái xe', [e.bangSo && 'Số ' + esc(e.bangSo), e.bangHang && 'Hạng ' + esc(e.bangHang)].filter(Boolean).join(' · '), e.bangHetHan ? 'Hết hạn ' + F.date(e.bangHetHan) : '', e.bangHetHan ? st(e.bangHetHan) : '', 'gplx') : '',
         drv || e.theNVTruoc || th ? doc('Thẻ tập huấn nghiệp vụ', th ? F.date(th.ngay) + (th.donVi ? ' · ' + esc(th.donVi) : '') : (e.theNVTruoc ? 'Đã có ảnh thẻ' : ''), thH ? 'Hạn ' + F.date(thH) : '', thH ? st(thH) : (e.theNVTruoc ? '<span class="badge b-green">Có ảnh</span>' : st('')), 'thenv') : '',
         drv ? doc('Giấy khám sức khỏe', sk ? 'Khám ' + F.date(sk.ngay) + (sk.noi ? ' · ' + esc(sk.noi) : '') : '', skH ? 'Hạn ' + F.date(skH) : '', st(skH), 'sk') : '',
@@ -12519,7 +12543,7 @@ const MED = {
     const P = {
       gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>${(x.th || e.theNVTruoc || (() => { try { return llIsLai(e); } catch (z) { return false; } })()) ? `<div class="med-sec">${ic('shield')} Thẻ tập huấn nghiệp vụ${e.theNVTruoc && Auth.can('lylich', 'add') ? `<button class="btn sm" style="margin-left:auto" data-thr>${ic('sparkle')} Đọc từ ảnh thẻ</button>` : ''}</div><div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Nội dung', x.th ? esc(x.th.noiDung || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ tập huấn (mặt trước)', e.theNVTruoc)}</div>` : ''}`],
       thenv: ['Thẻ nghiệp vụ lái xe', `<div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ nghiệp vụ (mặt trước)', e.theNVTruoc)}</div>`],
-      cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số CCCD', esc(e.cccd || ''))}${v('Họ và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Địa chỉ thường trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
+      cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số định danh cá nhân', esc(e.cccd || ''))}${v('Họ, chữ đệm và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Quốc tịch', esc(e.cccdQuocTich || ''))}${v('Có giá trị đến', e.cccdHetHan ? d(e.cccdHetHan) : '')}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Quê quán / Nơi đăng ký khai sinh</span><b>${esc(e.cccdQueQuan || '—')}</b></div><div class="med-full"><span>Nơi thường trú / Nơi cư trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Đặc điểm nhân dạng</span><b>${esc(e.cccdDacDiem || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
       sk: ['Giấy khám sức khỏe', `<div class="med-kv">${v('Lần khám gần nhất', x.sk ? d(x.sk.ngay) : '')}${v('Nơi khám', x.sk ? esc(x.sk.noi || '') : '')}${v('Tình trạng sức khỏe', x.sk ? esc(x.sk.tt || '') : '')}${v('Hạn giấy khám', x.skH ? d(x.skH) + ' ' + x.st(x.skH) : '')}</div><div class="med-h">Lịch sử khám sức khỏe</div>${hist('sk', [['ngay', 'Ngày khám', 'date'], ['noi', 'Nơi khám'], ['tt', 'Tình trạng'], ['hetHan', 'Hạn', 'date']])}`],
       th: ['Tập huấn nghiệp vụ', `<div class="med-kv">${v('Lần gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-h">Lịch sử tập huấn</div>${hist('th', [['ngay', 'Thời gian', 'date'], ['noiDung', 'Nội dung'], ['donVi', 'Đơn vị'], ['hetHan', 'Hạn thẻ', 'date']])}`],
       hd: ['Hợp đồng lao động', `<div class="med-kv">${v('Số hợp đồng', esc(e.soHD || ''))}${v('Loại hợp đồng', esc(e.loaiHD || ''))}${v('Từ ngày', d(e.hdTu))}${v('Đến ngày', e.hdDen ? d(e.hdDen) + ' ' + x.st(e.hdDen) : (e.hdTu ? 'Không thời hạn' : ''))}${v('Chức vụ', esc(e.chucVu || ''))}${v('Phòng ban', esc(e.phongBan || ''))}${v('Lương CK (tháng)', m(e.luongCB))}${e.moTaCV ? `<div class="med-full"><span>Mô tả công việc</span><b style="white-space:pre-line;font-weight:500">${esc(e.moTaCV)}</b></div>` : ''}</div><div class="med-act"><button class="btn pri" data-hdv>${ic('file')} Xem nội dung hợp đồng</button></div>`],
