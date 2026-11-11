@@ -11,7 +11,7 @@ const vDH = {
     const TR = T.filter(l => curL.includes(dhGrp(l.tuyen))), gios = [...new Set([...TR.map(l => l.gio), ...GC.filter(g => curL.includes(dhGrp(g.tuyen))).map(g => g.gio)])].sort(), nHid = 0, routes = curL.flatMap(g => allR.filter(r => dhGrp(r) === g).sort((a, b) => (a.toUpperCase() === g ? -1 : 0) - (b.toUpperCase() === g ? -1 : 0)));
     const used = {}; T.forEach(l => { if (l.xeId) used[l.xeId] = (used[l.xeId] || 0) + 1; });
     const veh = DB.vehicles.filter(v => !v.ngung);
-    const chip = l => { const v = lcXe(l), e = lcEmp(l), n = dvBook(l.id).length, c = dvCap(l), wn = dhDocWarn(l), wt = dhTimeWarn(l), wk = (wn.length ? `<span class="dx-wn" title="Giấy tờ hết hạn (NĐ 158/2024, Điều 11 khoản 4):\n• ${esc(wn.join('\n• '))}">⚠ ${wn.length}</span>` : '') + (wt.length ? `<span class="dx-wn dx-wt" title="Thời gian lái xe (NĐ 158/2024, Điều 11 khoản 5; Luật TTATGTĐB Điều 64):\n• ${esc(wt.join('\n• '))}">⏱ ${wt.length}</span>` : ''), lk = !(l.laiXe || l.khoa) || !Auth.can('dieuhanh', 'edit') ? '' : l.khoa ? (lcAdmin() ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Chuyến đang khóa: chỉ Admin thấy tên lái xe. Bấm để mở khóa cho mọi người cùng thấy">${ic('lock')}</span>` : `<span class="dx-lk" title="Chuyến đã khóa, chỉ Admin xem và mở khóa được">${ic('lock')}</span>`) : lcCan(l) ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Bấm để khóa chuyến: ẩn tên lái xe, chỉ Admin thấy">${ic('unlock')}</span>` : ''; return `<button class="dx-chip ${n >= c ? 'full' : ''} ${lcGone(l) ? 'gone' : ''}" data-act="dhChip" data-id="${l.id}" title="Bấm để sửa nhanh xe, lái xe, hủy chuyến hoặc mở sơ đồ ghế">${lk}${wk}<b>${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><span class="nm">${e.ten ? avatarHTML(e.ten, e.avatar, 'dx-av') + esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</span><span class="st"><span class="n">${n}/${c}</span> vé${lcGone(l) ? '<em>Đã xuất bến</em>' : ''}</span></button>`; };
+    const chip = l => { const v = lcXe(l), e = lcEmp(l), n = dvBook(l.id).length, c = dvCap(l), wn = dhDocWarn(l), wt = dhTimeWarn(l), wk = (wn.length ? `<span class="dx-wn" title="Giấy tờ hết hạn (NĐ 158/2024, Điều 11 khoản 4):\n• ${esc(wn.join('\n• '))}">⚠ ${wn.length}</span>` : '') + (wt.length ? `<span class="dx-wn dx-wt" title="Thời gian lái xe (NĐ 158/2024, Điều 11 khoản 5; Luật TTATGTĐB Điều 64):\n• ${esc(wt.join('\n• '))}">⏱ ${wt.length}</span>` : ''), lk = !(l.laiXe || l.khoa) || !Auth.can('dieuhanh', 'edit') ? '' : l.khoa ? (lcAdmin() ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Chuyến đang khóa: chỉ Admin thấy tên lái xe. Bấm để mở khóa cho mọi người cùng thấy">${ic('lock')}</span>` : `<span class="dx-lk" title="Chuyến đã khóa, chỉ Admin xem và mở khóa được">${ic('lock')}</span>`) : lcCan(l) ? `<span class="dx-lk" role="button" data-act="dhUnlock" data-id="${l.id}" title="Bấm để khóa chuyến: ẩn tên lái xe, chỉ Admin thấy">${ic('unlock')}</span>` : ''; return `<button class="dx-chip ${n >= c ? 'full' : ''} ${lcGone(l) ? 'gone' : ''}" data-act="dhChip" data-id="${l.id}" data-lx="${lcHide(l) ? '' : esc([l.laiXe, l.laiXe2].filter(Boolean).join(' '))}" data-xe="${esc(l.xeId || '')}" title="Bấm để sửa nhanh xe, lái xe, hủy chuyến hoặc mở sơ đồ ghế. Rê chuột (điện thoại: nhấn giữ) vào tên lái xe hoặc biển số để xem các giờ người / xe đó chạy trong ngày">${lk}${wk}<b class="bk">${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><span class="nm">${e.ten ? avatarHTML(e.ten, e.avatar, 'dx-av') + esc(e.ten) : '<span class="un">Chưa gán lái xe</span>'}</span><span class="st"><span class="n">${n}/${c}</span> vé${lcGone(l) ? '<em>Đã xuất bến</em>' : ''}</span></button>`; };
     const lbl = dhMode === 'group' ? 'nhóm tuyến đường' : 'tuyến đường', allL = dhMode === 'group' ? 'Tất cả các nhóm tuyến đường' : 'Tất cả các tuyến đường';
     const selBox = `<div class="dx-chips">${allG.length > 1 ? `<button type="button" class="dx-cp all ${curL.length === allG.length ? 'on' : ''}" data-act="dhAll" title="${allL}">Tất cả</button>` : ''}${allG.map(g => `<button type="button" class="dx-cp ${curL.includes(g) ? 'on' : ''}" data-act="dhG" data-g="${esc(g)}" title="Bấm để chọn / bỏ ${lbl} này">${esc(g)}</button>`).join('') || `<span class="muted">Chưa có ${lbl}</span>`}</div>`;
     const nT = TR.filter(l => l.laiXe).length, nDay = T.filter(l => l.laiXe).length, nNo = TR.filter(l => !l.laiXe).length, nMiss = routes.reduce((a, r) => a + gios.filter(g => GC.some(x => x.tuyen === r && x.gio === g) && !TR.some(l => l.tuyen === r && l.gio === g)).length, 0);
@@ -42,3 +42,41 @@ vDH.goNext = function (el) {
 vDH._enter = App.cur !== 'dieuhanh' || true;
 addCSS(`.dx thead th.dx-next{background:var(--p)!important;color:#fff!important;border-radius:8px 8px 0 0}`);
 MODL.def('dieuhanh', vDH);
+
+/* Tô sáng: rê chuột (điện thoại: nhấn giữ) vào tên lái xe hoặc biển số → nổi bật mọi chuyến trong ngày của người / xe đó, kèm bảng tóm tắt giờ chạy */
+const dhHL = {
+  on(el, kind, id, pin) {
+    const w = el.querySelector('.dx-wrap'); if (!w || !id) return;
+    dhHL.off(el, true); dhHL.cur = { kind, id, pin };
+    w.classList.add('dx-focus');
+    w.querySelectorAll('.dx-chip').forEach(c => { const v = kind === 'lx' ? (c.dataset.lx || '').split(' ') : [c.dataset.xe]; c.classList.toggle('dx-hl', v.includes(id)); });
+    const day = lcDay(), L = DB.lichchay.filter(l => l.ngay === day && !lcHide(l) && (kind === 'lx' ? [l.laiXe, l.laiXe2].includes(id) : l.xeId === id)).sort((a, b) => String(a.gio).localeCompare(String(b.gio)));
+    const who = kind === 'lx' ? ((DB.employees.find(e => e.id === id) || {}).ten || '') : ((DB.vehicles.find(v => v.id === id) || {}).bks || '');
+    const m = t => { const [h, mi] = String(t || '0:0').split(':').map(Number); return h * 60 + (mi || 0); }, hm = x => Math.floor(x / 60) + 'g' + String(x % 60).padStart(2, '0');
+    const rows = L.map((l, i) => { const o = kind === 'lx' ? ((lcXe(l) || {}).bks || 'chưa gán xe') : (lcEmp(l).ten || 'chưa gán lái xe'), gap = i ? m(l.gio) - m(L[i - 1].gio) : null;
+      return `${gap !== null ? `<span class="dx-gap${gap < 60 ? ' bad' : ''}">${gap <= 0 ? 'trùng giờ' : 'cách ' + hm(gap)}</span>` : ''}<span class="dx-hlt"><b>${esc(l.gio)}</b> ${esc(dhAbbr(l.tuyen))} · ${esc(o)}</span>`; }).join('');
+    let bar = el.querySelector('.dx-hlbar'); if (!bar) { bar = document.createElement('div'); bar.className = 'dx-hlbar'; el.appendChild(bar); }
+    bar.innerHTML = `<div class="dx-hlh"><b>${esc(who)}</b> · ${L.length} chuyến ngày ${F.date(day)}${L.length > 1 ? ` · từ ${esc(L[0].gio)} đến ${esc(L[L.length - 1].gio)}` : ''}${pin ? '<button type="button" class="dx-hlx" aria-label="Đóng">×</button>' : ''}</div><div class="dx-hlr">${rows}</div>`;
+  },
+  off(el, keep) { const w = el.querySelector('.dx-wrap'); if (w) { w.classList.remove('dx-focus'); w.querySelectorAll('.dx-hl').forEach(c => c.classList.remove('dx-hl')); } if (!keep) { const b = el.querySelector('.dx-hlbar'); if (b) b.remove(); dhHL.cur = null; } },
+  bind(el) {
+    if (el._dxHl) return; el._dxHl = 1;
+    const tgt = e => { const c = e.target.closest && e.target.closest('.dx-chip'); if (!c) return null; if (e.target.closest('.nm')) return c.dataset.lx ? ['lx', c.dataset.lx.split(' ')[0]] : null; if (e.target.closest('.bk')) return c.dataset.xe ? ['xe', c.dataset.xe] : null; return null; };
+    let tm = null, swallow = false, lt = 0; const mouse = () => Date.now() - lt > 800;   // bỏ qua sự kiện chuột giả sau khi chạm màn hình
+    el.addEventListener('mouseover', e => { if (!mouse() || (dhHL.cur && dhHL.cur.pin)) return; const t = tgt(e); if (t && !(dhHL.cur && dhHL.cur.kind === t[0] && dhHL.cur.id === t[1])) dhHL.on(el, t[0], t[1]); });
+    el.addEventListener('mouseout', e => { if (!mouse() || !dhHL.cur || dhHL.cur.pin) return; const n = e.relatedTarget ? tgt({ target: e.relatedTarget }) : null; if (!n || n[0] !== dhHL.cur.kind || n[1] !== dhHL.cur.id) dhHL.off(el); });
+    el.addEventListener('touchstart', e => { lt = Date.now(); const t = tgt(e); clearTimeout(tm); if (!t) return; tm = setTimeout(() => { swallow = true; dhHL.on(el, t[0], t[1], true); if (navigator.vibrate) try { navigator.vibrate(20); } catch (x) { } }, 450); }, { passive: true });
+    ['touchend', 'touchmove', 'touchcancel'].forEach(k => el.addEventListener(k, () => clearTimeout(tm), { passive: true }));
+    el.addEventListener('contextmenu', e => { if (tgt(e)) e.preventDefault(); });
+    el.addEventListener('click', e => {
+      if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); return; }
+      if (e.target.closest('.dx-hlx') || (dhHL.cur && dhHL.cur.pin && !e.target.closest('.dx-hlbar'))) { dhHL.off(el); if (e.target.closest('.dx-hlx')) { e.preventDefault(); e.stopPropagation(); } }
+    }, true);
+  }
+};
+addCSS(`.dx-chip{transition:opacity .15s,box-shadow .15s}.dx-chip .nm,.dx-chip .bk{cursor:help}.dx-focus .dx-chip{opacity:.28}.dx-focus .dx-chip.dx-hl{opacity:1;box-shadow:0 0 0 3px #f59e0b,0 4px 14px rgba(245,158,11,.45);position:relative;z-index:1}
+.dx-hlbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:60;max-width:min(760px,calc(100vw - 24px));background:#1e293b;color:#fff;border-radius:12px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.3);font-size:13px;pointer-events:auto}
+.dx-hlh{display:flex;align-items:center;gap:6px;margin-bottom:4px}.dx-hlx{margin-left:auto;background:none;border:0;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+.dx-hlr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}.dx-hlt{background:#f59e0b;color:#1e293b;border-radius:6px;padding:2px 7px;white-space:nowrap}.dx-gap{font-size:11px;color:#cbd5e1}.dx-gap.bad{color:#fca5a5;font-weight:700}
+@media(min-width:900px){.dx-hlbar{bottom:16px}}`);
+{ const r2 = vDH.render; vDH.render = function (el) { r2.call(this, el); dhHL.cur = null; dhHL.bind(el); }; }
