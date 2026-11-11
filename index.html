@@ -4172,6 +4172,14 @@ const dvLog = {
 };
 addCSS(`.vlog{margin-top:14px;border:1px solid #d4ebfa;border-radius:12px;overflow:hidden;background:#fafcfe}.vlog-h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#eaf6fe;font-size:13px}.vlog-i{display:grid;grid-template-columns:96px 110px 1fr;gap:8px;padding:7px 12px;border-top:1px solid #eaf1f7;font-size:12.5px;line-height:1.4}.vlog-i span{color:#64748b}.vlog-i em{font-style:normal;color:#0f172a;word-break:break-word}
 @media(max-width:900px){.vlog-i{grid-template-columns:1fr;gap:1px}.vlog-i span{font-size:11.5px}}`);
+/* điểm đón/trả mặc định của chuyến: chặng toàn tuyến trong bảng giá, không có thì 2 đầu lộ trình / 2 đầu tên tuyến */
+function dvEnds(trip) {
+  const bg = bgFind(trip.tuyen, trip.ngay), L = LT.get(trip.tuyen), T = String(trip.tuyen || '').split(/\s*(?:⇄|<>|->|→|–|-)\s*/).map(x => x.trim()).filter(Boolean);
+  const nm = x => String(x || '').trim(), di = L.length ? nm(L[0].ten) : nm(T[0]), den = L.length ? nm(L[L.length - 1].ten) : nm(T[T.length - 1]);
+  const ch = bg && bg.chang.find(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(di) && bgNorm(c.tra) === bgNorm(den));
+  return { di, den, ch: ch ? bg.chang.indexOf(ch) : -1 };
+}
+const dvEndsFill = (trip, d) => { const E = dvEnds(trip); if (!String(d.diemDon || '').trim()) d.diemDon = E.di; if (!String(d.diemTra || '').trim()) d.diemTra = E.den; };
 function dvForm(trip, b, seat, one) {
   const isNew = !b, G = isNew ? [] : (one ? [b] : dvGrp(b)), grp = G.length > 1, inG = !isNew && one && dvGrp(b).length > 1;
   if (isNew && !Auth.guard('lichchay', 'add')) return;
@@ -4186,7 +4194,7 @@ function dvForm(trip, b, seat, one) {
       { key: 'sdt', label: 'Số điện thoại', type: 'tel', required: isNew, ph: isNew ? 'Gõ vài số cuối hoặc cả số' : '09xxxxxxxx' }, { key: 'ten', label: 'Tên khách', ph: 'KHÁCH LẺ' },
       ...(grp ? [] : [{ key: 'ghe', label: 'Số ghế', type: 'select', options: dvSeatList(trip).filter(s => !used.has(s) || (b && b.ghe === s)).map(s => ({ value: s, label: s })) }]),
       { key: 'tt', label: 'Tình trạng', type: 'select', options: [{ value: 'giu', label: 'Giữ chỗ (chưa thu tiền)' }, { value: 'tra', label: 'Đã thanh toán' }] },
-      { key: 'diemDon', label: 'Điểm đón', list: [...new Set([...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', list: [...new Set([...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
+      { key: 'diemDon', label: 'Điểm đón', ph: 'Để trống = ' + (dvEnds(trip).di || 'điểm đầu tuyến'), list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', ph: 'Để trống = ' + (dvEnds(trip).den || 'điểm cuối tuyến'), list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
       { key: 'gia', label: grp ? 'Giá vé mỗi ghế' : 'Giá vé', type: 'money' }, { key: 'ghiChu', label: 'Ghi chú vé' }, ...DV_XF
     ],
     saveText: isNew ? 'Đặt vé' : grp ? 'Lưu ' + G.length + ' vé' : 'Lưu vé',
@@ -4195,7 +4203,7 @@ function dvForm(trip, b, seat, one) {
       if (!grp && !d.ghe) { toast('Chuyến đã hết ghế trống', 'err'); return false; }
       if (!grp && used.has(d.ghe)) { toast('Ghế ' + d.ghe + ' đã có người đặt', 'err'); return false; }
       if (isNew || d.sdt) { const ph = dvPhone(d.sdt); if (!ph) { toast('Số điện thoại không hợp lệ (VD: 0973460763)', 'err'); return false; } d.sdt = ph; }
-      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d);
+      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d); if (isNew) dvEndsFill(trip, d);
       if (grp) { G.forEach(x => { const ch = dvLog.diff(x, d); if (ch.length) (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') + ' (sửa cả nhóm)' }); Object.assign(x, d); }); App.changed(); toast('Đã lưu ' + G.length + ' vé: ' + dvSeatsTxt(G), 'ok'); return; }
       if (isNew) { const nb = { id: uid(), chuyen: trip.id, nguoiBan: (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d }; DB.datve.push(nb); dvAutoGrp(trip.id, [nb]); } else { const ch = dvLog.diff(b, d); if (ch.length) (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') }); Object.assign(b, d); }
       App.changed(); toast('Đã lưu vé ghế ' + d.ghe, 'ok');
@@ -4451,7 +4459,7 @@ function dvFormMulti(trip, seats) {
       { key: 'sdt', label: 'Số điện thoại', type: 'tel', required: true, ph: 'Gõ vài số cuối hoặc cả số' }, { key: 'ten', label: 'Tên khách', ph: 'KHÁCH LẺ' },
       { key: 'tt', label: 'Tình trạng', type: 'select', options: [{ value: 'giu', label: 'Giữ chỗ (chưa thu tiền)' }, { value: 'tra', label: 'Đã thanh toán' }] },
       { key: 'gia', label: 'Giá vé mỗi ghế', type: 'money' },
-      { key: 'diemDon', label: 'Điểm đón', list: [...new Set([...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', list: [...new Set([...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
+      { key: 'diemDon', label: 'Điểm đón', ph: 'Để trống = ' + (dvEnds(trip).di || 'điểm đầu tuyến'), list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', ph: 'Để trống = ' + (dvEnds(trip).den || 'điểm cuối tuyến'), list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
       { key: 'ghiChu', label: 'Ghi chú vé' }, ...DV_XF
     ],
     saveText: `Đặt ${seats.length} vé`,
@@ -4460,7 +4468,7 @@ function dvFormMulti(trip, seats) {
       const ph = dvPhone(d.sdt); if (!ph) { toast('Số điện thoại không hợp lệ (VD: 0973460763)', 'err'); return false; } d.sdt = ph;
       const used = new Set(dvBook(trip.id).map(x => x.ghe)), bad = seats.filter(g => used.has(g));
       if (bad.length) { toast('Ghế ' + bad.join(', ') + ' đã có người đặt', 'err'); return false; }
-      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d);
+      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d); dvEndsFill(trip, d);
       const nb = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
       const nhom = DV.clone && DV.clone.nhom && DV.clone.chuyen === trip.id ? DV.clone.nhom : seats.length > 1 ? uid() : undefined;
       const nw = seats.map(g => ({ id: uid(), chuyen: trip.id, nguoiBan: nb, tg, ...d, ghe: g, ...(nhom ? { nhom } : {}) })); DB.datve.push(...nw); dvAutoGrp(trip.id, nw);
@@ -4517,6 +4525,7 @@ const KH = {
     const $n = el.querySelector('[name="ten"]'), $a = el.querySelector('[name="diemDon"]'), $z = el.querySelector('[name="diemTra"]'), $g = el.querySelector('[name="ghe"]');
     const idx = KH.index(), all = Object.values(idx);
     const box = document.createElement('div'); box.className = 'field full kh-box'; $p.closest('label').after(box);
+    $p.setAttribute('autocomplete', 'off'); $p.setAttribute('autocorrect', 'off'); $p.removeAttribute('list');   // tắt gợi ý của bàn phím/trình duyệt (số đã lưu trên máy), dùng gợi ý khách của app
     let sug = [], done = '';
     const fire = x => { x.dispatchEvent(new Event('input', { bubbles: true })); };
     const card = k => {
@@ -4558,8 +4567,10 @@ const KH = {
     const pick = p => { $p.value = p; sug = []; show(); ($n && !$n.value.trim() ? $n : $p).focus(); };
     $p.addEventListener('input', show);
     $p.addEventListener('keydown', e => { if (e.key === 'Enter' && sug.length && !dvPhone($p.value)) { e.preventDefault(); e.stopPropagation(); pick(sug[0].sdt); } });
+    box.addEventListener('pointerdown', e => { const o = e.target.closest('[data-kh]'); if (!o) return; e.preventDefault(); pick(o.dataset.kh); });   // chạm là chọn ngay, không để bàn phím đóng làm lệch chỗ bấm
+    box.addEventListener('mousedown', e => { if (e.target.closest('[data-kh]')) e.preventDefault(); });
     box.addEventListener('click', e => {
-      const o = e.target.closest('[data-kh]'); if (o) return pick(o.dataset.kh);
+      const o = e.target.closest('[data-kh]'); if (o) { if (dvPhone($p.value) !== o.dataset.kh) pick(o.dataset.kh); return; }
       const s = e.target.closest('[data-khseat]'); if (s && $g) { $g.value = s.dataset.khseat; $g.dispatchEvent(new Event('change', { bubbles: true })); done = ''; show(); }
     });
     if ($p.value) show();
@@ -5710,12 +5721,15 @@ function bgBind(m, trip, auto) {
   if (!g || !a || !z) return;
   const hint = document.createElement('small'); hint.className = 'bg-hint'; g.parentNode.appendChild(hint);
   const bg = bgFind(trip.tuyen, trip.ngay); let ch = null;
-  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); ch.value = i >= 0 ? String(i) : ''; };
+  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); ch.value = i >= 0 ? String(i) : (!a.value.trim() && !z.value.trim() && ch.dataset.def) ? ch.dataset.def : ''; };
   if (bg && bg.chang.some(c => c.don || c.tra)) {
     const lab = document.createElement('label'); lab.className = 'field full';
-    lab.innerHTML = `<span>Chặng (chọn để tự điền điểm đón, điểm trả và giá)</span><select class="inp" id="bgCh"><option value="">(Chọn chặng)</option>${bg.chang.map((c, i) => (c.don || c.tra) ? `<option value="${i}">${esc(c.don)} → ${esc(c.tra)} · ${F.money(c.gia)}</option>` : '').join('')}</select>`;
-    a.closest('label').before(lab); ch = lab.querySelector('select');
-    ch.onchange = () => { const c = bg.chang[+ch.value]; if (!c || ch.value === '') return; a.value = c.don; z.value = c.tra; g.value = F.money(c.gia); hint.textContent = 'Giá theo bảng giá · chặng ' + c.don + ' → ' + c.tra; };
+    const E = dvEnds(trip), all = bg.chang.find(c => !c.don && !c.tra), defV = all ? 'all' : E.ch >= 0 ? String(E.ch) : '';
+    lab.innerHTML = `<span>Chặng (mặc định toàn tuyến · chọn chặng khác để tự điền điểm đón, điểm trả và giá)</span><select class="inp" id="bgCh">${all ? `<option value="all">Toàn tuyến${E.di && E.den ? ': ' + esc(E.di) + ' → ' + esc(E.den) : ''} · ${F.money(all.gia)}</option>` : defV ? '' : '<option value="">(Chọn chặng)</option>'}${bg.chang.map((c, i) => (c.don || c.tra) ? `<option value="${i}">${esc(c.don)} → ${esc(c.tra)} · ${F.money(c.gia)}${String(i) === defV ? ' (mặc định)' : ''}</option>` : '').join('')}</select>`;
+    a.closest('label').before(lab); ch = lab.querySelector('select'); ch.dataset.def = defV;
+    ch.onchange = () => {
+      if (ch.value === 'all') { a.value = ''; z.value = ''; g.value = F.money(all.gia); hint.textContent = 'Giá theo bảng giá · toàn tuyến'; [a, z].forEach(x => x.dispatchEvent(new Event('change', { bubbles: true }))); return; }
+      const c = bg.chang[+ch.value]; if (!c || ch.value === '') return; a.value = c.don; z.value = c.tra; g.value = F.money(c.gia); hint.textContent = 'Giá theo bảng giá · chặng ' + c.don + ' → ' + c.tra; };
   }
   const run = force => {
     const r = bgPrice(trip.tuyen, trip.ngay, a.value, z.value);
@@ -13837,7 +13851,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T06:35';
+const APP_BUILD = '2026-11-12T06:50';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
