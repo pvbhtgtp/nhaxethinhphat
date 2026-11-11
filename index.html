@@ -5361,7 +5361,7 @@ const dhScan = {
         self.tiles = null;
         if (bm.height > bm.width * 2.2) {   // ảnh chụp màn hình dài: cắt thành nhiều đoạn (chồng mép 8%) để chữ không bị thu quá nhỏ
           const W = Math.min(1200, bm.width), k1 = W / bm.width, H = Math.round(bm.width * 1.5), step = Math.round(H * 0.92), T = [];
-          for (let y = 0; y < bm.height && T.length < 8; y += step) { const h = Math.min(H, bm.height - y), c = document.createElement('canvas'); c.width = W; c.height = Math.round(h * k1); c.getContext('2d').drawImage(bm, 0, y, bm.width, h, 0, 0, c.width, c.height); T.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9))); if (y + h >= bm.height) break; }
+          for (let y = 0; y < bm.height && T.length < 30; y += step) { const h = Math.min(H, bm.height - y), c = document.createElement('canvas'); c.width = W; c.height = Math.round(h * k1); c.getContext('2d').drawImage(bm, 0, y, bm.width, h, 0, 0, c.width, c.height); T.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9))); if (y + h >= bm.height) break; }
           self.tiles = T.filter(Boolean);
         }
         const k = Math.min(1, 1800 / Math.max(bm.width, bm.height)), c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); const bl = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); return bl || f; } catch (e) { return f; }
@@ -5394,10 +5394,33 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
 Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e => e.ten).filter(Boolean))}`;
-      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh… <b data-sec>0</b> giây <span class="small">(thường 5–15 giây)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
+      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(thường 5–15 giây mỗi phần)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
-      try { res = await sample.json(prompt + (self.tiles && self.tiles.length > 1 ? `\nẢnh dài đã được cắt thành ${self.tiles.length} đoạn liên tiếp từ trên xuống (các đoạn chồng mép nhau một chút): gộp lại thành một danh sách, không lặp chuyến ở chỗ chồng mép.` : ''), { images: self.tiles && self.tiles.length > 1 ? self.tiles : self.file, signal: self.ctl.signal, modelTier: 'default', cache: false }).finally(() => clearInterval(tick)); toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây`, 'ok', 3000); }
-      catch (e) { const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
+      // Ảnh dài: đọc từng nhóm 2 đoạn, lần lượt, mỗi lần tối đa 90 giây (thử lại 1 lần) — không để treo vô hạn
+      const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [], TO = 90000;
+      for (let i = 0; i < parts.length; i += 2) G.push(parts.slice(i, i + 2));
+      const one = async (imgs, hint) => {
+        for (let a = 0; a < 2; a++) {
+          const c = new AbortController(), tm = setTimeout(() => c.abort(), TO), up = () => c.abort(); self.ctl.signal.addEventListener('abort', up);
+          try { return await sample.json(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: c.signal, modelTier: 'default', cache: false }); }
+          catch (e) { if (self.ctl.signal.aborted) throw e; if (a || !(e && (e.code === 'cancelled' || e.code === 'network' || e.code === 'invalid_json'))) { if (e && e.code === 'cancelled') e.code = 'timeout'; throw e; } }
+          finally { clearTimeout(tm); self.ctl.signal.removeEventListener('abort', up); }
+        }
+      };
+      try {
+        res = []; let lastRoute = '', fail = 0, err = null;
+        const seen = new Set(), key = r => [dhNorm(dhFindRoute(r.tuyen, routes) || r.tuyen), dhTime(r.gio), dhNorm(r.bks), dhNorm(r.laiXe)].join('|');
+        for (let g = 0; g < G.length; g++) {
+          const pg = out.querySelector('[data-pg]'); if (pg) pg.textContent = G.length > 1 ? ` · phần ${g + 1}/${G.length}` : '';
+          const hint = G.length > 1 ? `\nĐây là phần ${g + 1}/${G.length} của một ảnh chụp màn hình dài, cắt từ trên xuống (các đoạn chồng mép nhau một chút)${G[g].length > 1 ? `, gồm ${G[g].length} đoạn liên tiếp: gộp lại, không lặp chuyến ở chỗ chồng mép` : ''}.${lastRoute ? ` Các chuyến ở đầu phần này, trước tiêu đề tuyến mới đầu tiên, thuộc tuyến "${lastRoute}".` : ''}` : '';
+          let r; try { r = await one(G[g], hint); } catch (e) { if (self.ctl.signal.aborted) throw e; fail++; err = e; continue; }
+          (Array.isArray(r) ? r : []).forEach(x => { if (!x || typeof x !== 'object') return; if (!x.tuyen && lastRoute) x.tuyen = lastRoute; if (x.tuyen) lastRoute = x.tuyen; const k = key(x); if (seen.has(k)) return; seen.add(k); res.push(x); });
+        }
+        clearInterval(tick);
+        if (!res.length && err) throw err;
+        toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây` + (fail ? ` · ${fail}/${G.length} phần không đọc được, kiểm tra lại các chuyến thiếu` : ''), fail ? 'err' : 'ok', fail ? 7000 : 3000);
+      }
+      catch (e) { clearInterval(tick); const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'timeout' ? 'AI phản hồi quá lâu (quá 90 giây), hãy thử lại hoặc cắt ảnh ngắn hơn.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
       const canAdd = Auth.can('lichchay', 'add');
