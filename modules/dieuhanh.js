@@ -167,13 +167,14 @@ addCSS(`.db{display:flex;flex-direction:column;gap:8px}.db-s{font-weight:800;col
   r4.call(this, el);
   if (el._dcHold) return; el._dcHold = 1;
   const tile = e => { const c = e.target.closest && e.target.closest('.dc-t[data-id],.dx-chip[data-id]'); if (!c) return null; const a = e.target.closest('[data-act]'); return a && a !== c ? null : c; };   // nút riêng trong ô (khóa…) vẫn chạy bình thường
-  const edit = id => ACT.dhChip({ id });
+  let lastE = 0, lastT = 0;   // chống mở 2 cửa sổ chồng nhau (Android nhấn giữ bắn cả contextmenu lẫn touchend → bấm Lưu đóng 1 cái, còn 1 cái nằm dưới)
+  const edit = id => { const n = Date.now(); if (n - lastE < 1200) return; lastE = n; ACT.dhChip({ id }); };
   let t = null, sw = false;
   let hid = '';   // giữ đủ lâu: rung báo, NHẢ TAY mới mở cửa sổ sửa (tránh ngón tay đang giữ rơi vào nút trong cửa sổ, bôi chọn chữ)
-  el.addEventListener('touchstart', e => { const c = tile(e); clearTimeout(t); hid = ''; sw = false; if (!c) return; t = setTimeout(() => { sw = true; hid = c.dataset.id; c.classList.add('dc-hold'); if (navigator.vibrate) try { navigator.vibrate(25); } catch (x) { } }, 450); }, { passive: true });
+  el.addEventListener('touchstart', e => { lastT = Date.now(); const c = tile(e); clearTimeout(t); hid = ''; sw = false; if (!c) return; t = setTimeout(() => { sw = true; hid = c.dataset.id; c.classList.add('dc-hold'); if (navigator.vibrate) try { navigator.vibrate(25); } catch (x) { } }, 450); }, { passive: true });
   el.addEventListener('touchend', e => { clearTimeout(t); if (!hid) return; const id = hid; hid = ''; el.querySelectorAll('.dc-hold').forEach(x => x.classList.remove('dc-hold')); if (e.cancelable) e.preventDefault(); setTimeout(() => edit(id), 30); });
   ['touchmove', 'touchcancel'].forEach(k => el.addEventListener(k, () => { clearTimeout(t); if (k === 'touchcancel' || !hid) { hid = ''; el.querySelectorAll('.dc-hold').forEach(x => x.classList.remove('dc-hold')); } }, { passive: true }));
   el.addEventListener('click', e => { if (sw) { sw = false; e.preventDefault(); e.stopPropagation(); return; } const c = tile(e); if (!c) return; e.preventDefault(); e.stopPropagation(); DC.brief(c.dataset.id); }, true);
-  el.addEventListener('contextmenu', e => { const c = tile(e); if (!c) return; e.preventDefault(); edit(c.dataset.id); });   // máy tính: chuột phải = sửa nhanh
+  el.addEventListener('contextmenu', e => { const c = tile(e); if (!c) return; e.preventDefault(); if (Date.now() - lastT < 2500) return; edit(c.dataset.id); });   // cảm ứng: đã xử lý ở touchend   // máy tính: chuột phải = sửa nhanh
   el.addEventListener('selectstart', e => { if (e.target.closest && e.target.closest('.dc-t,.dx-chip')) e.preventDefault(); });
 }; }
