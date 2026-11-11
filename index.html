@@ -5347,6 +5347,14 @@ const dhFindRoute = (txt, routes) => { const n = dhNorm(txt); if (!n) return '';
 const dhFindVeh = txt => { const n = dhNorm(txt); if (!n) return null; const V = DB.vehicles; let c = V.filter(v => dhNorm(v.bks) === n); if (c.length === 1) return c[0]; const d = n.replace(/[A-Z]/g, ''); if (d.length >= 4) { c = V.filter(v => dhNorm(v.bks).replace(/[A-Z]/g, '').endsWith(d.slice(-5)) || d.endsWith(dhNorm(v.bks).replace(/[A-Z]/g, '').slice(-5))); if (c.length === 1) return c[0]; } return null; };
 const dhFindEmp = txt => { const n = dhNorm(txt); if (!n) return null; const E = DB.employees; let c = E.filter(e => dhNorm(e.ten) === n); if (c.length === 1) return c[0]; const w = String(txt).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().split(/\s+/).filter(Boolean); if (!w.length) return null; c = E.filter(e => { const nm = dhNorm(e.ten); return w.every(x => nm.includes(dhNorm(x))); }); if (c.length === 1) return c[0]; const last = w[w.length - 1]; c = E.filter(e => { const p = String(e.ten || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().trim().split(/\s+/); return p[p.length - 1] === last; }); return c.length === 1 ? c[0] : null; };
 addCSS('.sc-drop{position:relative}.sc-drop>svg{width:30px;height:30px;display:block;margin:0 auto 6px}.sc-cam svg{width:16px;height:16px;vertical-align:-3px}.modal-f [hidden]{display:none!important}.sc-in{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.sc-drop{border:2px dashed #94a3b8;border-radius:10px;padding:18px;text-align:center;color:#475569;cursor:pointer;background:#f8fafc}.sc-drop.on{border-color:#2563eb;background:#eff6ff}.sc-prev{max-width:100%;max-height:220px;border-radius:8px;margin-top:10px;border:1px solid #d0d5dd}.sc-tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}.sc-tb th,.sc-tb td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left}.sc-tb th{background:#f2f4f7}.sc-bad{color:#dc2626}.sc-ok{color:#15803d}');
+/* Kiểm tra logic: cùng một giờ, một xe không thể chạy 2 chuyến, một lái xe không thể lái 2 xe */
+const dhClash = (rows, dayOf) => {
+  const K = new Map(), add = (k, r) => { if (!K.has(k)) K.set(k, []); K.get(k).push(r); };
+  rows.forEach(r => { if (!r.ok || !r.v || !r.e) return; const d = dayOf(r); add('v|' + d + '|' + r.gio + '|' + r.v.id, r); add('e|' + d + '|' + r.gio + '|' + r.e.id, r); });
+  K.forEach((L, k) => { if (L.length < 2) return; L.forEach(r => { r.ok = false; r.st = k[0] === 'v' ? 'Trùng: xe này có 2 chuyến cùng giờ, kiểm tra lại' : 'Trùng: lái xe này có 2 chuyến cùng giờ, kiểm tra lại'; }); });
+  rows.forEach(r => { if (!r.ok) return; const d = dayOf(r), o = DB.lichchay.find(l => l !== r.trip && l.ngay === d && l.gio === r.gio && (l.xeId === r.v.id || l.laiXe === r.e.id) && !rows.some(x => x.trip === l));
+    if (o) { r.ok = false; r.st = 'Trùng với chuyến ' + (o.tuyen || '') + ' ' + o.gio + ' đã có trong lịch (' + (o.xeId === r.v.id ? 'cùng xe' : 'cùng lái xe') + ')'; } });
+};
 const dhScan = {
   file: null, ctl: null,
   async open() {
@@ -5390,6 +5398,7 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 - "gio": giờ 24h dạng HH:MM.
 - "bks": biển số xe đúng như đọc được (ví dụ 60B-123.45); chuyến chưa có xe thì để chuỗi rỗng.
 - "laiXe": tên lái xe đúng như đọc được, giữ nguyên dấu tiếng Việt; chưa có thì để chuỗi rỗng.
+- Mỗi chuyến phải đọc đủ cả giờ, biển số xe và lái xe của CÙNG một ô; không ghép xe của ô này với lái xe của ô khác.
 - Bỏ qua ô trống. Không bịa dữ liệu, chỗ nào không đọc rõ thì để chuỗi rỗng.
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
@@ -5447,21 +5456,23 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         const tuyen = dhFindRoute(r.tuyen, routes), gio = dhTime(r.gio), v = dhFindVeh(r.bks), e = dhFindEmp(r.laiXe);
         const trip = tuyen && gio ? T.find(l => l.tuyen === tuyen && l.gio === gio) : null;
         let st, ok = false;
-        if (r._bad) st = 'Các AI đọc không thống nhất ' + r._bad.join(', ') + ', nhập tay'; else if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ'; else if (!v && !e) st = 'Không khớp xe / lái xe nào';
+        if (r._bad) st = 'Các AI đọc không thống nhất ' + r._bad.join(', ') + ', nhập tay'; else if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ';
         else if ((r.bks && !v) || (r.laiXe && !e)) st = 'Có ' + [r.bks && !v && 'xe', r.laiXe && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
+        else if (!v || !e) st = (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');   // một chuyến hợp lệ phải đủ cả 3: giờ chạy + lái xe + xe
         else if (trip && !lcCan(trip)) st = 'Chuyến đã khóa (đã xuất bến)'; else if (trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; }
         else if (canAdd) { st = 'Tạo chuyến mới'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
         return { tuyen, gio, v: r._bad && r._bad.includes('xe') ? null : v, e: r._bad && r._bad.includes('lái xe') ? null : e, trip, rb: r.bks || '', rl: r.laiXe || '', st, ok, vt: r._v || '', alt: r._alt || [], hold: !ok && trip };
       });
+      dhClash(self.rows, () => day); self.rows.forEach(r => { if (!r.ok && r.trip) r.hold = r.trip; });
       const cell = (m, raw) => m ? `<span class="sc-ok">${esc(m)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
-      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chữ đỏ là chỗ không khớp danh sách nên sẽ không được điền.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>AI</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="small" title="${esc(r.alt.join('\n'))}">${esc(r.vt)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}${r.alt.length ? `<div class="small muted">${r.alt.map(esc).join('<br>')}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chỉ dòng đủ giờ chạy + lái xe + xe mới được áp dụng; chữ đỏ là chỗ thiếu hoặc không khớp danh sách.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>AI</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="small" title="${esc(r.alt.join('\n'))}">${esc(r.vt)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}${r.alt.length ? `<div class="small muted">${r.alt.map(esc).join('<br>')}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
       ap.hidden = !self.rows.some(r => r.ok);
     };
     ap.onclick = () => {
       let up = 0, nw = 0;
       m.el.querySelectorAll('[data-i]:checked').forEach(cb => {
-        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok) return;
-        if (r.trip) { if (!lcCan(r.trip)) return; if (r.v) r.trip.xeId = r.v.id; if (r.e) r.trip.laiXe = r.e.id; up++; }
+        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok || !r.v || !r.e) return;
+        if (r.trip) { if (!lcCan(r.trip)) return; r.trip.xeId = r.v.id; r.trip.laiXe = r.e.id; up++; }
         else { if (!r.e && Auth.can('lichchay', 'del')) return;   // giờ không có lái xe: không tạo (sẽ bị xóa ngay)
           DB.lichchay.push({ id: uid(), ngay: day, tuyen: r.tuyen, gio: r.gio, xeId: r.v ? r.v.id : '', laiXe: r.e ? r.e.id : '', soChuyen: 1, tienCong: 0 }); nw++; }
       });
@@ -5590,10 +5601,13 @@ const dhX = {
       self.rows = P.items.map(r => {
         const ngay = r.ngay || day, tuyen = dhFindRoute(r.tuyen, routes) || (canAdd ? r.tuyen : ''), gio = r.gio, v = dhFindVeh(r.bks), e = dhFindEmp(r.lai);
         const trip = tuyen && gio ? DB.lichchay.find(l => l.ngay === ngay && l.tuyen === tuyen && l.gio === gio) : null; let st, ok = false;
-        if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ'; else if (!v && !e) st = 'Không khớp xe / lái xe nào';
+        if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ';
+        else if ((r.bks && !v) || (r.lai && !e)) st = 'Có ' + [r.bks && !v && 'xe', r.lai && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
+        else if (!v || !e) st = (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');
         else if (trip && !lcCan(trip)) st = 'Chuyến đã khóa'; else if (trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; } else if (canAdd) { st = routes.includes(tuyen) ? 'Tạo chuyến mới' : 'Tạo chuyến (tuyến mới)'; ok = true; } else st = 'Chưa có chuyến này';
         return { ngay, tuyen, gio, v, e, trip, rb: r.bks, rl: r.lai, soChuyen: r.soChuyen || 1, st, ok };
       });
+      dhClash(self.rows, r => r.ngay);
       const cell = (x, raw) => x ? `<span class="sc-ok">${esc(x)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
       const days = [...new Set(self.rows.map(r => r.ngay))];
       out.innerHTML = `<div style="margin-top:12px"><b>${esc(f.name)}</b> · ${P.kind === 'grid' ? 'bảng điều hành' : 'danh sách'} · <b>${self.rows.length}</b> chuyến · ${days.length === 1 ? 'ngày ' + F.date(days[0]) : days.length + ' ngày (' + F.date(days.sort()[0]) + ' → ' + F.date(days[days.length - 1]) + ')'} <span class="muted small">· chữ đỏ là chỗ không khớp danh sách, sẽ không được điền</span></div>
@@ -5607,8 +5621,8 @@ const dhX = {
     ap.onclick = () => {
       let up = 0, nw = 0; const who = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
       m.el.querySelectorAll('[data-i]:checked').forEach(cb => {
-        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok) return;
-        if (r.trip) { if (!lcCan(r.trip)) return; if (r.v) r.trip.xeId = r.v.id; if (r.e) r.trip.laiXe = r.e.id; if (r.soChuyen) r.trip.soChuyen = r.soChuyen; up++; }
+        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok || !r.v || !r.e) return;
+        if (r.trip) { if (!lcCan(r.trip)) return; r.trip.xeId = r.v.id; r.trip.laiXe = r.e.id; if (r.soChuyen) r.trip.soChuyen = r.soChuyen; up++; }
         else { DB.lichchay.push({ id: uid(), ngay: r.ngay, tuyen: r.tuyen, gio: r.gio, xeId: r.v ? r.v.id : '', laiXe: r.e ? r.e.id : '', soChuyen: r.soChuyen || 1, tienCong: 0, nguoiCham: who, tgCham: tg }); nw++; }
       });
       if (!up && !nw) return toast('Chưa chọn dòng nào để áp dụng', 'err');
