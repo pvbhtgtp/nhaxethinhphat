@@ -9608,6 +9608,49 @@ addCSS(`.vlt-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1
 .vlt-it{border:1px solid #e0e7ff;background:#f5f7ff;border-radius:10px;padding:8px 10px;margin:10px 0 12px;text-align:left}.vlt-it b{display:block;font-size:13px}.vlt-it small{color:#64748b;font-size:12px}`);
 try { VAULT.mount(); } catch (e) { console.warn('VAULT', e); }
 
+/* ===== CẤU HÌNH ADMIN TRÊN MÁY CHỦ: Admin đăng nhập (số điện thoại + mật khẩu) ở BẤT KỲ máy nào cũng có đủ cấu hình đã khai báo =====
+   - Các cấu hình trước đây chỉ nằm trên máy (Zalo Bot, sao lưu Drive, Cloudflare, tự chuyển dự phòng, cập nhật GitHub) được lưu lên
+     tài liệu Firestore chỉ Admin đọc/ghi được (nhaxe/vcfg_1, theo Rules hiện có: mẫu v…_số chỉ Admin) → máy mới tự nhận ngay khi Admin đăng nhập.
+   - Đồng bộ 2 chiều theo từng mục: máy nào sửa sau cùng thì thắng; mục trống trên máy luôn được điền từ máy chủ, không bao giờ xóa cấu hình đang có. */
+const CVAULT = {
+  DOC: 'vcfg_1', KEYS: ['zbot.cfg', 'bk.cfg', 'cf.cfg', 'fo.cfg', 'gh.cfg', 'scn.ai', 'scn.mode'], SK: 'cvault.sync', un: null, cloud: {}, t: null,
+  ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  empty: v => v == null || v === '' || v === '{}' || v === 'null',
+  synced() { try { return JSON.parse(localStorage.getItem(CVAULT.SK) || '{}') || {}; } catch (e) { return {}; } },
+  mark(o) { try { localStorage.setItem(CVAULT.SK, JSON.stringify(o)); } catch (e) { } },
+  ready() { try { return PERM.admin() && typeof FB !== 'undefined' && FB.db && GS.on; } catch (e) { return false; } },
+  start() {
+    if (CVAULT.un || !CVAULT.ready()) return;
+    try {
+      CVAULT.un = FB.col().doc(CVAULT.DOC).onSnapshot(sn => { CVAULT.cloud = (sn.exists && sn.data().k) || {}; CVAULT.merge(); }, e => { console.warn('CVAULT', e && e.code); CVAULT.un = null; try { SYS.add('Cấu hình Admin', e); } catch (x) { } });
+    } catch (e) { CVAULT.un = null; }
+  },
+  stop() { if (CVAULT.un) { try { CVAULT.un(); } catch (e) { } CVAULT.un = null; } },
+  merge() {
+    const syn = CVAULT.synced(), up = {}; let got = 0;
+    CVAULT.KEYS.forEach(k => {
+      const loc = CVAULT.ls(k), c = CVAULT.cloud[k], cv = c && c.v, last = syn[k];
+      if (CVAULT.empty(loc)) { if (!CVAULT.empty(cv)) { try { localStorage.setItem(k, cv); syn[k] = cv; got++; } catch (e) { } } return; }   // máy chưa có → lấy từ máy chủ
+      if (loc === cv) { syn[k] = cv; return; }
+      if (last != null && loc === last && !CVAULT.empty(cv)) { try { localStorage.setItem(k, cv); syn[k] = cv; got++; } catch (e) { } return; }   // máy khác sửa sau → nhận bản mới
+      up[k] = { v: loc, at: new Date().toISOString(), who: (Auth.user && (Auth.user.ten || Auth.user.user)) || '' };   // máy này sửa → đẩy lên
+    });
+    CVAULT.mark(syn);
+    if (Object.keys(up).length) CVAULT.push(up);
+    if (got) { try { CF.cache && CF.cache(); FO.cache && FO.cache(); } catch (e) { } toast(ic('check') + ' Đã nhận đủ cấu hình Admin từ máy chủ', 'ok', 3000); }
+  },
+  async push(up) {
+    try {
+      const ref = FB.col().doc(CVAULT.DOC);
+      await FB.db.runTransaction(async t => { const s = await t.get(ref), k = Object.assign({}, (s.exists && s.data().k) || {}, up); t.set(ref, { k, at: new Date().toISOString() }); });
+      const syn = CVAULT.synced(); Object.entries(up).forEach(([k, o]) => syn[k] = o.v); CVAULT.mark(syn);
+    } catch (e) { console.warn('CVAULT.push', e); try { SYS.add('Cấu hình Admin', e); } catch (x) { } }
+  },
+  tick() { if (!CVAULT.ready()) { CVAULT.stop(); return; } if (!CVAULT.un) CVAULT.start(); else CVAULT.merge(); }
+};
+setTimeout(() => CVAULT.tick(), 4000); setInterval(() => CVAULT.tick(), 15000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') CVAULT.tick(); });
+
 /* =====================================================================================
    ĐỒNG BỘ THỜI GIAN THỰC NHIỀU NHÂN VIÊN  (vé · khóa ghế · dấu "đã in")
    - Mỗi vé là 1 tài liệu riêng trên Firestore (nhaxe/v_<id>): 2 nhân viên lưu cùng lúc KHÔNG đè nhau,
