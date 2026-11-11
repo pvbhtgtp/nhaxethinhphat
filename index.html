@@ -6973,6 +6973,7 @@ service cloud.firestore {
         : doc.matches('^nt_.+') ? (admin() || (member() && doc == 'nt_' + acl().get('emp', '-')))
         : doc.matches('^tx_.+') ? (has('vanhanh') || (member() && doc == 'tx_' + acl().get('emp', '-')))
         : doc.matches('^pa_lc_.+') ? has('vanhanh')
+        : doc.matches('^c_.+') ? has('vanhanh')
         : doc.matches('^p(m_)?nhansu(_.*)?$') ? has('nhansu')
         : doc.matches('^p(m_)?luong(_.*)?$') ? has('luong')
         : doc.matches('^p(m_)?vanhanh(_.*)?$') ? has('vanhanh')
@@ -6983,7 +6984,7 @@ service cloud.firestore {
     match /nhaxe/{doc} {
       allow get: if user() && okDoc(doc);
       // vé, phơi, lệnh vận chuyển, nghiệm thu an toàn: cần phần Vận hành · thư mục/danh mục hồ sơ, khóa ghế: mọi tài khoản
-      allow list: if user() && ((resource.data.t in ['v', 'p', 'o', 'a', 'x'] && has('vanhanh')) || resource.data.t in ['f', 'h', 'l']);
+      allow list: if user() && ((resource.data.t in ['v', 'p', 'o', 'a', 'x', 'c'] && has('vanhanh')) || resource.data.t in ['f', 'h', 'l']);
       allow create, update: if admin() || (user() && okWrite(doc) && (!versioned(doc) || metaOk()));
       allow delete: if admin() || (user() && okWrite(doc) && !versioned(doc));
     }
@@ -9663,16 +9664,26 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    ===================================================================================== */
 const TK = {
   live: false, started: false, migrated: false, err: '', latest: 0,
-  sync: { v: new Map(), p: new Map(), f: new Map(), h: new Map(), o: new Map(), a: new Map() },
-  KINDS: ['v', 'p', 'f', 'h', 'o', 'a'], ARR: { v: 'datve', f: 'hosoF', h: 'hosoH', o: 'lenhVC', a: 'antoan' }, EX: ['hosoF', 'hosoH', 'lenhVC', 'antoan'],        // id -> chuỗi JSON đã khớp với máy chủ
+  sync: { v: new Map(), p: new Map(), f: new Map(), h: new Map(), o: new Map(), a: new Map(), c: new Map() },
+  KINDS: ['v', 'p', 'f', 'h', 'o', 'a', 'c'], ARR: { v: 'datve', f: 'hosoF', h: 'hosoH', o: 'lenhVC', a: 'antoan', c: 'lichchay' }, EX: ['hosoF', 'hosoH', 'lenhVC', 'antoan'],        // id -> chuỗi JSON đã khớp với máy chủ
   busy: new Set(), off: new Set(), timer: null, running: false, again: false, rt: null, retry: null, pt: null, unsub: [],
-  PRE: { v: 'v_', p: 'p_', f: 'f_', h: 'h_', o: 'o_', a: 'a_' },
+  PRE: { v: 'v_', p: 'p_', f: 'f_', h: 'h_', o: 'o_', a: 'a_', c: 'c_' },
+  /* Lịch chạy theo từng chuyến (kind 'c'): chuyến trong "cửa sổ đang chạy" (3 ngày trước → 14 ngày tới) mỗi chuyến là 1 tài liệu riêng,
+     sửa chuyến nào chỉ ghi chuyến đó, máy khác nhận ngay; chuyến ngoài cửa sổ (lịch sử, lịch xa) vẫn nằm ở khối Vận hành như cũ.
+     Tắt: Cài đặt › settings.lcDocs = false → mọi chuyến tự quay về khối Vận hành (rollback, không mất dữ liệu). */
+  lcMig: false,
+  win() { const t = D.today(); return [D.add(t, -3), D.add(t, 14)]; },
+  inWin(t) { if (!t || !t.ngay) return false; const [a, b] = TK.win(); return t.ngay >= a && t.ngay <= b; },
+  lcUse() { try { return !(DB && DB.settings && DB.settings.lcDocs === false); } catch (e) { return true; } },
+  lcOn() { return TK.live && TK.lcMig && TK.lcUse() && !TK.off.has('c'); },
+  blob(c) { if (c && Array.isArray(c.lichchay) && TK.lcOn()) c.lichchay = c.lichchay.filter(t => !TK.inWin(t)); return c; },
   seatKey: t => (t && !t.huy && t.chuyen && t.ghe != null && String(t.ghe) !== '') ? Lock.key(t.chuyen, t.ghe) : '',
   /* ---------- dữ liệu trong bộ nhớ ---------- */
   local(kind) {
     const m = new Map();
     const a = TK.ARR[kind];
-    if (a) (DB[a] || []).forEach(t => { if (t && t.id) m.set(t.id, JSON.stringify(t)); });
+    if (kind === 'c') (DB.lichchay || []).forEach(t => { if (t && t.id && TK.inWin(t)) m.set(t.id, JSON.stringify(t)); });
+    else if (a) (DB[a] || []).forEach(t => { if (t && t.id) m.set(t.id, JSON.stringify(t)); });
     else { const o = DB.phoiIn || {}; Object.keys(o).forEach(k => m.set(k, JSON.stringify(o[k]))); }
     return m;
   },
@@ -9696,7 +9707,7 @@ const TK = {
     else if (DB.phoiIn) delete DB.phoiIn[id];
   },
   hash() {                       // băm phần dữ liệu CÒN LẠI (không gồm vé, dấu in) để biết có cần đẩy khối chung không
-    const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); c._meta = undefined;
+    const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); c._meta = undefined; TK.blob(c);
     const s = JSON.stringify(c); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return h + ':' + s.length;
   },
@@ -9704,7 +9715,7 @@ const TK = {
   async start() {
     if (TK.started) return; TK.started = true;
     try {
-      const col = FB.col(); TK.migrated = (await col.doc('m_tk').get()).exists;
+      const col = FB.col(); TK.migrated = (await col.doc('m_tk').get()).exists; try { TK.lcMig = (await col.doc('m_lc').get()).exists; } catch (e) { TK.lcMig = false; }
       await Promise.all(TK.KINDS.map(k => TK.listen(k)));
       TK.live = true; TK.err = ''; TK.fail = '';
       try { Lock.attach(); } catch (e) { }
@@ -9721,6 +9732,7 @@ const TK = {
           const id = c.doc.id.slice(2), sy = TK.sync[kind];
           if (c.type === 'removed') {
             if (!sy.has(id)) return; sy.delete(id);
+            if (kind === 'c') { const t = (DB.lichchay || []).find(x => x.id === id); if (t && !TK.inWin(t)) return; }   // chuyến ra khỏi cửa sổ: chuyển về khối Vận hành, không xóa
             if (!TK.busy.has(kind + id)) { TK.del(kind, id); ch = true; }
             return;
           }
@@ -9741,6 +9753,10 @@ const TK = {
     if (kind === 'v') {
       if (TK.migrated) { DB.datve = [...docs.values()].map(s => JSON.parse(s)); }
       else { DB.datve = DB.datve || []; const have = new Set(DB.datve.map(t => t.id)); docs.forEach((s, id) => { if (!have.has(id)) DB.datve.push(JSON.parse(s)); }); }   // lần đầu: vé trong khối cũ sẽ được đưa lên
+    } else if (kind === 'c') {
+      const loc = DB.lichchay || [], dv = [...docs.values()].map(s => JSON.parse(s));
+      DB.lichchay = TK.lcMig ? loc.filter(t => !docs.has(t.id) && !TK.inWin(t)).concat(dv)          // đã chuyển: chuyến trong cửa sổ lấy theo máy chủ
+        : loc.filter(t => !docs.has(t.id)).concat(dv);                                               // lần đầu: chuyến của máy sẽ được đưa lên
     } else if (TK.ARR[kind]) {
       const a = TK.ARR[kind], loc = DB[a] || []; DB[a] = [...docs.values()].map(s => JSON.parse(s)); loc.forEach(t => { if (t && t.id && !docs.has(t.id)) DB[a].push(t); });
     } else {
@@ -9753,13 +9769,13 @@ const TK = {
   async run() {
     if (!TK.live || TK.running) return; TK.running = true; TK.again = false; let fail = false;
     try {
-      for (const kind of TK.KINDS) { if (TK.off.has(kind)) continue;
+      for (const kind of TK.KINDS) { if (TK.off.has(kind) || (kind === 'c' && !TK.lcUse())) continue;
         const loc = TK.local(kind), sy = TK.sync[kind], ups = [], dels = [];
         loc.forEach((s, id) => { if (sy.get(id) !== s && !TK.busy.has(kind + id)) ups.push([id, s]); });
         sy.forEach((s, id) => { if (!loc.has(id) && !TK.busy.has(kind + id)) dels.push(id); });
         // chặn xóa hàng loạt do nhầm lẫn
         if (dels.length > 30 && dels.length > sy.size * 0.6) {
-          const okDel = await Modal.confirm(`Thao tác này sẽ xóa <b>${dels.length}</b> ${kind === 'v' ? 'vé' : 'dấu in'} trên máy chủ, mọi máy đều mất. Tiếp tục?`, { ok: 'Xóa', danger: true, title: 'Xóa hàng loạt' });
+          const okDel = await Modal.confirm(`Thao tác này sẽ xóa <b>${dels.length}</b> ${kind === 'v' ? 'vé' : kind === 'c' ? 'chuyến' : 'dấu in'} trên máy chủ, mọi máy đều mất. Tiếp tục?`, { ok: 'Xóa', danger: true, title: 'Xóa hàng loạt' });
           if (!okDel) { dels.forEach(id => { TK.put(kind, id, sy.get(id)); }); TK.paint(); dels.length = 0; }
         }
         const jobs = [];
@@ -9769,6 +9785,7 @@ const TK = {
         await Promise.all(pool);
       }
       if (!fail && !TK.migrated) { try { await FB.col().doc('m_tk').set({ t: 'm', at: new Date().toISOString() }); TK.migrated = true; } catch (e) { fail = true; } }
+      if (!fail && !TK.lcMig && TK.lcUse() && !TK.off.has('c')) { try { await FB.col().doc('m_lc').set({ t: 'm', at: new Date().toISOString(), n: TK.sync.c.size }); TK.lcMig = true; GS._h = null; GS.queue(); } catch (e) { fail = true; } }
     } finally { TK.running = false; }
     TK.err = fail ? 'Chưa gửi được vé lên máy chủ, đang tự thử lại' : ''; try { Store.status(); } catch (e) { }
     clearTimeout(TK.retry); if (fail) TK.retry = setTimeout(() => TK.flush(), 4000);
@@ -9837,7 +9854,7 @@ const TK = {
   },
   paint() {
     clearTimeout(TK.rt);
-    TK.rt = setTimeout(() => { if (App.cur === 'lichchay' || App.cur === 'hoso') { const y = window.scrollY; try { App.render(); } catch (e) { console.warn(e); } window.scrollTo(0, y); } }, 30);
+    TK.rt = setTimeout(() => { if (App.cur) { const y = window.scrollY; try { App.render(); } catch (e) { console.warn(e); } window.scrollTo(0, y); } }, 30);
   },
   /* khi máy khác lưu khối dữ liệu chung: lấy về sớm nhất có thể (đợi nếu đang lưu dở hoặc đang mở hộp thoại) */
   pullSoon(n = 0) {
@@ -9854,9 +9871,10 @@ const TK = {
 
   const apply1 = GS.apply;                        // kéo khối chung về: giữ nguyên vé đang có trong bộ nhớ
   GS.apply = function (data, ver) {
-    const kv = TK.live ? DB.datve : null, kp = TK.live ? DB.phoiIn : null, kx = TK.live ? TK.EX.map(k => DB[k]) : null;
+    const kv = TK.live ? DB.datve : null, kp = TK.live ? DB.phoiIn : null, kx = TK.live ? TK.EX.map(k => DB[k]) : null, kl = TK.lcOn() ? (DB.lichchay || []) : null;
     const r = apply1.apply(this, arguments);
     if (TK.live) { DB.datve = kv || []; DB.phoiIn = kp || {}; TK.EX.forEach((k, i) => { DB[k] = kx[i] || []; }); }
+    if (kl) { const keep = kl.filter(t => TK.inWin(t)), ids = new Set(keep.map(t => t.id)); DB.lichchay = (DB.lichchay || []).filter(t => !ids.has(t.id) && !TK.inWin(t)).concat(keep); }   // chuyến trong cửa sổ: giữ bản thời gian thực
     try { GS._h = TK.hash(); } catch (e) { }
     return r;
   };
@@ -9878,7 +9896,7 @@ const TK = {
 
   const call1 = FB.call;                          // khối chung không còn chứa vé (vé nằm ở tài liệu riêng)
   FB.call = function (body, c) {
-    if (TK.live && body && body.action === 'put' && body.data) { const d = Object.assign({}, body.data); d.datve = []; delete d.phoiIn; TK.EX.forEach(k => { d[k] = []; }); body = Object.assign({}, body, { data: d }); }
+    if (TK.live && body && body.action === 'put' && body.data) { const d = Object.assign({}, body.data); d.datve = []; delete d.phoiIn; TK.EX.forEach(k => { d[k] = []; }); TK.blob(d); body = Object.assign({}, body, { data: d }); }
     return call1.call(this, body, c);
   };
   FB.listen = function () {
@@ -9887,8 +9905,18 @@ const TK = {
   };
 }
 
+/* Lịch chạy theo chuyến: nếu Rules chưa cho phép (Admin chưa Publish luật mới) thì tạm chạy như cũ, cứ 2 phút thử lại; được là tự chuyển */
+setInterval(async () => {
+  try {
+    if (!TK.live || !TK.lcUse()) return;
+    let vh = true; try { vh = PERM.admin() || PS.readable().includes('vanhanh'); } catch (e) { }
+    if (TK.off.has('c') && vh) { TK.off.delete('c'); TK.sync.c = new Map(); await TK.listen('c'); if (!TK.off.has('c')) { TK.flush(); TK.paint(); } }
+    else if (!TK.lcMig) { const s = await FB.col().doc('m_lc').get(); if (s.exists) { TK.lcMig = true; GS._h = null; } }
+  } catch (e) { console.warn('TK.lc', e); }
+}, 120000);
+
 /* ---------- gộp im lặng khi 2 máy cùng lưu khối chung (không còn hộp thoại "máy khác đã lưu") ---------- */
-TK.core = () => { const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); delete c._meta; return JSON.parse(JSON.stringify(c)); };
+TK.core = () => { const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); delete c._meta; TK.blob(c); return JSON.parse(JSON.stringify(c)); };
 TK.m3 = function m3(b, l, r, st) {
   const j = JSON.stringify, sl = j(l), sr = j(r), sb = j(b);
   if (sl === sr) return l; if (sl === sb) return r; if (sr === sb) return l;
@@ -9924,7 +9952,7 @@ TK.m3 = function m3(b, l, r, st) {
     try {
       const j = await GS.call({ action: 'get' });
       if (j && j.data && GS._base) {
-        const loc = TK.core(), rem = JSON.parse(JSON.stringify(j.data)); delete rem.datve; delete rem.phoiIn; TK.EX.forEach(k => delete rem[k]); delete rem._meta;
+        const loc = TK.core(), rem = JSON.parse(JSON.stringify(j.data)); delete rem.datve; delete rem.phoiIn; TK.EX.forEach(k => delete rem[k]); delete rem._meta; TK.blob(rem);
         const st = { conflict: false }, merged = TK.m3(GS._base, loc, rem, st);
         if (!st.conflict) {
           merged._meta = Object.assign({}, DB._meta || {}); merged.datve = []; TK.EX.forEach(k => { merged[k] = []; }); 
@@ -10797,7 +10825,7 @@ const SB = {
   mb: n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + ' MB',
   sizes() {
     const j = o => { try { return JSON.stringify(o).length; } catch (e) { return 0; } };
-    const core = (() => { const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); return j(c); })();
+    const core = (() => { const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); TK.blob(c); return j(c); })();
     const files = (DB.hosoH || []).reduce((a, h) => a + (h.loai === 'file' && !h.drive ? Math.round((h.size || 0) * 1.34) : 0), 0);   // chỉ tính tệp cũ còn nằm trong Firestore; tệp đã ở Google Drive không chiếm Firestore
     return { core, ve: j(DB.datve) + j(DB.phoiIn), hs: j(DB.hosoF) + j(DB.hosoH) + files, other: j(DB.lenhVC) + j(DB.antoan) };
   },
@@ -11868,7 +11896,7 @@ const LIVE = {
     try {
       const j = await GS.call({ action: 'get' });
       if (j && j.data) {
-        const loc = TK.core(), rem = JSON.parse(JSON.stringify(j.data)); delete rem.datve; delete rem.phoiIn; TK.EX.forEach(k => delete rem[k]); delete rem._meta;
+        const loc = TK.core(), rem = JSON.parse(JSON.stringify(j.data)); delete rem.datve; delete rem.phoiIn; TK.EX.forEach(k => delete rem[k]); delete rem._meta; TK.blob(rem);
         const st = { conflict: false }, merged = GS._base ? TK.m3(GS._base, loc, rem, st) : LIVE.union(loc, rem);
         merged._meta = Object.assign({}, DB._meta || {}); merged.datve = []; TK.EX.forEach(k => { merged[k] = []; });
         GS.apply(merged, j.ver); GS._base = rem; GS._h = null; Store.dirty = true; GS.busy = false;
