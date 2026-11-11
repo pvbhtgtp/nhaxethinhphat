@@ -10014,7 +10014,7 @@ const HS = {
         ${R.length ? `<div class="tbl-wrap free"><table class="tbl compact hs-tbl"><tbody>${R.map(h => rowH(h, true)).join('')}</tbody></table></div>` : (RF.length ? '' : '<div class="empty">Không tìm thấy.</div>')}</div></div>`;
     } else {
       const sub = HS.kids(cur), its = HS.items(cur), f = HS.by(cur);
-      main = `<div class="card"><div class="card-h"><div class="hs-bc">${crumbs}</div><span class="sub">${sub.length} thư mục con · ${its.length} hồ sơ${HS.anCount(cur) ? ` · <a class="hs-an" data-hs="showAn">${HS.showAn ? 'Giấu' : 'Hiện'} ${HS.anCount(cur)} bản cũ đã ẩn</a>` : ''}</span></div><div class="card-b">
+      main = `<div class="card"><div class="card-h"><div class="hs-bc">${crumbs}</div><span class="sub">${sub.length} thư mục con · ${its.length} hồ sơ${HS.anCount(cur) ? ` <button type="button" class="btn sm" data-hs="showAn" style="margin-left:6px">${ic('eye')} ${HS.showAn ? 'Ẩn' : 'Xem'} bản cũ (${HS.anCount(cur)})</button>` : ''}</span></div><div class="card-b">
         ${f && f.ghiChu ? `<div class="hs-nt">${esc(f.ghiChu)}</div>` : ''}
         ${sub.length ? `<div class="hs-fg">${sub.map(s => `<div class="hs-fc" data-hs="sel" data-id="${s.id}" data-drop="${s.id}" draggable="true" data-drag="f:${s.id}">${ic('folder')}<div class="grow"><b>${esc(s.ten)}</b><div class="muted small">${HS.kids(s.id).length ? HS.kids(s.id).length + ' thư mục · ' : ''}${HS.count(s.id)} hồ sơ</div></div></div>`).join('')}</div>` : ''}
         ${its.length ? `<div class="tbl-wrap free"><table class="tbl compact hs-tbl"><thead><tr><th></th><th>Tên hồ sơ</th><th class="r">Dung lượng</th><th>Hạn</th><th>Ghi chú</th><th>Tải lên</th><th></th></tr></thead><tbody>${its.map(h => rowH(h, false)).join('')}</tbody></table></div>` : (sub.length ? '' : `<div class="empty hs-drop">${ic('folder')}<br>Thư mục trống.<br><span class="muted small">Kéo tệp vào đây, hoặc bấm “Tải hồ sơ lên”.</span></div>`)}</div></div>`;
@@ -12613,18 +12613,26 @@ const DOCH = {
       toast(`Đã chép ${T.label.toLowerCase()} mới vào Lưu trữ hồ sơ: ${esc(HS.ptxt(folder))}`, 'ok', 5000);
     } catch (e) { console.warn('DOCH.toHS', e); toast('Chưa chép được giấy mới vào Lưu trữ hồ sơ: ' + esc(e.message || e), 'err', 6000); }
   },
+  op: new Set(),                  // các nhóm giấy cũ đang mở xem (giữ khi vẽ lại)
   hist(o, t, urls) {
     const L = (((o && o.giayLS) || {})[t] || []); if (!L.length) return '';
-    const ed = DOCH.can(t);
-    return `<div class="dh-ls"><div class="dh-h">Giấy cũ (${L.length})</div>${L.map(r => `<div class="dh-r${r.an ? ' an' : ''}"><div class="dh-t"><span>${r.han ? 'Hết hạn ' + F.date(r.han) : 'Không ghi hạn'}${r.x && Object.keys(r.x).length ? ' · ' + esc(Object.values(r.x).join(' · ')) : ''} <span class="muted small">· thay ngày ${F.date(r.at)}</span></span>
-      <label class="dh-chk"><input type="checkbox" data-dh="${t}" data-id="${r.id}" ${r.an ? 'checked' : ''} ${ed ? '' : 'disabled'}> Ẩn</label></div>${r.an ? '' : `<div class="dh-f">${Object.values(r.f || {}).map(f => docPrev(f, urls || [], 320)).join('')}</div>`}</div>`).join('')}</div>`;
+    const ed = DOCH.can(t), key = (o.id || '') + ':' + t, open = DOCH.op.has(key), pr = t === 'dangKiem', last = L[0];
+    const sum = `${L.length} giấy cũ · gần nhất ${last.han ? 'hết hạn ' + F.date(last.han) : 'không ghi hạn'}, thay ngày ${F.date(last.at)}`;
+    return `<div class="dh-ls${open ? ' open' : ''}" data-dhk="${esc(key)}"><div class="dh-h"><span>${ic('clock')} ${sum}</span><button type="button" class="btn sm dh-tg" data-dhtg>${ic('eye')} <span class="dh-o">Ẩn giấy cũ</span><span class="dh-c">Xem giấy cũ (${L.length})</span></button></div>
+      <div class="dh-body">${L.map((r, i) => `<div class="dh-r"><div class="dh-t"><span><b>Giấy cũ ${L.length - i}</b> · ${r.han ? (r.han < D.today() ? '<span class="badge b-red">Hết hạn ' + F.date(r.han) + '</span>' : 'Hết hạn ' + F.date(r.han)) : 'Không ghi hạn'}${r.x && Object.keys(r.x).length ? ' · ' + esc(Object.values(r.x).join(' · ')) : ''} <span class="muted small">· thay ngày ${F.date(r.at)}</span></span>
+      ${pr ? `<label class="dh-chk" title="Bỏ chọn để in kèm giấy cũ trong lý lịch phương tiện"><input type="checkbox" data-dh="${t}" data-id="${r.id}" ${r.an ? 'checked' : ''} ${ed ? '' : 'disabled'}> Không in kèm</label>` : ''}</div>${open ? `<div class="dh-f">${Object.values(r.f || {}).map(f => docPrev(f, urls || [], 320)).join('') || '<div class="muted small">Không có ảnh / file</div>'}</div>` : `<div class="dh-f" data-dhlazy="${i}"></div>`}</div>`).join('')}</div></div>`;
   },
   bind(el, o, redraw) {
     el.addEventListener('click', ev => { const b = ev.target.closest('[data-dn]'); if (b) DOCH.renew(o, b.dataset.dn, redraw); });
+    el.addEventListener('click', ev => {             // nút Xem / Ẩn giấy cũ: mở thì vẽ ảnh/PDF của từng giấy cũ
+      const b = ev.target.closest('[data-dhtg]'); if (!b) return; const box = b.closest('.dh-ls'), key = box.dataset.dhk, t = key.split(':').pop();
+      const on = !box.classList.contains('open'); box.classList.toggle('open', on); if (on) DOCH.op.add(key); else DOCH.op.delete(key);
+      if (on) { const L = DOCH.ls(o, t); box.querySelectorAll('[data-dhlazy]').forEach(d => { const r = L[+d.dataset.dhlazy]; d.innerHTML = r ? Object.values(r.f || {}).map(f => docPrev(f, [], 320)).join('') || '<div class="muted small">Không có ảnh / file</div>' : ''; d.removeAttribute('data-dhlazy'); }); }
+    });
     el.addEventListener('change', ev => { const c = ev.target.closest('[data-dh]'); if (!c) return; const r = DOCH.ls(o, c.dataset.dh).find(x => x.id === c.dataset.id); if (r) { r.an = c.checked; App.changed(); redraw(); } });
   }
 };
-addCSS(`.hs-an{cursor:pointer;color:var(--p);text-decoration:underline}.dh-ls{margin-top:10px;border-top:1px dashed #cbd5e1;padding-top:8px}.dh-h{font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px}.dh-r{border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;margin-bottom:6px}.dh-r.an{opacity:.7}
+addCSS(`.hs-an{cursor:pointer;color:var(--p);text-decoration:underline}.dh-ls{margin-top:10px;border-top:1px dashed #cbd5e1;padding-top:8px}.dh-h{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12.5px;font-weight:600;color:#64748b;margin-bottom:6px}.dh-h>span{display:inline-flex;align-items:center;gap:5px}.dh-body,.dh-ls .dh-o{display:none}.dh-ls.open .dh-body{display:block}.dh-ls.open .dh-o{display:inline}.dh-ls.open .dh-c{display:none}.dh-r{border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;margin-bottom:6px}
 .dh-t{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}.dh-chk{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;white-space:nowrap}.dh-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}`);
 /* ===== Đọc thẻ / giấy chứng nhận tập huấn nghiệp vụ bằng AI → ghi vào Lý lịch hành nghề (loại 'th') ===== */
 const THR = {
