@@ -11,6 +11,20 @@ function kmRange(mode, day) {
   if (mode === 'month') return [day.slice(0, 7) + '-01', day.slice(0, 7) + '-' + String(D.daysIn(day.slice(0, 7))).padStart(2, '0')];
   return [day.slice(0, 4) + '-01-01', day.slice(0, 4) + '-12-31'];
 }
+const KMP = {
+  M: { day: 'Ngày', month: 'Tháng', year: 'Năm' },
+  html(noDate) {
+    const m = KMP.M[KM.mode] ? KM.mode : 'month', d = KM.day || D.today(), y = +d.slice(0, 4), Y = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 5 + i);
+    const inp = m === 'day' ? `<input type="date" class="inp" data-kp value="${d}">` : m === 'month' ? `<input type="month" class="inp" data-kp value="${d.slice(0, 7)}">` : `<select class="inp" data-kp>${Y.map(x => `<option value="${x}" ${x === y ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+    return `<div class="kmp">${Object.entries(KMP.M).map(([k, t]) => `<label class="kmp-c${k === m ? ' on' : ''}"><input type="checkbox" data-kc="${k}" ${k === m ? 'checked' : ''}> ${t}</label>`).join('')}${noDate ? '' : `<span class="kmp-d"><button type="button" class="btn sm" data-kn="-1" aria-label="Kỳ trước">‹</button>${inp}<button type="button" class="btn sm" data-kn="1" aria-label="Kỳ sau">›</button></span>`}</div>`;
+  },
+  bind(root, pd) {
+    root.querySelectorAll('[data-kc]').forEach(c => c.onchange = e => { if (pd) e.preventDefault(); KM.mode = c.dataset.kc; App.render(); });   // tick 1 ô: tự bỏ ô kia
+    const k = root.querySelector('[data-kp]'); if (k) k.onchange = () => { const v = k.value; if (!v) return; KM.day = KM.mode === 'day' ? v : KM.mode === 'month' ? v + '-01' : v + '-01-01'; App.render(); };
+    root.querySelectorAll('[data-kn]').forEach(b => b.onclick = e => { e.preventDefault(); const n = +b.dataset.kn; KM.day = kmStep(KM.mode, KM.day || D.today(), n); App.render(); });
+  }
+};
+if (KM.mode === 'week') KM.mode = 'month';
 function kmLabel(mode, day) { const [a, b] = kmRange(mode, day); return mode === 'day' ? F.date(a) : mode === 'week' ? F.date(a) + ' – ' + F.date(b) : mode === 'month' ? 'Tháng ' + day.slice(5, 7) + '/' + day.slice(0, 4) : 'Năm ' + day.slice(0, 4); }
 function kmStep(mode, day, n) { if (mode === 'day') return D.add(day, n); if (mode === 'week') return D.add(day, 7 * n); if (mode === 'month') return D.ymAdd(day.slice(0, 7), n) + '-01'; return (+day.slice(0, 4) + n) + '-01-01'; }
 function kmAgg(mode, day) {
@@ -75,12 +89,10 @@ const vKM = {
     if (!KM.day) KM.day = (DB.kmxe.length ? DB.kmxe.reduce((a, r) => r.ngay > a ? r.ngay : a, '') : '') || D.today();
     const A = kmAgg(KM.mode, KM.day), run = A.rows.filter(r => r.km > 0), nXe = run.length, top = run[0], mx = Math.max(1, ...A.rows.map(r => r.km));
     const can = Auth.can('kmxe', 'add');
-    el.insertAdjacentHTML('beforeend', `<div class="row sc-bar"><div class="km-seg">${Object.keys(kmMode).map(k => `<button class="${k === KM.mode ? 'on' : ''}" data-km="${k}">${kmMode[k]}</button>`).join('')}</div><button class="btn sm" data-kn="-1" aria-label="Kỳ trước">${ic('back')}</button><b class="km-lbl">${kmLabel(KM.mode, KM.day)}</b><button class="btn sm" data-kn="1" aria-label="Kỳ sau"><span style="display:inline-block;transform:scaleX(-1);line-height:0">${ic('back')}</span></button><input type="date" class="inp" id="kmDay" value="${KM.day}" style="width:150px"><button class="btn sm" data-kn="0">Hôm nay</button><span class="grow"></span>${can ? `<button class="btn" data-act="kmManual">${ic('plus')} Nhập tay</button><button class="btn pri" data-act="kmImport">${ic('upload')} Nhập báo cáo Excel</button>` : ''}</div>
+    el.insertAdjacentHTML('beforeend', `<div class="row sc-bar">${KMP.html()}<span class="grow"></span>${can ? `<button class="btn" data-act="kmManual">${ic('plus')} Nhập tay</button><button class="btn pri" data-act="kmImport">${ic('upload')} Nhập báo cáo Excel</button>` : ''}</div>
       <div class="sc-kpi"><div><small>Tổng km ${kmMode[KM.mode].toLowerCase()}</small><b>${kmFmt(A.total)} km</b></div><div><small>Số xe có chạy</small><b>${nXe} / ${A.rows.length}</b></div><div><small>Trung bình mỗi xe</small><b>${nXe ? kmFmt(A.total / nXe) : 0} km</b></div><div><small>Xe chạy nhiều nhất</small><b>${top ? esc(top.bks) : '—'}</b>${top ? `<em>${kmFmt(top.km)} km</em>` : ''}</div></div>
       <div class="tbl-card"><div class="tbl-wrap free"><table class="tbl"><thead><tr><th>Biển số</th><th class="r">Km</th><th class="r">Ngày chạy</th><th class="r">TB km/ngày</th><th style="min-width:140px"></th></tr></thead><tbody>${A.rows.map(r => `<tr class="km-row" data-bks="${esc(r.bks)}" style="cursor:pointer"><td><b>${esc(r.bks)}</b></td><td class="r"><b>${r.km ? kmFmt(r.km) : '—'}</b></td><td class="r">${r.nDays || '—'}</td><td class="r">${r.nDays ? kmFmt(r.km / r.nDays) : '—'}</td><td><div class="km-bar"><i style="width:${Math.round(r.km / mx * 100)}%"></i></div></td></tr>`).join('') || '<tr><td colspan="5" class="muted" style="padding:18px">Chưa có xe.</td></tr>'}</tbody></table></div></div>${DB.kmxe.length ? '' : '<div class="muted" style="margin-top:12px">Chưa có dữ liệu km. Tải báo cáo km từ Skysoft (Excel) rồi bấm "Nhập báo cáo Excel", hoặc "Nhập tay".</div>'}`);
-    el.querySelectorAll('[data-km]').forEach(b => b.onclick = () => { KM.mode = b.dataset.km; App.render(); });
-    el.querySelectorAll('[data-kn]').forEach(b => b.onclick = () => { const n = +b.dataset.kn; KM.day = n === 0 ? D.today() : kmStep(KM.mode, KM.day, n); App.render(); });
-    $('#kmDay', el).onchange = e => { if (e.target.value) { KM.day = e.target.value; App.render(); } };
+    KMP.bind(el);
     el.querySelectorAll('.km-row').forEach(tr => tr.onclick = () => { const r = A.rows.find(x => x.bks === tr.dataset.bks); if (r) kmDetail(r, KM.mode, A.a, A.b); });
   },
   excel() { const A = kmAgg(KM.mode, KM.day); XLSX.save('Km xe ' + kmLabel(KM.mode, KM.day), [xSheet('Km xe', 'KM XE CHẠY · ' + kmLabel(KM.mode, KM.day).toUpperCase(), [{ key: 'bks', label: 'Biển số' }, { key: 'km', label: 'Số km' }, { key: 'nDays', label: 'Số ngày chạy' }, { key: 'tb', label: 'TB km/ngày' }], A.rows.map(r => ({ ...r, km: Math.round(r.km * 10) / 10, tb: r.nDays ? Math.round(r.km / r.nDays * 10) / 10 : 0 })))]); },
@@ -92,15 +104,15 @@ function kmPanel(el) {
   const day = lcDay(); KM.day = day; const A = kmAgg(KM.mode, day), run = A.rows.filter(r => r.km > 0), mx = Math.max(1, ...A.rows.map(r => r.km)), can = Auth.can('kmxe', 'add');
   const box = document.createElement('details'); box.className = 'km-dx'; box.open = true;
   box.innerHTML = `<summary><b>Km xe đã chạy</b> · ${kmLabel(KM.mode, day)} · <b>${kmFmt(A.total)} km</b> · ${run.length}/${A.rows.length} xe</summary>
-    <div class="row sc-bar" style="margin-top:10px"><div class="km-seg">${Object.keys(kmMode).map(k => `<button class="${k === KM.mode ? 'on' : ''}" data-km="${k}">${kmMode[k]}</button>`).join('')}</div><span class="grow"></span>${can ? `<button class="btn sm" data-act="kmManual">${ic('plus')} Nhập tay</button><button class="btn sm pri" data-act="kmImport">${ic('upload')} Nhập báo cáo Skysoft</button>` : ''}</div>
+    <div class="row sc-bar" style="margin-top:10px">${KMP.html(true)}<span class="grow"></span>${can ? `<button class="btn sm" data-act="kmManual">${ic('plus')} Nhập tay</button><button class="btn sm pri" data-act="kmImport">${ic('upload')} Nhập báo cáo Skysoft</button>` : ''}</div>
     <div class="tbl-wrap free"><table class="tbl"><thead><tr><th>Biển số</th><th class="r">Km</th><th class="r">Ngày chạy</th><th class="r">TB km/ngày</th><th style="min-width:110px"></th></tr></thead><tbody>${A.rows.map(r => `<tr class="km-row" data-bks="${esc(r.bks)}" style="cursor:pointer"><td><b>${esc(r.bks)}</b></td><td class="r"><b>${r.km ? kmFmt(r.km) : '—'}</b></td><td class="r">${r.nDays || '—'}</td><td class="r">${r.nDays ? kmFmt(r.km / r.nDays) : '—'}</td><td><div class="km-bar"><i style="width:${Math.round(r.km / mx * 100)}%"></i></div></td></tr>`).join('')}</tbody></table></div>${DB.kmxe.length ? '' : '<div class="muted small" style="margin-top:8px">Chưa có dữ liệu km. Xuất báo cáo km từ Skysoft (Excel) rồi bấm "Nhập báo cáo Skysoft".</div>'}`;
   el.appendChild(box);
-  box.querySelectorAll('[data-km]').forEach(b => b.onclick = ev => { ev.preventDefault(); KM.mode = b.dataset.km; App.render(); });
+  KMP.bind(box, true);
   box.querySelectorAll('.km-row').forEach(tr => tr.onclick = () => { const r = A.rows.find(x => x.bks === tr.dataset.bks); if (r) kmDetail(r, KM.mode, A.a, A.b); });
 }
 /* bảng Km hiện trong màn hình Điều hành: dieuhanh.js tự nạp module này rồi gọi kmPanel */
 addCSS(`.km-dx{margin-top:16px;background:#fff;border:1px solid #bae6fd;border-radius:14px;padding:12px 14px}.km-dx>summary{cursor:pointer;list-style:none;font-size:14.5px;color:#0c4a6e}.km-dx>summary::-webkit-details-marker{display:none}.km-dx>summary::before{content:'▸ ';color:#0284c7}.km-dx[open]>summary::before{content:'▾ '}`);
 Object.assign(ACT, { kmImport: () => kmImport(), kmManual: () => kmManual() });
-addCSS(`.km-seg{display:inline-flex;border:1px solid #bae6fd;border-radius:10px;overflow:hidden}.km-seg button{border:0;background:#fff;padding:0 14px;height:40px;font:inherit;font-weight:600;color:#64748b;cursor:pointer}.km-seg button.on{background:#0284c7;color:#fff}.km-lbl{min-width:120px;text-align:center}.km-bar{height:8px;background:#e0f2fe;border-radius:6px;overflow:hidden}.km-bar i{display:block;height:100%;background:#0ea5e9;border-radius:6px}.km-row:hover td{background:#f0f9ff}
+addCSS(`.kmp{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.kmp-c{display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:14px;cursor:pointer;padding:6px 10px;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.kmp-c.on{border-color:#0284c7;background:#e0f2fe;color:#075985}.kmp-c input{width:16px;height:16px;margin:0}.kmp-d{display:inline-flex;align-items:center;gap:4px}.kmp-d .inp{width:auto;min-width:120px;height:36px}.kmp-d .btn{min-width:34px;font-size:18px;line-height:1}.km-seg{display:inline-flex;border:1px solid #bae6fd;border-radius:10px;overflow:hidden}.km-seg button{border:0;background:#fff;padding:0 14px;height:40px;font:inherit;font-weight:600;color:#64748b;cursor:pointer}.km-seg button.on{background:#0284c7;color:#fff}.km-lbl{min-width:120px;text-align:center}.km-bar{height:8px;background:#e0f2fe;border-radius:6px;overflow:hidden}.km-bar i{display:block;height:100%;background:#0ea5e9;border-radius:6px}.km-row:hover td{background:#f0f9ff}
 .km-tot{margin-bottom:10px}.km-bars{display:flex;flex-direction:column;gap:4px;max-height:52vh;overflow:auto}.km-b{display:grid;grid-template-columns:44px 1fr 70px;gap:8px;align-items:center;font-size:13px}.km-b i{display:block;height:10px;background:#38bdf8;border-radius:5px;min-width:0}.km-b b{text-align:right;color:#0c4a6e}@media(max-width:760px){.km-seg button{padding:0 10px}.sc-bar .inp{width:auto}}`);
 MODL.def('kmxe', vKM);
