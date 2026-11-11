@@ -5394,16 +5394,16 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
 Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e => e.ten).filter(Boolean))}`;
-      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(thường 5–15 giây mỗi phần)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
+      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(mỗi phần tối đa 35 giây: quá 15 giây tự đổi AI khác)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
-      // Ảnh dài: đọc từng nhóm 2 đoạn, lần lượt, mỗi lần tối đa 90 giây (thử lại 1 lần) — không để treo vô hạn
-      const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [], TO = 90000;
+      // Ảnh dài: đọc từng nhóm 2 đoạn, lần lượt; mỗi phần: AI thứ nhất 15 giây, quá hạn đổi AI khác 20 giây
+      const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [], TO = 40000;
       for (let i = 0; i < parts.length; i += 2) G.push(parts.slice(i, i + 2));
       const one = async (imgs, hint) => {
-        for (let a = 0; a < 2; a++) {
+        for (let a = 0; a < 1; a++) {
           const c = new AbortController(), tm = setTimeout(() => c.abort(), TO), up = () => c.abort(); self.ctl.signal.addEventListener('abort', up);
           try { return await sample.json(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: c.signal, modelTier: 'default', cache: false }); }
-          catch (e) { if (self.ctl.signal.aborted) throw e; if (a || !(e && (e.code === 'cancelled' || e.code === 'network' || e.code === 'invalid_json'))) { if (e && e.code === 'cancelled') e.code = 'timeout'; throw e; } }
+          catch (e) { if (!self.ctl.signal.aborted && e && e.code === 'cancelled') e.code = 'timeout'; throw e; }
           finally { clearTimeout(tm); self.ctl.signal.removeEventListener('abort', up); }
         }
       };
@@ -5420,7 +5420,7 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
         if (!res.length && err) throw err;
         toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây` + (fail ? ` · ${fail}/${G.length} phần không đọc được, kiểm tra lại các chuyến thiếu` : ''), fail ? 'err' : 'ok', fail ? 7000 : 3000);
       }
-      catch (e) { clearInterval(tick); const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'timeout' ? 'AI phản hồi quá lâu (quá 90 giây), hãy thử lại hoặc cắt ảnh ngắn hơn.' : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
+      catch (e) { clearInterval(tick); const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'timeout' ? esc(AIX.msg(e)) : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
       const canAdd = Auth.can('lichchay', 'add');
@@ -8465,7 +8465,38 @@ const AIX = {
     } catch (e) { }
     try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), m })); } catch (e) { } return m;
   },
+  /* Quét ảnh: AI thứ nhất tối đa 15 giây, quá hạn đổi sang AI khác (hoặc model khác) thêm tối đa 20 giây */
+  T1: 15000, T2: 20000,
+  timed(fn, ms, signal) {
+    const c = new AbortController(), up = () => c.abort(); let to = false; if (signal) { if (signal.aborted) c.abort(); signal.addEventListener('abort', up); }
+    const t = setTimeout(() => { to = true; c.abort(); }, ms);
+    return Promise.resolve().then(() => fn(c.signal)).catch(e => { if (to && !(signal && signal.aborted)) throw AIX.err('timeout'); throw e; }).finally(() => { clearTimeout(t); if (signal) signal.removeEventListener('abort', up); });
+  },
+  async steps(L, signal) {             // chạy lần lượt từng AI, mỗi AI có hạn giờ riêng; lỗi hoặc quá hạn thì sang AI kế
+    let last;
+    for (const st of L) { try { return await AIX.timed(st.run, st.ms, signal); } catch (e) { last = e; if (signal && signal.aborted) throw AIX.err('cancelled'); if (e && (e.code === 'bad_key' || e.code === 'no_key') && L.length < 2) throw e; } }
+    throw last || AIX.err('no_key');
+  },
+  imgSteps(prompt, opt) {
+    const P = AIX.provs(), deep = opt.deep || opt.modelTier === 'pro', o = { ...opt, _t: 1 };
+    if (deep && P.length >= 2 && AIX.cfg().cross !== false) return [{ ms: AIX.T1 + AIX.T2, run: sg => AIX.cross(prompt, { ...o, deep: true, signal: sg }, P) }];
+    const a = P[0], b = P[1] || P[0];
+    return [{ ms: AIX.T1, run: sg => AIX.one(a, prompt, { ...o, deep, signal: sg }) },
+            { ms: AIX.T2, run: sg => AIX.one(b, prompt, { ...o, deep: deep && b !== a, signal: sg, avoid: b === a ? [AIX.curModel] : [] }) }];
+  },
+  async cross(prompt, opt, P) {      // đọc song song 2 AI: sau 15 giây có kết quả nào dùng kết quả đó, không chờ đối chiếu
+    const R = P.slice(0, 2).map(p => AIX.one(p, prompt, opt).then(v => ({ v }), e => ({ e })));
+    const all = Promise.all(R), first = new Promise(res => { let n = 0; R.forEach(x => x.then(r => { n++; if (!r.e || n === R.length) res(r); })); });
+    const done = await Promise.race([all, AIX.wait(AIX.T1, opt.signal).then(() => null, () => null)]);
+    if (!done) { const r = await first; if (r.e) throw r.e; return r.v; }
+    const ok = done.filter(r => !r.e).map(r => r.v); if (!ok.length) throw done[0].e;
+    const a = ok[0]; if (ok.length < 2 || !a || typeof a !== 'object' || Array.isArray(a)) return a;
+    const b = ok[1], df = {}, n = v => String(v ?? '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+    Object.keys(b || {}).forEach(k => { const x = n(a[k]), y = n(b[k]); if (!x && y) a[k] = b[k]; else if (x && y && x !== y) df[k] = [a[k], b[k]]; });
+    if (Object.keys(df).length) a._diff = df; return a;
+  },
   async json(prompt, opt = {}) {
+    if (!opt._t && [].concat(opt.images || []).filter(Boolean).length) return AIX.steps(AIX.imgSteps(prompt, opt), opt.signal);
     if (!(opt.deep || opt.modelTier === 'pro')) {
       const P = AIX.provs(); let last;
       for (const p of P) { try { return await AIX.one(p, prompt, opt); } catch (e) { last = e; if (e.code === 'cancelled' || P.length === 1) throw e; } }
@@ -8492,12 +8523,13 @@ const AIX = {
       AIX._good = l[0]; return AIX.json0(prompt, opt);
     }
   },
-  async json0(prompt, { images, signal, deep } = {}) {
+  async json0(prompt, { images, signal, deep, avoid } = {}) {
     const c = AIX.cfg(); if (!c.key) throw AIX.err('no_key');
     const imgs = [].concat(images || []).filter(Boolean), parts = [{ text: prompt + '\nChỉ trả về JSON hợp lệ, không kèm giải thích.' }];
     for (const b of imgs) parts.push({ inline_data: { mime_type: b.type && /^image\//.test(b.type) ? b.type : 'image/jpeg', data: await AIX.b64(b) } });
     let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
-    const list = [...new Set([...(deep ? AIX.PRO : []), c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];   // đọc giấy tờ: thử model Pro trước
+    let list = [...new Set([...(deep ? AIX.PRO : []), c.model, AIX._good, ...disc, ...AIX.MODELS].filter(Boolean))];
+    if (avoid && avoid.length && list.some(m => !avoid.includes(m))) list = list.filter(m => !avoid.includes(m));   // đổi sang model khác khi model trước quá hạn   // đọc giấy tờ: thử model Pro trước
     let last;
     for (let round = 0; round < 3; round++) {
       if (round) await AIX.wait(round * 3000, signal);
@@ -8505,7 +8537,7 @@ const AIX = {
       for (const md of list) {
       try {
         const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json', ...((AIX.noThink || {})[md] || deep ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } };   // đọc giấy tờ: cho AI suy nghĩ (đọc chữ viết tay, con dấu tốt hơn)
-        const t0 = Date.now(), j = await AIX.call(md, body, c.key, signal); if (!AIX.PRO.includes(md)) AIX._good = md; AIX.lastMs = Date.now() - t0;
+        AIX.curModel = md; const t0 = Date.now(), j = await AIX.call(md, body, c.key, signal); if (!AIX.PRO.includes(md)) AIX._good = md; AIX.lastMs = Date.now() - t0;
         const txt = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(p => p.text || '').join('') : '';
         if (!txt) throw AIX.err((j.promptFeedback && j.promptFeedback.blockReason) ? 'image_rejected' : 'invalid_json');
         return AIX.parse(txt);
@@ -8561,13 +8593,17 @@ const AIX = {
       : c === 'http_400' ? 'AI không nhận yêu cầu này (ảnh quá dài / quá lớn hoặc model không hỗ trợ). App đã thử các model khác nhưng chưa được — thử cắt ảnh thành 2 nửa rồi quét từng phần.'
       : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.'
       : /^http_5\d\d$/.test(c || '') ? 'Dịch vụ AI của Google đang quá tải. App đã tự đổi model và thử lại nhiều lần nhưng chưa được, bạn chờ vài phút rồi quét lại.'
+      : c === 'timeout' ? 'AI đọc quá lâu: đã thử 2 AI (15 giây + 20 giây) vẫn chưa xong. Thử lại hoặc chụp ảnh rõ, gọn hơn.'
       : c === 'cancelled' ? 'Đã dừng.' : 'Lỗi AI: ' + ((e && e.message) || c || '');
   }
 };
 // Claude (khi app mở trên Claude) hoặc Gemini (mọi nơi khác)
 async function aiSampler() {
   const s = (typeof claude !== 'undefined' && claude.use) ? await claude.use('sample').catch(() => null) : null;
-  if (s) { const lim = await s.limits().catch(() => null); if (lim && lim.images) return s; }
+  if (s) { const lim = await s.limits().catch(() => null); if (lim && lim.images) {
+    if (!AIX.ok()) return s;
+    return { limits: () => s.limits(), json: (p, o = {}) => AIX.steps([{ ms: AIX.T1, run: sg => s.json(p, { ...o, signal: sg }) }, { ms: AIX.T2, run: sg => AIX.one(AIX.provs()[0], p, { ...o, _t: 1, signal: sg }) }], o.signal), gemini: true };
+  } }
   return AIX.ok() ? AIX.sampler() : null;
 }
 {
