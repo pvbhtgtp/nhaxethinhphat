@@ -140,3 +140,35 @@ addCSS(`.dc-sw{display:inline-flex;border:1px solid #d0d5dd;border-radius:10px;o
     requestAnimationFrame(() => DC.fit(w));
   } catch (e) { console.warn('DC', e); try { SYS.add('Điều hành dạng thẻ', e); } catch (x) { } }
 }; }
+/* Nhấn giữ ô chuyến (máy tính: chuột phải): thẻ tóm tắt chuyến + thao tác nhanh. Nhấn giữ đúng tên lái xe / biển số vẫn là tô sáng. */
+DC.brief = function (id) {
+  const l = lcById(id); if (!l) return; const v = lcXe(l) || {}, hide = lcHide(l), E = id2 => (DB.employees || []).find(e => e.id === id2) || {};
+  const B = dvBook(l.id), c = dvCap(l), tt = B.filter(b => b.tt === 'tra').length, no = B.reduce((a, b) => a + (b.tt === 'tra' ? 0 : Math.max(0, dvTot(b) - (+b.coc || 0))), 0);
+  const ms = Math.round((new Date(l.ngay + 'T' + (l.gio || '00:00') + ':00') - Date.now()) / 60000), when = lcGone(l) ? 'Đã xuất bến' : ms > 0 ? (ms >= 60 ? 'Còn ' + Math.floor(ms / 60) + ' giờ ' + (ms % 60 ? ms % 60 + ' phút' : '') : 'Còn ' + ms + ' phút') : 'Đang chạy';
+  let W = []; try { W = [...dhDocWarn(l), ...dhTimeWarn(l)]; } catch (e) { } let xc = []; try { xc = hide ? [] : XC.of(l); } catch (e) { }
+  const lenh = (() => { try { return LVC.state(l); } catch (e) { return ''; } })(), nt = (() => { try { return ATK.state(l); } catch (e) { return ''; } })();
+  const ppl = [['Lái xe', l.laiXe], ['Lái xe 2', l.laiXe2], ['Phụ xe', l.phuXe]].filter(x => x[1]).map(([r, i]) => { const e = E(i); return `<div class="db-p"><span>${r}</span><b>${hide ? '🔒 Đã khóa' : esc(e.ten || '')}</b>${!hide && e.sdt ? `<a class="btn sm" href="tel:${esc(e.sdt)}">${ic('phone')} Gọi</a>` : ''}</div>`; }).join('') || '<div class="db-p"><span>Lái xe</span><b class="un">Chưa gán lái xe</b></div>';
+  const m = Modal.open({ title: esc(l.gio || '') + ' · ' + esc(l.tuyen || '') + ' · ' + F.date(l.ngay), width: 460, body: `<div class="db">
+      <div class="db-s ${lcGone(l) ? '' : ms > 0 && ms <= 60 ? 'soon' : ''}">${when}</div>
+      <div class="db-p"><span>Xe</span><b>${v.bks ? esc(v.bks) : '<span class="un">Chưa gán xe</span>'}</b><small>${esc([v.loai, +v.soCho ? v.soCho + ' chỗ' : ''].filter(Boolean).join(' · '))}</small></div>${ppl}
+      <div class="db-k"><div><b>${B.length}<small>/${c}</small></b><span>Vé</span></div><div><b>${tt}</b><span>Đã thu (TT)</span></div><div><b>${B.length - tt}</b><span>Đặt chỗ (ĐC)</span></div><div><b>${F.money(no)}</b><span>Còn phải thu</span></div></div>
+      <div class="db-d"><span class="${lenh ? 'ok' : 'no'}">${ic('file')} ${lenh === 'dong' ? 'Lệnh đã đóng' : lenh === 'mo' ? 'Lệnh đang mở' : 'Chưa có lệnh'}</span><span class="${nt === 'ok' ? 'ok' : 'no'}">${ic('check')} ${nt === 'ok' ? 'Nghiệm thu đạt' : nt === 'fail' ? 'Nghiệm thu không đạt' : nt ? 'Nghiệm thu chưa đủ' : 'Chưa nghiệm thu'}</span></div>
+      ${xc.length ? `<div class="db-w x">⇄ ${esc(XC.tip(xc)).replace(/\n/g, '<br>⇄ ')}</div>` : ''}${W.length ? `<div class="db-w">⚠ ${W.map(esc).join('<br>⚠ ')}</div>` : ''}</div>`,
+    foot: `<button class="btn" data-no>Đóng</button>${Auth.can('dieuhanh', 'edit') && lcCan(l) ? `<button class="btn pri" data-ed>${ic('edit')} Sửa nhanh</button>` : `<button class="btn pri" data-go>Mở chuyến</button>`}` });
+  m.el.querySelector('[data-no]').onclick = () => m.close();
+  const ed = m.el.querySelector('[data-ed],[data-go]'); if (ed) ed.onclick = () => { m.close(); ACT.dhChip({ id: l.id }); };
+};
+addCSS(`.db{display:flex;flex-direction:column;gap:8px}.db-s{font-weight:800;color:#475467}.db-s.soon{color:#dc2626}.db-p{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eef2f6;border-radius:10px}.db-p>span{min-width:62px;font-size:12.5px;color:#64748b}.db-p>b{font-size:15px}.db-p>small{color:#64748b;margin-left:auto}.db-p .btn{margin-left:auto}.db-p .un{color:#b42318}
+.db-k{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.db-k>div{background:#f5f7fb;border-radius:10px;padding:7px 8px}.db-k b{display:block;font-size:16px}.db-k b small{font-size:12px;color:#64748b}.db-k span{font-size:11px;color:#64748b}
+.db-d{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;font-weight:600}.db-d span{display:inline-flex;align-items:center;gap:4px}.db-d svg{width:15px;height:15px}.db-d .ok{color:#15803d}.db-d .no{color:#b45309}
+.db-w{background:#fef2f2;color:#b91c1c;border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.45}.db-w.x{background:#fff7ed;color:#c2410c}
+@media(max-width:520px){.db-k{grid-template-columns:repeat(2,1fr)}}`);
+{ const r4 = vDH.render; vDH.render = function (el) {
+  r4.call(this, el);
+  if (el._dcHold) return; el._dcHold = 1;
+  let t = null, sw = false;
+  el.addEventListener('touchstart', e => { const c = e.target.closest && e.target.closest('.dc-t[data-id],.dx-chip[data-id]'); clearTimeout(t); if (!c || e.target.closest('.nm,.bk')) return; t = setTimeout(() => { sw = true; if (navigator.vibrate) try { navigator.vibrate(20); } catch (x) { } DC.brief(c.dataset.id); }, 500); }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(k => el.addEventListener(k, () => clearTimeout(t), { passive: true }));
+  el.addEventListener('click', e => { if (sw) { sw = false; e.preventDefault(); e.stopPropagation(); } }, true);
+  el.addEventListener('contextmenu', e => { const c = e.target.closest && e.target.closest('.dc-t[data-id],.dx-chip[data-id]'); if (!c || e.target.closest('.nm,.bk')) return; e.preventDefault(); DC.brief(c.dataset.id); });
+}; }
