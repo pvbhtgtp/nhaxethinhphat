@@ -24,6 +24,7 @@ function paForm(r) {
       { key: 'ngayDi', label: 'Ngày đi của chuyến', type: 'date' }, { key: 'xe', label: 'Biển số xe', type: 'select', blank: '— Không rõ —', options: () => (DB.vehicles || []).filter(x => !x.ngung).map(x => x.bks).filter(Boolean).sort() },
       { key: 'lai', label: 'Lái xe / nhân viên liên quan', type: 'select', blank: '— Không rõ —', options: drivers }, { key: 'nguoiNhan', label: 'Người tiếp nhận' },
       { key: 'noiDung', label: 'Nội dung phản ánh', type: 'textarea', full: true, required: true },
+      { key: 'anh', label: 'Ảnh hiện trường / bằng chứng', type: 'image', max: 1280, full: true },
       { key: 'xuLy', label: 'Biện pháp xử lý / trả lời khách', type: 'textarea', full: true },
       { key: 'tt', label: 'Trạng thái', type: 'select', options: Object.entries(PA_TT).map(([k, x]) => ({ value: k, label: x.t })) }, { key: 'ngayXong', label: 'Ngày xử lý xong', type: 'date' }
     ],

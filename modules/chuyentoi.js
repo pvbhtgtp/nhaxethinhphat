@@ -44,17 +44,31 @@ const CT = {
   report(t) {          // báo sự cố trên chuyến → sổ Phản ánh & sự cố (máy văn phòng tự ghi), có gọi nhanh điều hành
     let loai = CT.INC[0];
     const m = Modal.open({ title: 'Báo sự cố · ' + esc(t.gio) + ' ' + esc(t.tuyen), width: 420, body: `<div class="ct-inc">${CT.INC.map((x, i) => `<button type="button" class="ct-b${i ? '' : ' sel'}" data-l="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-      <textarea class="inp" data-nd rows="3" placeholder="Mô tả ngắn: chuyện gì, ở đâu, cần hỗ trợ gì" style="margin-top:10px;width:100%"></textarea>`, foot: '<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>Gửi báo cáo</button>' });
+      <textarea class="inp" data-nd rows="3" placeholder="Mô tả ngắn: chuyện gì, ở đâu, cần hỗ trợ gì" style="margin-top:10px;width:100%"></textarea>
+      <label class="ct-b ct-ph"><input type="file" accept="image/*" capture="environment" data-ph hidden>${ic('camera')} <span>Chụp ảnh hiện trường (nên có)</span></label><img data-pv hidden style="max-width:100%;border-radius:10px;margin-top:8px">`, foot: '<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>Gửi báo cáo</button>' });
     m.el.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { loai = b.dataset.l; m.el.querySelectorAll('[data-l]').forEach(x => x.classList.toggle('sel', x === b)); });
     m.el.querySelector('[data-no]').onclick = () => m.close();
-    m.el.querySelector('[data-ok]').onclick = () => {
+    let photo = ''; const ph = m.el.querySelector('[data-ph]'), pv = m.el.querySelector('[data-pv]');
+    ph.onchange = async () => { const f = ph.files[0]; if (!f) return; try { photo = await resizeImage(f, 1280); pv.src = photo; pv.hidden = false; m.el.querySelector('.ct-ph span').textContent = 'Chụp lại ảnh khác'; } catch (e) { toast('Không đọc được ảnh', 'err'); } };
+    m.el.querySelector('[data-ok]').onclick = async () => {
       const nd = m.el.querySelector('[data-nd]').value.trim(); if (!nd) return toast('Nhập mô tả ngắn', 'err');
+      const ok = m.el.querySelector('[data-ok]'); ok.disabled = true;
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6), x = { chuyen: t.id, loai, nd, at: Date.now(), bks: (t.xe || {}).bks || '' }, me = CT.me();
+      if (photo) { try { await IMGX.open(); x.anh = IMGX.PRE + await IMGX.upload(photo); } catch (e) { toast('Chưa tải được ảnh lên kho (mạng yếu), báo cáo vẫn gửi không kèm ảnh', 'err', 5000); } }   // ảnh lên Drive, máy chủ chỉ giữ mã tham chiếu
       if (CT.live()) { const who = ((DB.employees || []).find(e => String(e.id) === me) || {}).ten || dvLog.who(); if (TX.inc(id, x, me, who)) App.changed(); }
       else FB.col().doc('tx_' + me).set({ inc: { [id]: x } }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng rồi gửi lại', 'err'));
       m.close(); toast(ic('check') + ' Đã gửi báo sự cố cho điều hành', 'ok', 3000);
     };
   },
+  /* giấy tờ của chính lái xe sắp / đã hết hạn: nhắc 1 lần mỗi ngày khi mở màn hình (thông báo tự tắt) */
+  gt() {
+    const me = CT.me(), e = (DB.employees || []).find(x => String(x.id) === me) || {}; let g = DB._me && String(DB._me.id) === me ? DB._me.gt : null;
+    if (!g) { g = { bangHetHan: e.bangHetHan || '' }; try { const sk = llLatest(me, 'sk'), th = llLatest(me, 'th'); if (sk) g.sk = { han: llHan(sk) }; if (th) g.th = { han: th.hetHan || '' }; } catch (x) { } }
+    const td = D.today(), out = [];
+    [['Giấy phép lái xe', g.bangHetHan], ['Giấy khám sức khỏe', g.sk && g.sk.han], ['Thẻ tập huấn nghiệp vụ', g.th && g.th.han]].forEach(([n, h]) => { if (!h) return; const k = D.diff(h, td); if (k <= 30) out.push(n + (k < 0 ? ' đã hết hạn ' + F.date(h) : ' còn ' + k + ' ngày (hết hạn ' + F.date(h) + ')')); });
+    return out;
+  },
+  nhac() { const k = 'ct.gt.' + CT.me() + '.' + D.today(); try { if (localStorage.getItem(k)) return; } catch (e) { } const L = CT.gt(); if (!L.length) return; try { localStorage.setItem(k, '1'); } catch (e) { } toast(ic('alert') + ' Giấy tờ của bạn cần gia hạn: ' + L.map(esc).join('; '), 'err', 9000); },
   /* lịch thu nhỏ: chuyến của tôi theo ngày bất kỳ (lái xe tra cứu nhanh) */
   mineAll() { const me = CT.me(), seen = new Set(); return (DB.lichchay || []).filter(l => l && [l.laiXe, l.laiXe2, l.phuXe].map(String).includes(me) && !seen.has(l.id) && seen.add(l.id)); },
   full: false, wk: '',
@@ -134,6 +148,7 @@ const CT = {
     });
   }
 };
+ICONS.camera = ICONS.camera || '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>';
 ICONS.map = ICONS.map || '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>';
 addCSS(`.ct{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px;padding-bottom:96px}@media(max-width:900px){.ct-in{padding-bottom:170px}}
 .ct-card{display:block;width:100%;text-align:left;border:1px solid #e4e7ec;background:#fff;border-radius:18px;padding:14px 16px;font:inherit;cursor:pointer;box-shadow:0 1px 3px rgba(16,24,40,.06)}.ct-card.big{border:2px solid var(--p);box-shadow:0 10px 30px -12px rgba(37,99,235,.35)}.ct-card.gone{opacity:.6}
@@ -159,7 +174,7 @@ addCSS(`.ct{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap
 .ct-acts.c4{grid-template-columns:repeat(4,1fr);gap:6px}.ct-acts.c4 .ct-b{font-size:13px;gap:4px;padding:0 4px}.ct-b:disabled{opacity:.35;cursor:not-allowed}.ct-b.warn{border-color:#fdba74;color:#c2410c}.ct-b.warn.sel,.ct-b.sel{background:#fff7ed;border-color:#f97316}.ct-b.sm{min-height:36px;font-size:13px;padding:0 10px}
 .ct-p.vang .ct-pt{opacity:.45}.ct-tag{font-size:11px;font-weight:800;background:#dcfce7;color:#15803d;border-radius:6px;padding:1px 6px;vertical-align:2px}.ct-tag.vang{background:#fee2e2;color:#b91c1c}
 .ct-docs{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:8px 12px;font-size:13px;font-weight:600}.ct-docs span{display:inline-flex;align-items:center;gap:4px}.ct-docs svg{width:15px;height:15px}.ct-docs .ok{color:#15803d}.ct-docs .no{color:#b45309}.ct-docs .ct-b{margin-left:auto}
-.ct-inc{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ct-inc .ct-b{min-height:48px;font-size:13.5px;padding:4px 8px;text-align:center}
+.ct-ph{margin-top:10px;cursor:pointer}.ct-inc{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ct-inc .ct-b{min-height:48px;font-size:13.5px;padding:4px 8px;text-align:center}
 .ct-cal{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:8px 10px}.ct-calh{display:flex;align-items:center;gap:6px;margin-bottom:4px}.ct-calh b{flex:1;text-align:center;font-size:15px}.ct-calh button{border:0;background:#f1f5f9;border-radius:10px;min-width:34px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font:inherit;font-weight:700;font-size:13px}.ct-calh .nx svg{transform:rotate(180deg)}.ct-calh svg{width:16px;height:16px}.ct-calh .ct-today{padding:0 10px;background:#eff6ff;color:#1d4ed8}
 .ct-calg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}.ct-calg small{font-size:11px;color:#98a2b3;padding:2px 0}.ct-cal.wk .ct-calg button{height:40px}.ct-calg button{position:relative;border:0;background:none;border-radius:10px;height:34px;font:inherit;font-size:14px;font-weight:600;color:#1f2937;cursor:pointer}.ct-calg button.has{background:#eef2ff;color:#3730a3;font-weight:800}.ct-calg button.td{box-shadow:inset 0 0 0 2px #93c5fd}.ct-calg button.sel{background:var(--p);color:#fff}.ct-calg i{position:absolute;top:1px;right:3px;font-style:normal;font-size:9.5px;font-weight:800;color:#dc2626}.ct-calg button.sel i{color:#fff}
 .ct-card.sm{cursor:default;padding:10px 14px}.ct-card.sm .ct-time{font-size:18px}`);
@@ -168,7 +183,7 @@ MODL.def('chuyentoi', {
   render(el) {
     if (!CT.me()) { el.innerHTML = '<div class="ct"><div class="ct-empty"><b>Tài khoản chưa gắn với hồ sơ nhân viên</b><span>Nhờ quản lý kiểm tra số điện thoại trong hồ sơ nhân viên.</span></div></div>'; return; }
     CT.listen(); if (!CT.live() && CT.data == null) { el.innerHTML = '<div class="ct"><div class="ct-empty sm">Đang tải chuyến…</div></div>'; return; }
-    const T = CT.trips(), t = CT.trip && T.find(x => x.id === CT.trip);
+    const T = CT.trips(), t = CT.trip && T.find(x => x.id === CT.trip); setTimeout(() => { try { CT.nhac(); } catch (e) { } }, 800);
     if (t) CT.one(el, t); else { CT.trip = ''; CT.list(el, T); }
   }
 });

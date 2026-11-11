@@ -13418,7 +13418,8 @@ const TX = {
     const y = D.today().slice(2, 4), n = L.filter(r => String(r.so || '').startsWith('PA' + y)).length + 1;
     L.push({ id: 'inc_' + id, so: 'PA' + y + '-' + String(n).padStart(3, '0'), tg: dvLog.now(), ngay: D.iso(at), gio: String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0'),
       kenh: 'Lái xe báo qua app', loai: x.loai || 'Khác', ten: who || '', sdt: '', ngayDi: t.ngay || '', xe: v.bks || x.bks || '', lai: String(emp || ''), nguoiNhan: 'App lái xe',
-      noiDung: (t.gio ? 'Chuyến ' + t.gio + ' ' + (t.tuyen || '') + ': ' : '') + (x.nd || ''), tt: 'moi' });
+      noiDung: (t.gio ? 'Chuyến ' + t.gio + ' ' + (t.tuyen || '') + ': ' : '') + (x.nd || ''), tt: 'moi', ...(x.anh ? { anh: x.anh } : {}) });
+    if (x.anh) try { IMGX.fill(DB); } catch (e) { }
     try { NOTI && NOTI.bell && NOTI.bell(); } catch (e) { }
     return true;
   },
