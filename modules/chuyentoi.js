@@ -3,7 +3,7 @@
    Dữ liệu: máy có dữ liệu Đặt vé thì tự soạn (TX.build); lái xe nhận tài liệu riêng 'tx_<mã NV>' theo thời gian thực.
    Lái xe chỉ đánh dấu Đã lên xe / Đã thu (ghi vào acts, máy quầy vé tự ghi vào vé); không đặt, sửa, hủy vé. */
 const CT = {
-  trip: '', tab: 'don', data: null, acts: {}, seen: {}, fresh: {}, un: null, on: '',
+  trip: '', tab: 'don', d: '', mon: '', data: null, acts: {}, seen: {}, fresh: {}, un: null, on: '',
   me: () => { try { const e = DRV.me(); return e && e.id ? String(e.id) : ''; } catch (x) { return ''; } },
   live: () => NOTI.can(),
   trips() { const me = CT.me(); if (!me) return []; return CT.live() ? TX.build(me) : (CT.data || []); },
@@ -17,17 +17,17 @@ const CT = {
     }, e => { CT.on = ''; CT.err = (e && e.code) || 'err'; CT.data = CT.data || []; if (App.cur === 'chuyentoi') App.render(); });
   },
   /* trạng thái vé: dữ liệu gốc + thao tác của lái xe chưa kịp ghi vào vé */
-  st(p) { const a = CT.acts[p.id]; const o = { len: p.len, tt: p.tt, httt: p.httt }; if (a && !CT.live()) { if (a.len != null) o.len = !!a.len; if (a.tt) { o.tt = a.tt; if (a.httt) o.httt = a.httt; } } return o; },
+  st(p) { const a = CT.acts[p.id]; const o = { len: p.len, tt: p.tt, httt: p.httt, vang: !!p.vang, xuong: !!p.xuong }; if (a && !CT.live()) { if (a.len != null) o.len = !!a.len; if (a.vang != null) o.vang = !!a.vang; if (a.xuong != null) o.xuong = !!a.xuong; if (a.tt) { o.tt = a.tt; if (a.httt) o.httt = a.httt; } } return o; },
   act(p, o) {
     const me = CT.me(), a = Object.assign({}, CT.acts[p.id] || {}, o, { at: Date.now(), by: me }); CT.acts[p.id] = a;
-    if (CT.live()) { const b = (DB.datve || []).find(x => x.id === p.id); if (b) { if (o.len != null) b.len = !!o.len; if (o.tt === 'tra') { b.tt = 'tra'; b.httt = o.httt || 'tm'; b.lxThu = 1; } if (o.tt === 'giu' && b.lxThu) { b.tt = 'giu'; b.httt = ''; delete b.lxThu; } (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: 'Trên xe: ' + (o.len != null ? (o.len ? 'đã lên xe' : 'bỏ lên xe') : o.tt === 'tra' ? 'đã thu ' + (o.httt === 'ck' ? 'chuyển khoản' : 'tiền mặt') : 'bỏ đã thu') }); App.changed(); return; } }
+    if (CT.live()) { const b = (DB.datve || []).find(x => x.id === p.id); if (b) { if (o.len != null) b.len = !!o.len; if (o.vang != null) b.vang = !!o.vang; if (o.xuong != null) b.daXuong = !!o.xuong; if (o.tt === 'tra') { b.tt = 'tra'; b.httt = o.httt || 'tm'; b.lxThu = 1; } if (o.tt === 'giu' && b.lxThu) { b.tt = 'giu'; b.httt = ''; delete b.lxThu; } (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: 'Trên xe: ' + (o.vang != null ? (o.vang ? 'khách vắng' : 'bỏ vắng') : o.xuong != null ? (o.xuong ? 'đã trả khách' : 'bỏ đã trả') : o.len != null ? (o.len ? 'đã lên xe' : 'bỏ lên xe') : o.tt === 'tra' ? 'đã thu ' + (o.httt === 'ck' ? 'chuyển khoản' : 'tiền mặt') : 'bỏ đã thu') }); App.changed(); return; } }
     FB.col().doc('tx_' + me).set({ acts: { [p.id]: a } }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng', 'err'));
     App.render();
   },
   eta(t, name) { const n = LT.nm(name); if (!n) return ''; let i = t.lt.findIndex(x => LT.nm(x.ten) === n); if (i < 0) i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a)); }); return i < 0 ? '' : LT.time(t, t.lt[i].phut); },
   idx(t, name) { const n = LT.nm(name); const i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a === n || (a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a))); }); return i < 0 ? 999 : i; },
   due: (p, s) => s.tt === 'tra' ? 0 : Math.max(0, p.tien - p.coc),
-  sum(t) { let len = 0, can = 0, tm = 0, ck = 0; t.pax.forEach(p => { const s = CT.st(p); if (s.len) len++; if (s.tt === 'tra') { if (s.httt === 'ck') ck += p.tien; else tm += p.tien - p.coc; } else can += Math.max(0, p.tien - p.coc); }); return { n: t.pax.length, len, can, tm, ck, cap: t.so ? sdSeats(t.so).length : t.xe.soCho }; },
+  sum(t) { let len = 0, can = 0, tm = 0, ck = 0, vang = 0, xuong = 0; t.pax.forEach(p => { const s = CT.st(p); if (s.vang) { vang++; return; } if (s.len) len++; if (s.xuong) xuong++; if (s.tt === 'tra') { if (s.httt === 'ck') ck += p.tien; else tm += p.tien - p.coc; } else can += Math.max(0, p.tien - p.coc); }); return { n: t.pax.length, len, can, tm, ck, vang, xuong, cap: t.so ? sdSeats(t.so).length : t.xe.soCho }; },
   mins(t) { const d = new Date(t.ngay + 'T' + (t.gio || '00:00') + ':00').getTime(); return Math.round((d - Date.now()) / 60000); },
   when(t) { const m = CT.mins(t); if (m > 0) return m >= 60 ? `Còn ${Math.floor(m / 60)} giờ ${m % 60 ? (m % 60) + ' phút' : ''}` : `Còn ${m} phút`; if (m > -180) return 'Đang chạy'; return 'Đã chạy'; },
   /* lý do chưa thấy chuyến: giúp lái xe / quản lý xử lý ngay */
@@ -40,34 +40,81 @@ const CT = {
     return 'Không có chuyến hôm nay và ngày mai' + (CT.at ? ' (cập nhật lúc ' + new Date(CT.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ')' : '') + '.';
   },
   map: n => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(n),
+  INC: ['Sự cố xe / hỏng xe', 'Tai nạn / va chạm', 'Khách gây rối / an ninh', 'Kẹt xe / trễ giờ', 'Khác'],
+  report(t) {          // báo sự cố trên chuyến → sổ Phản ánh & sự cố (máy văn phòng tự ghi), có gọi nhanh điều hành
+    let loai = CT.INC[0];
+    const m = Modal.open({ title: 'Báo sự cố · ' + esc(t.gio) + ' ' + esc(t.tuyen), width: 420, body: `<div class="ct-inc">${CT.INC.map((x, i) => `<button type="button" class="ct-b${i ? '' : ' sel'}" data-l="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+      <textarea class="inp" data-nd rows="3" placeholder="Mô tả ngắn: chuyện gì, ở đâu, cần hỗ trợ gì" style="margin-top:10px;width:100%"></textarea>`, foot: '<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>Gửi báo cáo</button>' });
+    m.el.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { loai = b.dataset.l; m.el.querySelectorAll('[data-l]').forEach(x => x.classList.toggle('sel', x === b)); });
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    m.el.querySelector('[data-ok]').onclick = () => {
+      const nd = m.el.querySelector('[data-nd]').value.trim(); if (!nd) return toast('Nhập mô tả ngắn', 'err');
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6), x = { chuyen: t.id, loai, nd, at: Date.now(), bks: (t.xe || {}).bks || '' }, me = CT.me();
+      if (CT.live()) { const who = ((DB.employees || []).find(e => String(e.id) === me) || {}).ten || dvLog.who(); if (TX.inc(id, x, me, who)) App.changed(); }
+      else FB.col().doc('tx_' + me).set({ inc: { [id]: x } }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng rồi gửi lại', 'err'));
+      m.close(); toast(ic('check') + ' Đã gửi báo sự cố cho điều hành', 'ok', 3000);
+    };
+  },
+  /* lịch thu nhỏ: chuyến của tôi theo ngày bất kỳ (lái xe tra cứu nhanh) */
+  mineAll() { const me = CT.me(), seen = new Set(); return (DB.lichchay || []).filter(l => l && [l.laiXe, l.laiXe2, l.phuXe].map(String).includes(me) && !seen.has(l.id) && seen.add(l.id)); },
+  full: false, wk: '',
+  cal() {
+    const td = D.today(), d = CT.d || td, cnt = {};
+    CT.mineAll().forEach(l => { if (l.ngay) cnt[l.ngay] = (cnt[l.ngay] || 0) + 1; });
+    let cells, title;
+    if (CT.full) { const ym = CT.mon || d.slice(0, 7), nd = D.daysIn(ym), lead = (D.parse(ym + '-01').getDay() + 6) % 7; title = F.month ? F.month(ym) : ym;
+      cells = [...Array(lead).fill(''), ...Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'))]; }
+    else { const base = CT.wk || d, mon = D.add(base, -((D.parse(base).getDay() + 6) % 7)); cells = Array.from({ length: 7 }, (_, i) => D.add(mon, i)); title = 'Tháng ' + (+cells[3].slice(5, 7)) + '/' + cells[3].slice(0, 4); }
+    return `<div class="ct-cal${CT.full ? '' : ' wk'}"><div class="ct-calh"><button type="button" data-cm="-1">${ic('back')}</button><b>${title}</b><button type="button" data-cm="1" class="nx">${ic('back')}</button>${d !== td ? '<button type="button" class="ct-today" data-cd="' + td + '">Hôm nay</button>' : ''}<button type="button" class="ct-today" data-cf>${CT.full ? 'Thu gọn' : 'Cả tháng'}</button></div>
+      <div class="ct-calg">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<small>${x}</small>`).join('')}${cells.map(x => x ? `<button type="button" data-cd="${x}" class="${x === d ? 'sel' : ''}${x === td ? ' td' : ''}${cnt[x] ? ' has' : ''}">${+x.slice(8)}${cnt[x] ? `<i>${cnt[x]}</i>` : ''}</button>` : '<span></span>').join('')}</div></div>`;
+  },
+  dayList(d) {
+    const L = CT.mineAll().filter(l => l.ngay === d).sort((a, b) => String(a.gio).localeCompare(String(b.gio))), me = CT.me();
+    const nm = id => ((DB.employees || []).find(e => String(e.id) === String(id)) || {}).ten || '';
+    if (!L.length) return `<div class="ct-empty sm">${ic('bus')}<b>Không có chuyến ngày ${F.date(d)}</b></div>`;
+    return `<div class="ct-lbl">${L.length} chuyến ngày ${F.date(d)}</div>` + L.map(l => { const v = (DB.vehicles || []).find(x => x.id === l.xeId) || {}, mates = [l.laiXe, l.laiXe2, l.phuXe].filter(x => x && String(x) !== me).map(nm).filter(Boolean);
+      return `<div class="ct-card sm"><div class="ct-h"><b class="ct-time">${esc(l.gio || '')}</b><span class="ct-when">${l.phuXe && String(l.phuXe) === me ? 'Phụ xe' : 'Lái xe'}</span></div><div class="ct-route">${esc(l.tuyen || '')}</div><div class="ct-sub">${ic('bus')} ${esc(v.bks || 'Chưa gán xe')}${mates.length ? ' · Cùng: ' + esc(mates.join(', ')) : ''}</div></div>`; }).join('');
+  },
   /* ---------- màn hình danh sách chuyến ---------- */
   list(el, T) {
+    const td0 = D.today(), d = CT.d || td0;
+    if (d !== td0 && !(d === D.add(td0, 1) && T.some(t => t.ngay === d))) { el.innerHTML = `<div class="ct">${CT.cal()}${CT.dayList(d)}</div>`; return CT.bindCal(el); }
+    if (d === D.add(td0, 1)) T = T.filter(t => t.ngay === d);
     const td = D.today(), nx = T.find(t => CT.mins(t) > -180) || T[T.length - 1];
     const card = (t, big) => { const s = CT.sum(t), m = CT.mins(t); return `<button class="ct-card${big ? ' big' : ''}${m < -180 ? ' gone' : ''}" data-ct="${esc(t.id)}">
       <div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when ${m > 0 && m <= 60 ? 'soon' : ''}">${t.ngay === td ? '' : 'Ngày mai · '}${CT.when(t)}</span></div>
       <div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
       <div class="ct-kpi"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Cần thu</span></div></div></button>`; };
-    el.innerHTML = `<div class="ct">${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
+    el.innerHTML = `<div class="ct">${CT.cal()}${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
     el.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { CT.trip = b.dataset.ct; CT.tab = 'don'; App.render(); window.scrollTo(0, 0); });
+    CT.bindCal(el);
+  },
+  bindCal(el) {
+    el.querySelectorAll('[data-cd]').forEach(b => b.onclick = () => { CT.d = b.dataset.cd; CT.mon = CT.d.slice(0, 7); CT.wk = ''; App.render(); });
+    el.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { const n = +b.dataset.cm; if (CT.full) CT.mon = D.ymAdd(CT.mon || (CT.d || D.today()).slice(0, 7), n); else CT.wk = D.add(CT.wk || CT.d || D.today(), 7 * n); App.render(); });
+    const f = el.querySelector('[data-cf]'); if (f) f.onclick = () => { CT.full = !CT.full; CT.mon = (CT.wk || CT.d || D.today()).slice(0, 7); App.render(); };
   },
   /* ---------- màn hình một chuyến ---------- */
   one(el, t) {
     const s = CT.sum(t), gone = CT.mins(t) < -20, now = Date.now();
-    const row = p => { const st = CT.st(p), due = CT.due(p, st), nw = CT.fresh[p.id] > now; return `<div class="ct-p${st.len ? ' on' : ''}${nw ? ' new' : ''}">
-      <div class="ct-pt"><span class="ct-seat">${esc(p.ghe)}</span><div class="grow"><b>${esc(p.ten || 'Khách')}</b>${p.gc ? `<div class="ct-gc">${esc(p.gc)}</div>` : ''}<div class="ct-pm">${CT.tab === 'don' ? (p.tra ? 'Trả: ' + esc(p.tra) : '') : 'Trả: ' + esc(p.tra || 'chưa ghi điểm trả')}</div></div>
+    const row = p => { const st = CT.st(p), due = CT.due(p, st), nw = CT.fresh[p.id] > now; return `<div class="ct-p${st.len || st.vang || (CT.tab === 'tra' && st.xuong) ? ' on' : ''}${st.vang ? ' vang' : ''}${nw ? ' new' : ''}">
+      <div class="ct-pt"><span class="ct-seat">${esc(p.ghe)}</span><div class="grow"><b>${esc(p.ten || 'Khách')}</b>${st.vang ? ' <span class="ct-tag vang">Vắng</span>' : ''}${st.xuong ? ' <span class="ct-tag">Đã trả</span>' : ''}${p.gc ? `<div class="ct-gc">${esc(p.gc)}</div>` : ''}<div class="ct-pm">${CT.tab === 'don' ? (p.tra ? 'Trả: ' + esc(p.tra) : '') : 'Trả: ' + esc(p.tra || 'chưa ghi điểm trả')}</div></div>
         <div class="ct-money">${st.tt === 'tra' ? `<span class="ok">Đã thu${st.httt === 'ck' ? ' CK' : ''}</span>` : `<b>${F.money(due)}</b><small>${p.coc ? 'đã cọc ' + F.money(p.coc) : 'cần thu'}</small>`}</div></div>
-      <div class="ct-acts">${p.sdt ? `<a class="ct-b call" href="tel:${esc(p.sdt)}">${ic('phone')} Gọi</a>` : '<span></span>'}<button class="ct-b ${st.len ? 'done' : ''}" data-len="${esc(p.id)}">${ic('check')} ${st.len ? 'Đã lên' : 'Lên xe'}</button><button class="ct-b ${st.tt === 'tra' ? 'done' : 'pay'}" data-pay="${esc(p.id)}">${ic('wallet')} ${st.tt === 'tra' ? 'Đã thu' : 'Thu tiền'}</button></div></div>`; };
+      <div class="ct-acts${CT.tab === 'don' ? ' c4' : ''}">${p.sdt ? `<a class="ct-b call" href="tel:${esc(p.sdt)}">${ic('phone')} Gọi</a>` : '<span></span>'}${CT.tab === 'don'
+        ? `<button class="ct-b ${st.len ? 'done' : ''}" data-len="${esc(p.id)}" ${st.vang ? 'disabled' : ''}>${ic('check')} ${st.len ? 'Đã lên' : 'Lên xe'}</button><button class="ct-b ${st.vang ? 'warn' : ''}" data-vang="${esc(p.id)}" ${st.len ? 'disabled' : ''}>${ic('x')} ${st.vang ? 'Đã vắng' : 'Vắng'}</button>`
+        : `<button class="ct-b ${st.xuong ? 'done' : ''}" data-xuong="${esc(p.id)}" ${st.vang ? 'disabled' : ''}>${ic('check')} ${st.xuong ? 'Đã trả' : 'Trả khách'}</button>`}<button class="ct-b ${st.tt === 'tra' ? 'done' : 'pay'}" data-pay="${esc(p.id)}" ${st.vang ? 'disabled' : ''}>${ic('wallet')} ${st.tt === 'tra' ? 'Đã thu' : 'Thu'}</button></div></div>`; };
     const grp = key => { const G = {}; t.pax.forEach(p => { const k = p[key] || '(Chưa ghi điểm)'; (G[k] = G[k] || []).push(p); }); return Object.entries(G).sort((a, b) => CT.idx(t, a[0]) - CT.idx(t, b[0]) || a[0].localeCompare(b[0], 'vi'))
-      .map(([k, L]) => { L.sort((a, b) => CT.st(a).len - CT.st(b).len || String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true })); const e = CT.eta(t, k), left = L.filter(p => !CT.st(p).len).length;
+      .map(([k, L]) => { L.sort((a, b) => (CT.st(a).len || CT.st(a).vang) - (CT.st(b).len || CT.st(b).vang) || String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true })); const e = CT.eta(t, k), left = L.filter(p => { const z = CT.st(p); return CT.tab === 'tra' ? !z.xuong && !z.vang : !z.len && !z.vang; }).length;
         return `<div class="ct-stop"><div class="ct-sh">${k !== '(Chưa ghi điểm)' ? `<a href="${CT.map(k)}" target="_blank" rel="noopener" title="Chỉ đường">${ic('map')} ${esc(k)}</a>` : esc(k)}${e ? `<em>~${e}</em>` : ''}<span>${left ? left + ' chờ' : '✓ đủ'}/${L.length}</span></div>${L.map(row).join('')}</div>`; }).join(''); };
     let body = '';
     if (CT.tab === 'don') body = t.pax.length ? grp('don') : '<div class="ct-empty sm">Chưa có khách đặt vé.</div>';
     else if (CT.tab === 'tra') body = (t.pax.length ? grp('tra') : '') + `<div class="ct-lbl">Hàng gửi (${t.hang.length})</div>${t.hang.length ? t.hang.map(h => `<div class="ct-p"><div class="ct-pt"><span class="ct-seat">${ic('box')}</span><div class="grow"><b>${esc(h.ten)}</b>${h.sl ? ` <small>× ${esc(h.sl)}</small>` : ''}<div class="ct-pm">${h.noi ? 'Giao: ' + esc(h.noi) : ''}${h.nhan ? ' · ' + esc(h.nhan) : ''}</div></div><div class="ct-money">${h.thu === 'nhan' ? `<b>${F.money(h.tien)}</b><small>thu người nhận</small>` : '<span class="ok">Đã trả cước</span>'}</div></div>${h.sdt ? `<div class="ct-acts"><a class="ct-b call" href="tel:${esc(h.sdt)}">${ic('phone')} Gọi người nhận</a></div>` : ''}</div>`).join('') : '<div class="ct-empty sm">Không có hàng gửi.</div>'}`;
     else { const so = t.so; body = so ? `<div class="ct-grid" style="grid-template-columns:repeat(${so.cols},minmax(0,1fr))">${so.rows.map(r => r.map(x => { if (x === 'D') return '<div class="ct-g lbl">Tài xế</div>'; if (x === 'DOOR') return '<div class="ct-g lbl">Cửa</div>'; if (!x) return '<div></div>'; const p = t.pax.find(q => q.ghe === x), st = p ? CT.st(p) : null; return `<div class="ct-g ${p ? (st.len ? 'len' : st.tt === 'tra' ? 'pd' : 'bk') : ''}"><b>${esc(x)}</b>${p ? `<small>${esc(String(p.don || '').slice(0, 14))}</small>` : ''}</div>`; }).join('')).join('')}</div><div class="ct-leg"><span><i class="bk"></i>Chưa thu</span><span><i class="pd"></i>Đã thu</span><span><i class="len"></i>Đã lên xe</span><span><i></i>Trống</span></div>` : '<div class="ct-empty sm">Xe chưa có sơ đồ ghế.</div>'; }
-    const done = gone ? `<div class="ct-sum"><b>Tổng kết chuyến</b><div class="ct-kpi"><div><b>${s.len}/${s.n}</b><span>Khách đã lên</span></div><div><b>${F.money(s.tm)}</b><span>Tiền mặt đã thu</span></div><div><b>${F.money(s.ck)}</b><span>Chuyển khoản</span></div></div>${s.n - s.len ? `<div class="ct-warn">${s.n - s.len} khách chưa đánh dấu lên xe (bỏ chuyến?)</div>` : ''}${s.can ? `<div class="ct-warn">Còn ${F.money(s.can)} chưa thu</div>` : ''}</div>` : '';
+    const done = gone ? `<div class="ct-sum"><b>Tổng kết chuyến</b><div class="ct-kpi"><div><b>${s.len}/${s.n}</b><span>Khách đã lên</span></div><div><b>${F.money(s.tm)}</b><span>Tiền mặt đã thu</span></div><div><b>${F.money(s.ck)}</b><span>Chuyển khoản</span></div></div>${s.vang ? `<div class="ct-warn">${s.vang} khách vắng</div>` : ''}${s.n - s.len - s.vang ? `<div class="ct-warn">${s.n - s.len - s.vang} khách chưa đánh dấu lên xe hoặc vắng</div>` : ''}${s.can ? `<div class="ct-warn">Còn ${F.money(s.can)} chưa thu</div>` : ''}</div>` : '';
     el.innerHTML = `<div class="ct ct-in">
       <div class="ct-top"><button class="ct-back" data-back>${ic('back')}</button><div class="grow"><div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when">${t.ngay === D.today() ? '' : F.date(t.ngay) + ' · '}${CT.when(t)}</span></div><div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}</div></div></div>
       <div class="ct-kpi big"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Còn phải thu</span></div></div>
+      <div class="ct-docs"><span class="${t.lenh ? 'ok' : 'no'}">${ic('file')} ${t.lenh ? 'Lệnh ' + esc(String(t.lenh.so || '').replace(/^LVC-/, '')) + (t.lenh.tt === 'dong' ? ' · đã đóng' : ' · đang mở') : 'Chưa có lệnh vận chuyển'}</span><span class="${t.nt === 'ok' ? 'ok' : t.nt ? 'no' : 'no'}">${ic('check')} ${t.nt === 'ok' ? 'Nghiệm thu đạt' : t.nt === 'fail' ? 'Nghiệm thu không đạt' : t.nt === 'part' ? 'Nghiệm thu chưa đủ' : 'Chưa nghiệm thu'}</span><button class="ct-b warn sm" data-inc>${ic('alert')} Báo sự cố</button></div>
       ${done}
       <div class="ct-tabs">${[['don', 'Đón khách'], ['ghe', 'Sơ đồ ghế'], ['tra', 'Trả & hàng']].map(([k, n]) => `<button class="${CT.tab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
       <div class="ct-body">${body}</div>
@@ -76,6 +123,9 @@ const CT = {
     el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { CT.tab = b.dataset.tab; App.render(); });
     const P = id => t.pax.find(p => p.id === id);
     el.querySelectorAll('[data-len]').forEach(b => b.onclick = () => { const p = P(b.dataset.len); if (p) CT.act(p, { len: !CT.st(p).len }); });
+    el.querySelectorAll('[data-vang]').forEach(b => b.onclick = () => { const p = P(b.dataset.vang); if (p) CT.act(p, { vang: !CT.st(p).vang }); });
+    el.querySelectorAll('[data-xuong]').forEach(b => b.onclick = () => { const p = P(b.dataset.xuong); if (p) CT.act(p, { xuong: !CT.st(p).xuong }); });
+    el.querySelector('[data-inc]').onclick = () => CT.report(t);
     el.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => { const p = P(b.dataset.pay); if (!p) return; const st = CT.st(p);
       if (st.tt === 'tra') { if (!st.httt || CT.acts[p.id]) return Modal.confirm('Bỏ đánh dấu đã thu của ghế ' + esc(p.ghe) + '?', { ok: 'Bỏ đã thu' }).then(ok => ok && CT.act(p, { tt: 'giu' })); return toast('Vé đã thu tại quầy', ''); }
       const m = Modal.open({ title: 'Thu tiền ghế ' + esc(p.ghe) + ' · ' + esc(p.ten || ''), width: 380, body: `<div style="text-align:center;font-size:30px;font-weight:800;margin:4px 0 14px">${F.money(CT.due(p, st))} đ</div><div class="ct-pay"><button class="ct-b pay" data-h="tm">${ic('money')} Tiền mặt</button><button class="ct-b pay" data-h="ck">${ic('wallet')} Chuyển khoản</button></div>`, foot: '<button class="btn" data-no>Đóng</button>' });
@@ -105,7 +155,14 @@ addCSS(`.ct{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap
 .ct-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:#475467;margin-top:8px}.ct-leg i{display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px dashed #d0d5dd;vertical-align:-2px;margin-right:5px}.ct-leg i.bk{background:#fee2e2;border:1.5px solid #fca5a5}.ct-leg i.pd{background:#dcfce7;border:1.5px solid #86efac}.ct-leg i.len{background:#16a34a;border-color:#16a34a}
 .ct-sum{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:12px 14px}.ct-warn{margin-top:8px;color:#b45309;font-weight:700;font-size:13.5px}
 .ct-foot{position:fixed;left:0;right:0;bottom:var(--bn-h,0px);z-index:40;display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:640px;margin:0 auto;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid #e4e7ec}.ct-foot small{display:block;font-size:12px;color:#64748b}.ct-foot b{font-size:18px}.ct-foot b.due{color:#dc2626}
-@media(max-width:900px){.ct-foot{bottom:64px}}`);
+@media(max-width:900px){.ct-foot{bottom:64px}}
+.ct-acts.c4{grid-template-columns:repeat(4,1fr);gap:6px}.ct-acts.c4 .ct-b{font-size:13px;gap:4px;padding:0 4px}.ct-b:disabled{opacity:.35;cursor:not-allowed}.ct-b.warn{border-color:#fdba74;color:#c2410c}.ct-b.warn.sel,.ct-b.sel{background:#fff7ed;border-color:#f97316}.ct-b.sm{min-height:36px;font-size:13px;padding:0 10px}
+.ct-p.vang .ct-pt{opacity:.45}.ct-tag{font-size:11px;font-weight:800;background:#dcfce7;color:#15803d;border-radius:6px;padding:1px 6px;vertical-align:2px}.ct-tag.vang{background:#fee2e2;color:#b91c1c}
+.ct-docs{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:8px 12px;font-size:13px;font-weight:600}.ct-docs span{display:inline-flex;align-items:center;gap:4px}.ct-docs svg{width:15px;height:15px}.ct-docs .ok{color:#15803d}.ct-docs .no{color:#b45309}.ct-docs .ct-b{margin-left:auto}
+.ct-inc{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ct-inc .ct-b{min-height:48px;font-size:13.5px;padding:4px 8px;text-align:center}
+.ct-cal{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:8px 10px}.ct-calh{display:flex;align-items:center;gap:6px;margin-bottom:4px}.ct-calh b{flex:1;text-align:center;font-size:15px}.ct-calh button{border:0;background:#f1f5f9;border-radius:10px;min-width:34px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font:inherit;font-weight:700;font-size:13px}.ct-calh .nx svg{transform:rotate(180deg)}.ct-calh svg{width:16px;height:16px}.ct-calh .ct-today{padding:0 10px;background:#eff6ff;color:#1d4ed8}
+.ct-calg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}.ct-calg small{font-size:11px;color:#98a2b3;padding:2px 0}.ct-cal.wk .ct-calg button{height:40px}.ct-calg button{position:relative;border:0;background:none;border-radius:10px;height:34px;font:inherit;font-size:14px;font-weight:600;color:#1f2937;cursor:pointer}.ct-calg button.has{background:#eef2ff;color:#3730a3;font-weight:800}.ct-calg button.td{box-shadow:inset 0 0 0 2px #93c5fd}.ct-calg button.sel{background:var(--p);color:#fff}.ct-calg i{position:absolute;top:1px;right:3px;font-style:normal;font-size:9.5px;font-weight:800;color:#dc2626}.ct-calg button.sel i{color:#fff}
+.ct-card.sm{cursor:default;padding:10px 14px}.ct-card.sm .ct-time{font-size:18px}`);
 MODL.def('chuyentoi', {
   title: 'Chuyến của tôi', icon: 'bus', desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền',
   render(el) {

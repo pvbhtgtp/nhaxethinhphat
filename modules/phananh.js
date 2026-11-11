@@ -2,8 +2,8 @@
 /* Module Phản ánh & sự cố (NĐ 158/2024 Đ11: theo dõi vi phạm, sự cố an toàn; tiếp nhận, xử lý phản ánh của hành khách) · tải khi mở màn hình (MODL).
    Dữ liệu: DB.phanAnh (phần Vận hành). Vi phạm / tai nạn lấy từ Lý lịch hành nghề (DB.lylich, loại vp / tn) — không nhập trùng. */
 const PA = { tab: 'pa', thang: '', nam: '', tt: '', q: '' };
-const PA_KENH = ['Điện thoại / Hotline', 'Zalo', 'Trực tiếp', 'Facebook', 'Email', 'Khác'];
-const PA_LOAI = ['Thái độ phục vụ', 'Giờ giấc / bỏ chuyến', 'An toàn / lái xe ẩu', 'Hành lý / hàng hóa', 'Giá vé / thu tiền', 'Vệ sinh xe', 'Khác'];
+const PA_KENH = ['Điện thoại / Hotline', 'Zalo', 'Trực tiếp', 'Facebook', 'Email', 'Lái xe báo qua app', 'Khác'];
+const PA_LOAI = ['Thái độ phục vụ', 'Giờ giấc / bỏ chuyến', 'An toàn / lái xe ẩu', 'Hành lý / hàng hóa', 'Giá vé / thu tiền', 'Vệ sinh xe', 'Sự cố xe / hỏng xe', 'Tai nạn / va chạm', 'Khách gây rối / an ninh', 'Kẹt xe / trễ giờ', 'Khác'];
 const PA_TT = { moi: { t: 'Mới tiếp nhận', c: 'b-red' }, dang: { t: 'Đang xử lý', c: 'b-amber' }, xong: { t: 'Đã xử lý', c: 'b-green' } };
 const paAll = () => (DB.phanAnh = DB.phanAnh || []);
 const paEmp = id => (id && (DB.employees || []).find(e => e.id === id)) || null;

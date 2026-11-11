@@ -13087,7 +13087,7 @@ MODL.reg('phananh', { title: 'Phản ánh & sự cố', icon: 'message', group: 
 const ME = {
   BACK: 7, FWD: 14, last: {}, t: 0,
   build(e) {
-    if (!e) return null; const td = D.today(), from = D.add(td, -ME.BACK), to = D.add(td, ME.FWD), cur = td.slice(0, 7), prev = D.ymAdd(cur, -1);
+    if (!e) return null; const td = D.today(), cur = td.slice(0, 7), prev = D.ymAdd(cur, -1), from = prev + '-01', to = D.add(td, 31);   // lịch tra cứu của lái xe: từ đầu tháng trước đến 31 ngày tới
     const bks = id => ((DB.vehicles || []).find(v => v.id === id) || {}).bks || '', mine = l => [l.laiXe, l.laiXe2, l.phuXe].includes(e.id);
     const trips = (DB.lichchay || []).filter(l => l.ngay >= from && l.ngay <= to && mine(l)).sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio))
       .map(l => ({ id: l.id, ngay: l.ngay, gio: l.gio, tuyen: l.tuyen, xe: bks(l.xeId), xeId: l.xeId, laiXe: l.laiXe || '', laiXe2: l.laiXe2 || '', ve: (DB.datve || []).filter(v => v.chuyen === l.id && !v.huy).length }));
@@ -13392,7 +13392,9 @@ const TX = {
     const v = (DB.vehicles || []).find(x => x.id === l.xeId) || {}; let so = null; try { so = dvSO(l); } catch (e) { }
     return { id: l.id, ngay: l.ngay, gio: l.gio || '', tuyen: l.tuyen || '', xe: { bks: v.bks || '', loai: v.loai || '', soCho: +v.soCho || 0 }, so, lt: LT.get(l.tuyen).map(x => ({ ten: x.ten, phut: +x.phut || 0 })),
       vai: '', lai: [l.laiXe, l.laiXe2, l.phuXe].map(id => ((DB.employees || []).find(e => e.id === id) || {}).ten || ''),
-      pax: dvBook(l.id).map(b => ({ id: b.id, ghe: b.ghe || '', ten: b.ten || '', sdt: b.sdt || '', don: b.diemDon || '', tra: b.diemTra || '', tien: dvTot(b), coc: +b.coc || 0, tt: b.tt || 'giu', httt: b.httt || '', len: !!b.len, gc: b.ghiChu || '', tg: b.tg || '' })),
+      pax: dvBook(l.id).map(b => ({ id: b.id, ghe: b.ghe || '', ten: b.ten || '', sdt: b.sdt || '', don: b.diemDon || '', tra: b.diemTra || '', tien: dvTot(b), coc: +b.coc || 0, tt: b.tt || 'giu', httt: b.httt || '', len: !!b.len, vang: !!b.vang, xuong: !!b.daXuong, gc: b.ghiChu || '', tg: b.tg || '' })),
+      lenh: (() => { try { const o = LVC.of(l.id); return o ? { so: o.so || '', tt: o.tt === 'dong' ? 'dong' : 'mo' } : null; } catch (e) { return null; } })(),
+      nt: (() => { try { return ATK.state(l); } catch (e) { return ''; } })(),
       hang: (GH.list(l.id) || []).filter(h => !h.huy).map(h => ({ id: h.id, so: h.so || '', ten: GH.items(h).map(i => i.tenHang).filter(Boolean).join('; ') || 'Hàng gửi', sl: GH.slTong(h), nhan: h.tenNhan || '', sdt: h.sdtNhan || '', noi: h.noiNhan || '', tien: GH.tien(h), thu: h.nguoiThu || '' })) };
   },
   build(emp) {
@@ -13409,6 +13411,17 @@ const TX = {
   },
   /* luật bảo mật chưa cập nhật: báo ngay cho người thao tác (1 lần) */
   denied(e) { if (!e || e.code !== 'permission-denied' || TX._pd) return; TX._pd = 1; toast(`Chưa gửi được chuyến / thông báo cho lái xe: luật bảo mật Firebase chưa cập nhật. ${PERM.admin() ? '<button class="btn sm" data-act="rulesGo" style="margin-left:6px">Cập nhật ngay</button>' : 'Báo Admin bấm Cập nhật luật.'}`, 'err', 15000); },
+  /* lái xe báo sự cố trên chuyến → tự vào sổ Phản ánh & sự cố (phần Vận hành), không trùng */
+  inc(id, x, emp, who) {
+    if (!x || !id) return false; const L = (DB.phanAnh = DB.phanAnh || []); if (L.some(r => r.id === 'inc_' + id)) return false;
+    const t = (DB.lichchay || []).find(l => l.id === x.chuyen) || {}, v = (DB.vehicles || []).find(z => z.id === t.xeId) || {}, at = new Date(+x.at || Date.now());
+    const y = D.today().slice(2, 4), n = L.filter(r => String(r.so || '').startsWith('PA' + y)).length + 1;
+    L.push({ id: 'inc_' + id, so: 'PA' + y + '-' + String(n).padStart(3, '0'), tg: dvLog.now(), ngay: D.iso(at), gio: String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0'),
+      kenh: 'Lái xe báo qua app', loai: x.loai || 'Khác', ten: who || '', sdt: '', ngayDi: t.ngay || '', xe: v.bks || x.bks || '', lai: String(emp || ''), nguoiNhan: 'App lái xe',
+      noiDung: (t.gio ? 'Chuyến ' + t.gio + ' ' + (t.tuyen || '') + ': ' : '') + (x.nd || ''), tt: 'moi' });
+    try { NOTI && NOTI.bell && NOTI.bell(); } catch (e) { }
+    return true;
+  },
   soon() { clearTimeout(TX._t); TX._t = setTimeout(() => { try { TX.push(); } catch (e) { console.warn('TX', e); } }, 1500); },
   /* máy quầy vé: nhận "Đã lên xe / Đã thu" từ lái xe, ghi vào vé */
   watch() {
@@ -13421,7 +13434,10 @@ const TX = {
             const nd = []; if (a.len != null && !!b.len !== !!a.len) { b.len = !!a.len; nd.push(a.len ? 'đã lên xe' : 'bỏ đánh dấu lên xe'); }
             if (a.tt === 'tra' && b.tt !== 'tra') { b.tt = 'tra'; b.httt = a.httt || 'tm'; b.lxThu = 1; nd.push('đã thu ' + (b.httt === 'ck' ? 'chuyển khoản' : 'tiền mặt')); }
             if (a.tt === 'giu' && b.tt === 'tra' && b.lxThu) { b.tt = 'giu'; b.httt = ''; delete b.lxThu; nd.push('bỏ đánh dấu đã thu'); }
+            if (a.vang != null && !!b.vang !== !!a.vang) { b.vang = !!a.vang; nd.push(a.vang ? 'khách vắng' : 'bỏ đánh dấu vắng'); }
+            if (a.xuong != null && !!b.daXuong !== !!a.xuong) { b.daXuong = !!a.xuong; nd.push(a.xuong ? 'đã trả khách' : 'bỏ đánh dấu đã trả'); }
             b.lxAt = +a.at; if (nd.length) { (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: who, nd: who + ' (trên xe): ' + nd.join(', ') }); ch = true; } });
+          Object.entries(o.inc || {}).forEach(([id, x]) => { if (TX.inc(id, x, o.emp, who)) ch = true; });
         });
         if (ch) App.changed(false);
       }, () => { TX._w = false; });
