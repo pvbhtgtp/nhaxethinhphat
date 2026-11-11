@@ -45,9 +45,10 @@ function llTable(e, loai) {
 function llWork(e) {
   const T = (DB.lichchay || []).filter(l => [l.laiXe, l.laiXe2].includes(e.id) && l.xeId && l.ngay), G = {};
   T.forEach(l => { const v = (DB.vehicles || []).find(x => x.id === l.xeId); if (!v) return; const k = (v.loai || '') + '|' + (v.soCho || v.taiTrong || ''); const g = G[k] = G[k] || { tu: l.ngay, den: l.ngay, loai: v.loai || '', cho: +v.soCho ? v.soCho + ' chỗ' : (v.taiTrong ? v.taiTrong + ' kg' : '') }; if (l.ngay < g.tu) g.tu = l.ngay; if (l.ngay > g.den) g.den = l.ngay; });
-  const R = Object.values(G).sort((a, b) => a.tu.localeCompare(b.tu));
-  if (!R.length && (e.llXe || e.ngayVao)) R.push({ tu: e.ngayVao || '', den: '', loai: e.llXe || '', cho: e.llCho || '' });
-  return R.map(r => ({ ...r, hang: e.bangHang || '', hd: e.loaiHD || '' }));
+  const R = Object.values(G).sort((a, b) => a.tu.localeCompare(b.tu)), uq = a => [...new Set(a.filter(Boolean))].join(', ');
+  if (!R.length && !e.llXe && !e.ngayVao) return [];
+  // một dòng duy nhất: thời gian = ngày vào công ty; các loại xe đã chạy gộp chung, thêm giấy tờ mới không sinh dòng mới
+  return [{ tu: e.ngayVao || (R[0] && R[0].tu) || '', loai: uq(R.map(r => r.loai)) || e.llXe || '', cho: uq(R.map(r => r.cho)) || e.llCho || '', hang: e.bangHang || '', hd: e.loaiHD || '' }];
 }
 function llDoc(e, ed) {
   const c = 'border:1px solid #333;padding:5px 6px;font-size:13px;vertical-align:top', h = c + ';background:#f1f5f9;font-weight:700;text-align:center';
@@ -62,8 +63,8 @@ function llDoc(e, ed) {
     <table style="width:100%;border-collapse:collapse;margin:4px 0"><tr>${kv('Họ và tên', esc(e.ten))}${kv('Ngày sinh', d(e.ngaySinh))}</tr><tr>${kv('Số CCCD', esc(e.cccd || ''))}${kv('Điện thoại', esc(e.sdt || ''))}</tr>
       <tr>${kv('Giấy phép lái xe số', esc(e.bangSo || ''))}${kv('Hạng', esc(e.bangHang || '') + (e.bangHetHan ? ' · hết hạn ' + d(e.bangHetHan) : ''))}</tr><tr><td colspan="2" style="padding:3px 0;font-size:13.5px">Cơ quan cấp GPLX: <b>${esc(e.bangNoiCap || '')}</b>${e.bangNgayCap ? ' · ngày cấp <b>' + d(e.bangNgayCap) + '</b>' : ''}</td></tr>
       <tr><td colspan="2" style="padding:3px 0;font-size:13.5px">Nơi thường trú: <b>${esc(e.diaChiTT || '')}</b></td></tr></table>
-    ${sec(2, 'Quá trình hành nghề lái xe')}${tbl(['Thời gian', 'Hạng GPLX', 'Loại xe điều khiển', 'Sức chứa / tải trọng', 'Hình thức hợp đồng lao động'], W.map(r => `<tr><td style="${c}">${r.tu ? d(r.tu) + ' – ' + (r.den ? d(r.den) : 'nay') : ''}</td><td style="${c}">${esc(r.hang)}</td><td style="${c}">${esc(r.loai)}</td><td style="${c}">${esc(r.cho)}</td><td style="${c}">${esc(r.hd)}</td>${ed ? `<td style="${c}"></td>` : ''}</tr>`))}
-    ${ed ? '<div class="muted small">Tự lấy theo các xe đã chạy trong Lịch chạy và loại hợp đồng trong hồ sơ Nhân viên.</div>' : ''}
+    ${sec(2, 'Quá trình hành nghề lái xe')}${tbl(['Thời gian', 'Hạng GPLX', 'Loại xe điều khiển', 'Sức chứa / tải trọng', 'Hình thức hợp đồng lao động'], W.map(r => `<tr><td style="${c};white-space:nowrap">${r.tu ? 'Từ ' + d(r.tu) : ''}</td><td style="${c}">${esc(r.hang)}</td><td style="${c}">${esc(r.loai)}</td><td style="${c}">${esc(r.cho)}</td><td style="${c}">${esc(r.hd)}</td>${ed ? `<td style="${c}"></td>` : ''}</tr>`))}
+    ${ed ? '<div class="muted small">Thời gian tính từ ngày vào công ty; loại xe tự lấy theo các xe đã chạy trong Lịch chạy, hợp đồng theo hồ sơ Nhân viên.</div>' : ''}
     ${sec(3, 'Theo dõi sức khỏe', 'sk')}${tbl(['Ngày khám', 'Cơ sở khám', 'Kết quả khám', 'Hạn giấy khám'], rows('sk', [r => d(r.ngay), r => esc(r.noi || ''), r => esc(r.tt || ''), r => ed ? llBadge(llHan(r), '—') : d(llHan(r))]))}
     ${sec(4, 'Vi phạm quy định về an toàn giao thông', 'vp')}${tbl(['Ngày', 'Lỗi vi phạm', 'Hình thức xử lý', 'Ghi chú'], rows('vp', [r => d(r.ngay), r => esc(r.loi || ''), r => esc(r.xuLy || ''), r => esc(r.ghiChu || '')]))}
     ${sec(5, 'Tai nạn giao thông', 'tn')}${tbl(['Ngày', 'Xe', 'Địa điểm', 'Thiệt hại về người và phương tiện', 'Nguyên nhân'], rows('tn', [r => d(r.ngay), r => esc(r.xe || ''), r => esc(r.diaDiem || ''), r => esc(r.thietHai || ''), r => esc(r.nguyenNhan || '')]))}
