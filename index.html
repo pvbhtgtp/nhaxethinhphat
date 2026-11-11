@@ -2093,7 +2093,7 @@ function empForm(e) {
       App.changed(); toast('Đã lưu nhân viên ' + esc(d.ten), 'ok');
       try { HS.afterEmpSave(isNew ? DB.employees[DB.employees.length - 1] : e); } catch (x) { console.warn('HS.afterEmpSave', x); }
     },
-    onDelete: isNew ? null : () => { DB.employees = DB.employees.filter(x => x !== e); App.changed(); }
+    onDelete: isNew ? null : () => { if (!REFX.canDel('E', e)) return; DB.employees = DB.employees.filter(x => x !== e); App.changed(); }
   });
   if (!isNew) tvBind(fm, e);
   lpAttach(fm, () => { const d = readForm(fm.el, EMP_FIELDS()); return d.ten ? `<div class="pr">${hdHTML({ ...(e || {}), ...d })}</div>` : ''; }, { caption: 'Xem trước hợp đồng lao động', empty: 'Nhập họ tên để xem trước hợp đồng' });
@@ -2141,7 +2141,7 @@ const vEmp = {
 };
 Object.assign(ACT, {
   empAdd: () => empForm(), empImport: () => empImport(), empEdit: d => empForm(empById(d.id)),
-  empDel: async d => { const e = empById(d.id); if (await Modal.confirm(`Xóa nhân viên <b>${esc(e.ten)}</b>?`, { ok: 'Xóa', danger: true })) { DB.employees = DB.employees.filter(x => x !== e); App.changed(); } }
+  empDel: async d => { const e = empById(d.id); if (!e || !REFX.canDel('E', e)) return; if (await Modal.confirm(`Xóa nhân viên <b>${esc(e.ten)}</b>?`, { ok: 'Xóa', danger: true })) { DB.employees = DB.employees.filter(x => x !== e); App.changed(); } }
 });
 
 /* ---------- Nhập nhiều nhân viên từ Excel (file .xlsx/.csv hoặc dán thẳng) ---------- */
@@ -3533,7 +3533,7 @@ function vehForm(v) {
       if (sdMsg) setTimeout(() => toast(sdMsg, 'ok', 8000), 400);
       App.changed(); toast('Đã lưu xe ' + esc(d.bks), 'ok');
     },
-    onDelete: isNew || !canDel ? null : () => { DB.vehicles = DB.vehicles.filter(x => x !== v); App.changed(); }
+    onDelete: isNew || !canDel ? null : () => { if (!REFX.canDel('V', v)) return; DB.vehicles = DB.vehicles.filter(x => x !== v); App.changed(); }
   });
   { const kd = m.el.querySelector('[name="kdSo"]'); if (kd && canEdit) { const f = kd.closest('.field'), b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.style.marginTop = '6px'; b.innerHTML = ic('search') + ' Tra cứu trên Cục Đăng kiểm'; b.onclick = () => vehTraCuu(m.el.querySelector('[name="bks"]').value, m.el.querySelector('[name="khung"]').value, v); f.appendChild(b); } }
   { const g = n => m.el.querySelector(`[name="${n}"]`), tt = g('taiTrong'), L = g('loai'), C = g('soCho'); let last = null;
@@ -3632,7 +3632,7 @@ Object.assign(ACT, {
   },
   vehLock: async d => { const v = vehById(d.id); if (!v) return; if (v.ngung) { delete v.ngung; toast('Đã mở khóa xe ' + v.bks, 'ok'); App.changed(); return; } if (await Modal.confirm(`Khóa xe <b>${esc(v.bks)}</b> vì không còn sử dụng?`, { ok: 'Khóa xe' })) { v.ngung = '1'; toast('Đã khóa xe ' + v.bks, 'ok'); App.changed(); } },
   vehAdd: () => vehForm(), vehEdit: d => vehForm(vehById(d.id)), vehDocs: d => vehDocs(vehById(d.id)),
-  vehDel: async d => { const v = vehById(d.id); if (v && await Modal.confirm(`Xóa phương tiện <b>${esc(v.bks)}</b>?`, { ok: 'Xóa', danger: true })) { DB.vehicles = DB.vehicles.filter(x => x !== v); App.changed(); } }
+  vehDel: async d => { const v = vehById(d.id); if (!v || !REFX.canDel('V', v)) return; if (await Modal.confirm(`Xóa phương tiện <b>${esc(v.bks)}</b>?`, { ok: 'Xóa', danger: true })) { DB.vehicles = DB.vehicles.filter(x => x !== v); App.changed(); } }
 });
 /* ===== Lý lịch phương tiện kinh doanh vận tải ===== */
 const VL_F = [['soLoai', 'Số loại (model)'], ['nuocSX', 'Nước sản xuất'], ['taiTrong', 'Tải trọng cho phép chở (kg)'], ['loaiHinh', 'Loại hình kinh doanh vận tải', ['Tuyến cố định', 'Xe buýt', 'Xe taxi', 'Xe hợp đồng', 'Xe du lịch', 'Tuyến cố định + Xe hợp đồng']], ['dkSo', 'Giấy đăng ký xe: số'], ['dkNgay', 'Ngày cấp', 'date'], ['dkNoi', 'Nơi cấp'], ['kdSo', 'Số giấy chứng nhận kiểm định'], ['gpsModel', 'GPS: nhãn hiệu / model'], ['gpsNcc', 'GPS: nhà cung cấp dịch vụ'], ['gpsTk', 'GPS: tài khoản truy cập'], ['hhPhuHieu', 'Thời hạn phù hiệu / biển hiệu', 'date'], ['ngayHD', 'Ngày đưa phương tiện vào hoạt động', 'date'], ['ngayNgung', 'Ngày ngừng hoạt động / thanh lý', 'date']];
@@ -5820,6 +5820,24 @@ const REFX = {
   }
 };
 ACT.refx = () => REFX.show();
+/* Chặn xóa xe / nhân viên còn được mod khác dùng tới: đề nghị chuyển sang Ngừng sử dụng / Nghỉ việc (giữ nguyên lịch sử) */
+REFX.uses = function (kind, x) {
+  if (!x) return []; const out = [], id = x.id, bk = REFX.bk(x.bks), nm = REFX.nm(x.ten);
+  REFX.R.forEach(([name, key, F]) => { const L = DB[key]; if (!Array.isArray(L)) return; let n = 0;
+    L.forEach(r => { if (!r || r === x) return; if (F.some(([f, t]) => r[f] && ((kind === 'V' && ((t === 'V' && r[f] === id) || (t === 'B' && REFX.bk(r[f]) === bk))) || (kind === 'E' && ((t === 'E' && r[f] === id) || (t === 'N' && REFX.nm(r[f]) === nm)))))) n++; });
+    if (n) out.push(name + ' (' + n + ')'); });
+  if (kind === 'E') { try { const c = Object.values(DB.cham || {}).filter(m => m && m[id]).length; if (c) out.push('Chấm công (' + c + ' tháng)'); } catch (e) { } }
+  return out;
+};
+REFX.canDel = function (kind, x) {
+  const U = REFX.uses(kind, x); if (!U.length) return true;
+  const isV = kind === 'V', label = isV ? 'xe ' + (x.bks || '') : 'nhân viên ' + (x.ten || '');
+  const m = Modal.open({ title: 'Không xóa được ' + esc(label), width: 480, body: `<p style="margin-top:0">Đang được dùng ở: <b>${U.map(esc).join(', ')}</b>. Xóa sẽ làm đứt liên kết, mất lịch sử ở các mod này.</p><p>Nên chuyển sang <b>${isV ? 'Ngừng sử dụng (khóa)' : 'Nghỉ việc'}</b>: ${isV ? 'xe' : 'người'} không còn được chọn cho chuyến mới, lịch sử vẫn giữ đủ.</p>`,
+    foot: `<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>${isV ? 'Chuyển sang Ngừng sử dụng' : 'Chuyển sang Nghỉ việc'}</button>` });
+  m.el.querySelector('[data-no]').onclick = () => m.close();
+  m.el.querySelector('[data-ok]').onclick = () => { if (isV) { x.ngung = '1'; if (!x.ngayNgung) x.ngayNgung = D.today(); } else { x.trangThai = 'Nghỉ việc'; if (!x.ngayThoiViec) x.ngayThoiViec = D.today(); } App.changed(); m.close(); toast(ic('check') + ' Đã chuyển ' + esc(label) + (isV ? ' sang Ngừng sử dụng' : ' sang Nghỉ việc'), 'ok', 3000); };
+  return false;
+};
 { const ch = App.changed; App.changed = function () { try { REFX.follow(); } catch (e) { } return ch.apply(this, arguments); }; }
 { const rr = App.render; App.render = function () { try { if (!REFX.sv && DB && DB.vehicles && DB.vehicles.length) REFX.snap(); } catch (e) { } return rr.apply(this, arguments); }; }
 setTimeout(() => { try { REFX.run(); } catch (e) { } }, 20000);
@@ -13726,7 +13744,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T02:10';
+const APP_BUILD = '2026-11-12T02:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
