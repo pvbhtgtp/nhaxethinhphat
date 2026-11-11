@@ -12327,14 +12327,24 @@ const IDC = {
   GOC: ' Thêm khóa "goc": tọa độ 4 góc của tấm thẻ trong ảnh theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái (theo chiều chữ trên thẻ), dạng [[x,y],[x,y],[x,y],[x,y]] với x,y là số nguyên 0-1000 tính theo chiều rộng và chiều cao ảnh.',
   P: {
     cccd1: 'Ảnh mặt trước Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số","hoTen":"","ngaySinh":"YYYY-MM-DD","gioiTinh":"Nam|Nữ","noiThuongTru":"","ngayCap":"YYYY-MM-DD nếu có trên mặt này","noiCap":""}. Trường không thấy để chuỗi rỗng.',
-    cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"so":"số 12 chữ số nếu có (dòng mã MRZ IDVNM...)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
+    cccd2: 'Ảnh mặt sau Căn cước công dân / Thẻ căn cước Việt Nam. Trả JSON: {"mrz":"chép nguyên văn từng ký tự 3 dòng mã MRZ ở cuối thẻ (bắt đầu IDVNM), mỗi dòng cách nhau bằng \\n, giữ nguyên dấu <","so":"số CCCD 12 chữ số: ở dòng MRZ thứ nhất là 12 chữ số đứng NGAY SAU cụm IDVNM + 9 chữ số + 1 chữ số kiểm tra (không phải 9 chữ số liền sau IDVNM)","ngayCap":"YYYY-MM-DD","noiCap":"cơ quan cấp, ví dụ CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI","noiThuongTru":"nếu có"}. Trường không thấy để chuỗi rỗng.',
     gplx1: 'Ảnh mặt trước Giấy phép lái xe Việt Nam. Trả JSON: {"so":"số GPLX","hoTen":"","ngaySinh":"YYYY-MM-DD","hang":"hạng cao nhất, ví dụ B2, C, D, E","ngayCap":"YYYY-MM-DD","hetHan":"YYYY-MM-DD hoặc rỗng nếu không thời hạn","noiCap":"ví dụ SỞ GTVT ĐỒNG NAI"}. Trường không thấy để chuỗi rỗng.',
     gplx2: 'Ảnh mặt sau Giấy phép lái xe Việt Nam (bảng các hạng xe và ngày hết hạn). Trả JSON: {"so":"số GPLX nếu có","hang":"hạng cao nhất còn hạn","hetHan":"YYYY-MM-DD của hạng đó","ngayCap":"YYYY-MM-DD nếu có"}. Trường không thấy để chuỗi rỗng.'
   },
-  MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', noiThuongTru: 'diaChiTT', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT' },
+  MAP: { cccd1: { so: 'cccd', hoTen: 'ten', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh', noiThuongTru: 'diaChiTT', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap' }, cccd2: { so: 'cccd', ngayCap: 'cccdNgayCap', noiCap: 'cccdNoiCap', noiThuongTru: 'diaChiTT', ngaySinh: 'ngaySinh', gioiTinh: 'gioiTinh' },
     gplx1: { so: 'bangSo', hoTen: 'ten', ngaySinh: 'ngaySinh', hang: 'bangHang', ngayCap: 'bangNgayCap', hetHan: 'bangHetHan', noiCap: 'bangNoiCap' }, gplx2: { so: 'bangSo', hang: 'bangHang', hetHan: 'bangHetHan', ngayCap: 'bangNgayCap' } },
   LB: { cccd: 'Số CCCD', ten: 'Họ và tên', ngaySinh: 'Ngày sinh', gioiTinh: 'Giới tính', diaChiTT: 'Địa chỉ thường trú', cccdNgayCap: 'Ngày cấp CCCD', cccdNoiCap: 'Nơi cấp CCCD', bangSo: 'Số bằng lái', bangHang: 'Hạng bằng', bangNgayCap: 'Ngày cấp bằng', bangHetHan: 'Ngày hết hạn bằng', bangNoiCap: 'Nơi cấp bằng' },
   n: v => String(v || '').normalize('NFC').toUpperCase().replace(/[^\p{L}\p{N}]/gu, ''),
+  KEEP: { cccd2: ['cccd', 'diaChiTT', 'ngaySinh', 'gioiTinh'], gplx2: ['bangSo'] },   // mặt sau: chỉ điền khi ô còn trống, không ghi đè số đã có
+  ck(t) { const W = [7, 3, 1]; let s = 0; for (let i = 0; i < t.length; i++) { const c = t[i]; s += (c === '<' ? 0 : /\d/.test(c) ? +c : c.charCodeAt(0) - 55) * W[i % 3]; } return String(s % 10); },
+  mrz(raw) {                      // giải mã MRZ thẻ CCCD: dòng 1 IDVNM + 9 số + kiểm tra + 12 số CCCD; dòng 2 ngày sinh, giới tính
+    const L = String(raw || '').toUpperCase().replace(/[«‹]/g, '<').split(/\\n|\n|\r/).map(x => x.replace(/\s+/g, '')).filter(Boolean), r = {};
+    const all = L.join(''), m1 = all.match(/IDVNM([0-9O]{9})([0-9O])([0-9O]{12})/);
+    if (m1) { const f = x => x.replace(/O/g, '0'), d9 = f(m1[1]), c = f(m1[2]), so = f(m1[3]); if (IDC.ck(d9) === c && so.slice(3) === d9) r.so = so; }
+    const m2 = all.match(/(\d{6})(\d)([MF<])(\d{6})(\d)VNM/);
+    if (m2 && IDC.ck(m2[1]) === m2[2]) { const y = +m2[1].slice(0, 2), cy = new Date().getFullYear() % 100; r.ngaySinh = (y > cy ? '19' : '20') + m2[1].slice(0, 2) + '-' + m2[1].slice(2, 4) + '-' + m2[1].slice(4, 6); if (m2[3] !== '<') r.gioiTinh = m2[3] === 'M' ? 'Nam' : 'Nữ'; }
+    return r;
+  },
   async read(kind, src, root, set) {
     if (!AIX.ok()) return toast('Chưa cài khóa AI nên chưa đọc đối chiếu thông tin trên thẻ', 'ok', 5000);
     toast('Đang đọc thẻ để cắt thẳng và đối chiếu thông tin…', 'ok', 3000);
@@ -12342,17 +12352,20 @@ const IDC = {
     try { d = await AIX.json(IDC.P[kind] + IDC.GOC, { images: [blob] }); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
     if (!root.isConnected) return;
     try { const g = d && d.goc; if (Array.isArray(g) && g.length === 4 && !set.done) { const Q = g.map(p => [(+p[0] || 0) / 1000 * src.width, (+p[1] || 0) / 1000 * src.height]); if (IDC.okQ(Q, src.width, src.height)) { set(IDC.flat(src, Q)); toast('Đã cắt thẳng ảnh thẻ về đúng khổ', 'ok'); } } } catch (e) { console.warn('IDC.goc', e); }
-    const ch = [], M = IDC.MAP[kind];
+    if (kind === 'cccd2') { const z = IDC.mrz(d && d.mrz); d = Object.assign({}, d, { so: z.so || '', ngaySinh: z.ngaySinh || '', gioiTinh: z.gioiTinh || '' }); }
+    const ch = [], lech = [], M = IDC.MAP[kind], KP = IDC.KEEP[kind] || [];
     Object.keys(M).forEach(k => {
       let v = String((d && d[k]) || '').trim(); if (!v) return; const key = M[k], el = root.querySelector(`[name="${key}"]`); if (!el) return;
       if (/^(cccd|bangSo)$/.test(key)) v = v.replace(/\s+/g, ''); if (key === 'bangHang') v = v.toUpperCase();
       if (el.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
       if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === v)) return;
       const old = el.value; if (IDC.n(old) === IDC.n(v)) return;
+      if (old && KP.includes(key)) { lech.push(IDC.LB[key] || key); return; }
       el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
       el.style.background = '#fef9c3'; ch.push(`<li><b>${esc(IDC.LB[key] || key)}</b>: ${old ? `<s>${esc(el.type === 'date' ? F.date(old) : old)}</s> → ` : ''}<b>${esc(el.type === 'date' ? F.date(v) : v)}</b></li>`);
     });
-    if (!ch.length) return toast('Thông tin trên thẻ khớp với dữ liệu đã nhập', 'ok', 4000);
+    if (lech.length) toast('Mặt sau thẻ đọc ra khác ' + lech.join(', ') + ' đã nhập, giữ nguyên dữ liệu cũ. Kiểm tra lại bằng mắt', 'err', 7000);
+    if (!ch.length) return lech.length ? 0 : toast('Thông tin trên thẻ khớp với dữ liệu đã nhập', 'ok', 4000);
     toast('Đã sửa ' + ch.length + ' trường theo thẻ (tô vàng). Kiểm tra rồi bấm Lưu', 'ok', 7000);
   }
 };
