@@ -18,12 +18,16 @@ const CT = {
   },
   /* trạng thái vé: dữ liệu gốc + thao tác của lái xe chưa kịp ghi vào vé */
   st(p) { const a = CT.acts[p.id]; const o = { len: p.len, tt: p.tt, httt: p.httt, vang: !!p.vang, xuong: !!p.xuong }; if (a && !CT.live()) { if (a.len != null) o.len = !!a.len; if (a.vang != null) o.vang = !!a.vang; if (a.xuong != null) o.xuong = !!a.xuong; if (a.tt) { o.tt = a.tt; if (a.httt) o.httt = a.httt; } } return o; },
-  act(p, o) {
+  act(p, o, many) {
     const me = CT.me(), a = Object.assign({}, CT.acts[p.id] || {}, o, { at: Date.now(), by: me }); CT.acts[p.id] = a;
     if (CT.live()) { const b = (DB.datve || []).find(x => x.id === p.id); if (b) { if (o.len != null) b.len = !!o.len; if (o.vang != null) b.vang = !!o.vang; if (o.xuong != null) b.daXuong = !!o.xuong; if (o.tt === 'tra') { b.tt = 'tra'; b.httt = o.httt || 'tm'; b.lxThu = 1; } if (o.tt === 'giu' && b.lxThu) { b.tt = 'giu'; b.httt = ''; delete b.lxThu; } (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: 'Trên xe: ' + (o.vang != null ? (o.vang ? 'khách vắng' : 'bỏ vắng') : o.xuong != null ? (o.xuong ? 'đã trả khách' : 'bỏ đã trả') : o.len != null ? (o.len ? 'đã lên xe' : 'bỏ lên xe') : o.tt === 'tra' ? 'đã thu ' + (o.httt === 'ck' ? 'chuyển khoản' : 'tiền mặt') : 'bỏ đã thu') }); App.changed(); return; } }
+    if (many) return a;
     FB.col().doc('tx_' + me).set({ acts: { [p.id]: a } }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng', 'err'));
     App.render();
   },
+  /* vé đoàn (cùng nhóm): bấm 1 lần cho cả đoàn, gửi 1 lần */
+  actAll(L, o) { if (L.length < 2) return CT.act(L[0], o); const A = {}; L.forEach(p => { A[p.id] = CT.act(p, o, true); }); FB.col().doc('tx_' + CT.me()).set({ acts: A }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng', 'err')); App.render(); },
+  grp: (t, p) => p && p.nhom ? t.pax.filter(x => x.nhom === p.nhom) : [p],
   eta(t, name) { const n = LT.nm(name); if (!n) return ''; let i = t.lt.findIndex(x => LT.nm(x.ten) === n); if (i < 0) i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a)); }); return i < 0 ? '' : LT.time(t, t.lt[i].phut); },
   idx(t, name) { const n = LT.nm(name); const i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a === n || (a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a))); }); return i < 0 ? 999 : i; },
   due: (p, s) => s.tt === 'tra' ? 0 : Math.max(0, p.tien - p.coc),
@@ -146,7 +150,7 @@ const CT = {
     el.querySelector('[data-back]').onclick = () => { CT.trip = ''; App.render(); };
     el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { CT.tab = b.dataset.tab; App.render(); });
     const P = id => t.pax.find(p => p.id === id);
-    el.querySelectorAll('[data-len]').forEach(b => b.onclick = () => { const p = P(b.dataset.len); if (p) CT.act(p, { len: !CT.st(p).len }); });
+    el.querySelectorAll('[data-len]').forEach(b => b.onclick = () => { const p = P(b.dataset.len); if (!p) return; const G = CT.grp(t, p), nv = !CT.st(p).len; CT.actAll(G, { len: nv }); if (G.length > 1) toast((nv ? 'Đã đánh dấu lên xe cả đoàn ' : 'Bỏ lên xe cả đoàn ') + G.length + ' khách (ghế ' + G.map(x => x.ghe).join(', ') + ')', 'ok', 3000); });
     el.querySelectorAll('[data-vang]').forEach(b => b.onclick = () => { const p = P(b.dataset.vang); if (p) CT.act(p, { vang: !CT.st(p).vang }); });
     el.querySelectorAll('[data-xuong]').forEach(b => b.onclick = () => { const p = P(b.dataset.xuong); if (p) CT.act(p, { xuong: !CT.st(p).xuong }); });
     el.querySelector('[data-inc]').onclick = () => CT.report(t);
