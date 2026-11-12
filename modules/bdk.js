@@ -68,6 +68,7 @@ const BDK = {
     
     try { L += ok(!Store.dirty, 'Mọi thay đổi đã lưu', 'Đang có thay đổi chờ lưu'); } catch (e) { }
     try { L += ok(!SYS.L.length, 'Không có lỗi', SYS.L.length + ' lỗi trong Tình trạng hệ thống'); } catch (e) { }
+    try { const on = TK.lcUse(); L += `<li class="${on ? (TK.off.has('c') ? 'bad' : 'ok') : ''}">Lịch chạy gửi tức thì theo từng chuyến: <b>${on ? (TK.off.has('c') ? 'đã bật nhưng Firebase chưa cho phép (cập nhật Rules)' : 'đang bật') : 'đang tắt'}</b> <button class="btn sm" data-lcdoc style="margin-left:6px">${on ? 'Tắt' : 'Bật'}</button></li>`; } catch (e) { }
     try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
     return `<ul class="bdk-ul">${L}</ul><button class="btn sm" style="margin-top:8px" data-lcr>Khôi phục chuyến bị thiếu</button>`;
   },
@@ -119,6 +120,15 @@ const BDK = {
     });
     el.querySelectorAll('[data-go]').forEach(x => x.onclick = e => { if (BDK.edit || e.target.closest('button')) return; App.go(x.dataset.go); });
     el.querySelectorAll('[data-lcr]').forEach(x => x.onclick = () => { if (!BDK.edit) LCR.open(); });
+    el.querySelectorAll('[data-lcdoc]').forEach(x => x.onclick = async () => {   // bật/tắt kênh gửi tức thì từng chuyến (khối Vận hành luôn giữ đủ chuyến nên tắt lúc nào cũng an toàn)
+      if (BDK.edit) return; const st = S();
+      if (TK.lcUse()) { st.lcDocs = false; App.changed(); return toast('Đã tắt. Lịch chạy vẫn đồng bộ như cũ qua khối dữ liệu Vận hành', 'ok', 5000); }
+      x.disabled = true;
+      try { const d = FB.col().doc('c___probe'); await d.set({ t: 'cp', at: new Date().toISOString() }); await d.delete(); }
+      catch (e) { x.disabled = false; return toast('Firebase chưa cho phép ghi từng chuyến. Vào Cài đặt › Firebase › Rules, chép luật mới và bấm Publish, rồi bật lại', 'err', 9000); }
+      st.lcDocs = true; App.changed(); try { if (TK.off.has('c')) { TK.off.delete('c'); TK.sync.c = new Map(); await TK.listen('c'); } TK.flush(); } catch (e) { }
+      toast(ic('check') + ' Đã bật: sửa chuyến nào máy khác nhận ngay chuyến đó. Khối Vận hành vẫn giữ đủ mọi chuyến (tắt lại lúc nào cũng được)', 'ok', 7000);
+    });
     el.querySelectorAll('[data-rx]').forEach(x => x.onclick = () => { if (!BDK.edit) REFX.show(); });
     el.querySelectorAll('[data-pa]').forEach(x => x.onclick = () => { const r = (DB.phanAnh || []).find(z => z.id === x.dataset.pa); if (r) { r.tt = 'dang'; r.nguoiNhan = r.nguoiNhan || dvLog.who(); App.changed(); App.render(); toast('Đã nhận xử lý', 'ok', 2000); } });
   }
