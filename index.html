@@ -9899,7 +9899,7 @@ const TK = {
   win() { const t = D.today(); return [D.add(t, -3), D.add(t, 14)]; },
   inWin(t) { if (!t || !t.ngay) return false; const [a, b] = TK.win(); return t.ngay >= a && t.ngay <= b; },
   lcUse() { try { return !!(DB && DB.settings && DB.settings.lcDocs === true); } catch (e) { return false; } },   // Admin bật/tắt ở Bảng điều khiển › Hệ thống
-  lcOn() { return TK.live && TK.lcMig && TK.lcUse() && !TK.off.has('c'); },
+  lcOn() { return TK.live && TK.lcUse() && !TK.off.has('c'); },
   blob(c) { return c; },   // 12/11: khối Vận hành LUÔN giữ đủ mọi chuyến (tài liệu từng chuyến chỉ là kênh nhận nhanh, ghi song song) — không bao giờ bỏ chuyến khỏi khối
   seenC: new Set(),   // chuyến đã từng có trên máy này (chỉ được xóa trên máy chủ chuyến máy này thật sự đã có rồi mới mất)
   canC() { try { return TK.lcUse() && Auth.can('lichchay', 'edit') && (!PS.on || (PS.have || []).includes('vanhanh')); } catch (e) { return false; } },
@@ -9943,7 +9943,7 @@ const TK = {
   async start() {
     if (TK.started) return; TK.started = true;
     try {
-      const col = FB.col(); TK.migrated = (await col.doc('m_tk').get()).exists; try { TK.lcMig = (await col.doc('m_lc').get()).exists; } catch (e) { TK.lcMig = false; }
+      const col = FB.col(); TK.migrated = (await col.doc('m_tk').get()).exists; TK.lcMig = false; try { if ((await col.doc('m_lc').get()).exists && PERM.admin()) await col.doc('m_lc').delete(); } catch (e) { }   // xóa dấu cũ để máy bản cũ không tách chuyến khỏi khối
       await Promise.all(TK.KINDS.map(k => TK.listen(k)));
       TK.live = true; TK.err = ''; TK.fail = '';
       try { Lock.attach(); } catch (e) { }
@@ -10014,7 +10014,7 @@ const TK = {
         await Promise.all(pool);
       }
       if (!fail && !TK.migrated) { try { await FB.col().doc('m_tk').set({ t: 'm', at: new Date().toISOString() }); TK.migrated = true; } catch (e) { fail = true; } }
-      if (!fail && !TK.lcMig && TK.lcUse() && !TK.off.has('c')) { try { await FB.col().doc('m_lc').set({ t: 'm', at: new Date().toISOString(), n: TK.sync.c.size }); TK.lcMig = true; GS._h = null; GS.queue(); } catch (e) { fail = true; } }
+      // không ghi dấu 'm_lc' nữa: máy còn chạy bản cũ thấy dấu này sẽ bỏ chuyến khỏi khối Vận hành (lỗi 11/11)
     } finally { TK.running = false; }
     TK.err = fail ? 'Chưa gửi được vé lên máy chủ, đang tự thử lại' : ''; try { Store.status(); } catch (e) { }
     clearTimeout(TK.retry); if (fail) TK.retry = setTimeout(() => TK.flush(), 4000);
@@ -10103,7 +10103,7 @@ const TK = {
     const kv = TK.live ? DB.datve : null, kp = TK.live ? DB.phoiIn : null, kx = TK.live ? TK.EX.map(k => DB[k]) : null, kl = TK.lcOn() ? (DB.lichchay || []) : null;
     const r = apply1.apply(this, arguments);
     if (TK.live) { DB.datve = kv || []; DB.phoiIn = kp || {}; TK.EX.forEach((k, i) => { DB[k] = kx[i] || []; }); }
-    if (kl) { const M = new Map((DB.lichchay || []).map(t => [t.id, t])); kl.filter(t => t && t.id && TK.inWin(t)).forEach(t => { const b = M.get(t.id); if (!b) { if (TK.sync.c.has(t.id)) DB.lichchay.push(t); } else if (TK.newer(t, b) && t._u) { const i = DB.lichchay.indexOf(b); DB.lichchay[i] = t; } }); }   // chuyến trong cửa sổ: lấy bản sửa sau cùng (khối hoặc thời gian thực), không bỏ chuyến nào
+    if (kl) { const M = new Map((DB.lichchay || []).map(t => [t.id, t])); kl.filter(t => t && t.id && TK.inWin(t)).forEach(t => { const b = M.get(t.id); if (!b) { if (TK.sync.c.has(t.id)) DB.lichchay.push(t); } else if ((+t._u || 0) > (+b._u || 0)) { const i = DB.lichchay.indexOf(b); DB.lichchay[i] = t; } }); }   // chỉ giữ bản trên máy khi nó THẬT SỰ mới hơn (máy bản cũ sửa mà không đóng dấu giờ thì vẫn nhận bản trong khối)   // chuyến trong cửa sổ: lấy bản sửa sau cùng (khối hoặc thời gian thực), không bỏ chuyến nào
     try { GS._h = TK.hash(); } catch (e) { }
     try { LCV.reset(); } catch (e) { }
     return r;
@@ -10299,7 +10299,6 @@ setInterval(async () => {
     if (!TK.live || !TK.lcUse()) return;
     let vh = true; try { vh = PERM.admin() || PS.readable().includes('vanhanh'); } catch (e) { }
     if (TK.off.has('c') && vh) { TK.off.delete('c'); TK.sync.c = new Map(); await TK.listen('c'); if (!TK.off.has('c')) { TK.flush(); TK.paint(); } }
-    else if (!TK.lcMig) { const s = await FB.col().doc('m_lc').get(); if (s.exists) { TK.lcMig = true; GS._h = null; } }
   } catch (e) { console.warn('TK.lc', e); }
 }, 120000);
 
@@ -14048,7 +14047,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T12:10';
+const APP_BUILD = '2026-11-12T12:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
