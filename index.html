@@ -9388,6 +9388,9 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
       if (!PS.have) { PS.have = await myParts(); PS.sig = {}; }
       const sp = PS.split(body.data), ch = PS.have.filter(p => JSON.stringify(sp[p]) !== PS.sig[p]);
       if (!ch.length) return { ok: true, ver: cur };
+      /* CHỐT AN TOÀN: so với bản đang có trên máy chủ, bản sắp lưu mà làm mất hàng loạt bản ghi / làm trống giấy tờ, ảnh → không lưu, hỏi lại */
+      if (!(PS.okUntil > Date.now())) { const bad = []; for (const p of ch) { let old = null; try { old = PS.sig[p] ? JSON.parse(PS.sig[p]) : (await PS.get(p)).data; } catch (e) { } if (old) bad.push(...PS.guard(old, sp[p])); }
+        if (bad.length) { PS.block(bad); const er = new Error('Đã chặn lưu vì có thể làm mất dữ liệu: ' + bad[0]); er.guard = true; throw er; } }
       for (const p of ch) {
         const base = body.force || PS.pv[p] == null ? await partVer(p) : PS.pv[p];
         try { const r = await PS.put(p, sp[p], base, body.who); PS.pv[p] = r.ver; PS.sig[p] = JSON.stringify(sp[p]); }
@@ -10149,7 +10152,7 @@ const LCR = {
   },
   /* khôi phục toàn bộ: gộp từ bản sao lưu mới nhất → cũ hơn vào dữ liệu hiện tại — chỉ thêm bản ghi thiếu (theo mã) và điền ô đang trống; không sửa ô đang có dữ liệu. Lịch chạy xử lý riêng ở trên. */
   SKIP: new Set(['_meta', 'lichchay', 'phoiIn']),
-  KN: { employees: 'Nhân viên', vehicles: 'Phương tiện', lylich: 'Lý lịch hành nghề', datve: 'Vé đã bán', phanAnh: 'Phản ánh & sự cố', nhienlieu: 'Nhiên liệu', suachua: 'Sửa chữa', kmxe: 'Km xe', guihang: 'Gửi hàng', hdvc: 'Hợp đồng vận chuyển', choVe: 'Khách chờ vé', giochay: 'Giờ chạy', banggia: 'Bảng giá', cham: 'Chấm công', settings: 'Cài đặt', users: 'Tài khoản', hopdong: 'Hợp đồng lao động', lcBo: 'Chuyến đã bỏ' },
+  KN: { lichchay: 'Lịch chạy', employees: 'Nhân viên', vehicles: 'Phương tiện', lylich: 'Lý lịch hành nghề', datve: 'Vé đã bán', phanAnh: 'Phản ánh & sự cố', nhienlieu: 'Nhiên liệu', suachua: 'Sửa chữa', kmxe: 'Km xe', guihang: 'Gửi hàng', hdvc: 'Hợp đồng vận chuyển', choVe: 'Khách chờ vé', giochay: 'Giờ chạy', banggia: 'Bảng giá', cham: 'Chấm công', settings: 'Cài đặt', users: 'Tài khoản', hopdong: 'Hợp đồng lao động', lcBo: 'Chuyến đã bỏ' },
   gempty: v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length),
   gfill(T, raw, at, st, only) {
     const E = LCR.gempty, cl = x => JSON.parse(JSON.stringify(x)), ided = a => Array.isArray(a) && a.length && a.every(x => x && typeof x === 'object' && x.id != null), tot = { add: 0, fill: 0 };
@@ -10225,7 +10228,7 @@ LCR.dups = function () {
 LCR.clean = async function () {
   const rm = LCR.dups(); if (!rm.length) return toast('Không có chuyến trùng giờ nào cần dọn', 'ok', 3000);
   if (!await Modal.confirm(`Bỏ <b>${rm.length}</b> chuyến trùng giờ (bản trống: không lái xe, không xe, không vé, không hàng; luôn giữ lại bản đã gán)?`, { ok: 'Dọn', danger: true })) return;
-  const S = new Set(rm); DB.lichchay = DB.lichchay.filter(l => !S.has(l)); App.changed(); toast(ic('check') + ' Đã dọn ' + rm.length + ' chuyến trùng', 'ok', 3000);
+  const S = new Set(rm); try { PS.okUntil = Date.now() + 120000; } catch (e) { } DB.lichchay = DB.lichchay.filter(l => !S.has(l)); App.changed(); toast(ic('check') + ' Đã dọn ' + rm.length + ' chuyến trùng', 'ok', 3000);
 };
 ACT.lcRestore = () => LCR.open();
 /* Lịch chạy theo chuyến: nếu Rules chưa cho phép (Admin chưa Publish luật mới) thì tạm chạy như cũ, cứ 2 phút thử lại; được là tự chuyển */
@@ -13379,6 +13382,31 @@ const PS = {
     if (docs.some(x => !x.exists)) { const er = new Error('Phần ' + part + ' vừa được máy khác cập nhật'); er.code = 'aborted'; throw er; }
     return { ok: true, ver: +m.ver || 0, data: JSON.parse(docs.map(x => x.data().d).join('')) };
   },
+  guard(o, n) {
+    const out = [], blank = [], E = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length), F = v => typeof v === 'string' && v.length > 20 && (v.startsWith('data:') || v.startsWith('nxdrv:'));
+    const kn = k => (typeof LCR !== 'undefined' && LCR.KN[k]) || k, fl = f => (typeof LCR !== 'undefined' && LCR.FL[f]) || f;
+    Object.keys(o || {}).forEach(k => {
+      if (k === 'nvPub' || k[0] === '_') return; const ov = o[k], nv = n ? n[k] : undefined;
+      if (Array.isArray(ov) && ov.length >= 3 && E(nv)) { out.push(kn(k) + ': mất toàn bộ ' + ov.length + ' bản ghi'); return; }
+      if (!Array.isArray(ov) || !Array.isArray(nv) || !ov.length || !ov.every(x => x && x.id != null)) return;
+      const N = new Map(nv.filter(x => x && x.id != null).map(x => [String(x.id), x])); let rm = 0;
+      ov.forEach(r => { const m = N.get(String(r.id)); if (!m) { rm++; return; } Object.keys(r).forEach(f => { if (F(r[f]) && E(m[f])) blank.push((r.bks || r.ten || r.id) + ': ' + fl(f)); }); });
+      if (rm >= 10 && rm / ov.length >= 0.2) out.push(kn(k) + ': mất ' + rm + '/' + ov.length + ' bản ghi');
+    });
+    if (blank.length >= 2) out.push('làm trống ' + blank.length + ' giấy tờ/ảnh (' + blank.slice(0, 6).join('; ') + (blank.length > 6 ? '…' : '') + ')');
+    return out;
+  },
+  block(bad) {
+    try { SYS.add('Chặn lưu dữ liệu', 'Bản trên máy này sắp làm mất: ' + bad.join(' · ') + '. Chưa lưu lên máy chủ.'); } catch (e) { }
+    if (PS._bk || Date.now() - (PS._bkT || 0) < 120000) return; PS._bk = true;
+    const adm = (() => { try { return PERM.admin(); } catch (e) { return false; } })();
+    const m = Modal.open({ title: 'Đã chặn một lần lưu có thể làm mất dữ liệu', width: 560, body: `<p style="margin-top:0">Dữ liệu trên máy này khác bản trên máy chủ theo hướng <b>mất dữ liệu</b>, nên app <b>chưa lưu</b>:</p><ul style="padding-left:18px;line-height:1.6">${bad.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="small muted">Nếu không phải anh/chị vừa chủ động xóa, bấm <b>Tải lại từ máy chủ</b> (giữ dữ liệu đúng trên máy chủ, bỏ bản lỗi trên máy này).</p>`,
+      foot: `${adm ? '<button class="btn danger left" data-y>Đúng là tôi xóa, vẫn lưu</button>' : ''}<button class="btn pri" data-r>${ic('download')} Tải lại từ máy chủ</button>` });
+    const done = () => { PS._bk = false; PS._bkT = Date.now(); m.close(); };
+    m.el.querySelector('[data-r]').onclick = async () => { done(); try { clearTimeout(GS.t); GS.err = ''; await GS.pull(false); toast(ic('check') + ' Đã tải lại dữ liệu đúng từ máy chủ', 'ok', 4000); } catch (e) { toast(esc(e.message || e), 'err'); } };
+    const y = m.el.querySelector('[data-y]'); if (y) y.onclick = () => { done(); PS.okUntil = Date.now() + 120000; GS.err = ''; GS.push(); };
+    const x = m.el.querySelector('[data-x]'); if (x) x.addEventListener('click', () => { PS._bk = false; PS._bkT = Date.now(); });
+  },
   async put(part, data, baseVer, who) {
     const meta = FB.col().doc('pm_' + part), txt = JSON.stringify(data), n = Math.max(1, Math.ceil(txt.length / FB.CH)), pre = 'p' + part + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + '_';
     let b = FB.db.batch(), cnt = 0; for (let i = 0; i < n; i++) { if (cnt >= 400) { await b.commit(); b = FB.db.batch(); cnt = 0; } b.set(FB.col().doc(pre + i), { d: txt.slice(i * FB.CH, (i + 1) * FB.CH) }); cnt++; } if (cnt) await b.commit();
@@ -13909,7 +13937,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T08:15';
+const APP_BUILD = '2026-11-12T08:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
