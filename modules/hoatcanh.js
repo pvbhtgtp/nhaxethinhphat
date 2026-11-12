@@ -116,19 +116,26 @@ const HC = {
   seen: new Map(),
   check() {
     try {
-      if (!HC.on() || App.cur !== 'lichchay' || typeof dvCur !== 'function') return; const t = dvCur(); if (!t) return;
-      const B = dvBook(t.id), snap = new Map(B.map(b => [b.id, { len: !!b.len, xn: !!b.xn, g: (b.goi || []).length }])), prev = HC.seen.get(t.id); HC.seen.set(t.id, snap);
-      if (!prev) return; const nm = b => 'Ghế ' + (b.ghe || '') + (b.ten && b.ten !== 'KHÁCH LẺ' ? ' · ' + b.ten : ''), was = id => prev.get(id) || { len: false, xn: false, g: 0 };
-      const up = B.filter(b => b.len && !was(b.id).len);
-      if (up.length) return HC.play({ cap: `${t.gio} ${t.tuyen} · ${up.length > 1 ? up.length + ' khách' : nm(up[0])} đã lên xe` });
-      const cg = B.filter(b => (b.goi || []).length > was(b.id).g);   // tài xế / nhân viên vừa ghi kết quả gọi khách
-      if (cg.length) { const b = cg[0], k = b.goi[b.goi.length - 1], o = typeof callKQ === 'function' ? callKQ(k.kq) : { t: 'Gọi khách' }; return HC.play({ mode: 'call', kq: k.kq, cap: `${t.gio} · ${nm(b)} · ${(k.vai || '')} ${o.t}`.replace(/\s+/g, ' ') }); }
-      const xn = B.filter(b => b.xn && !was(b.id).xn);
-      if (xn.length) HC.play({ mode: 'call', kq: 'ok', cap: `${t.gio} · ${xn.length > 1 ? xn.length + ' vé' : nm(xn[0])} đã xác nhận` });
+      if (!HC.on() || App.cur !== 'lichchay' || typeof dvBook !== 'function') return;
+      /* mọi chuyến của hôm nay và của ngày đang xem (không chỉ chuyến đang mở) — chuyến đang mở được ưu tiên */
+      const td = D.today(), day = typeof dvDay === 'function' ? dvDay() : td, cur = typeof dvCur === 'function' ? dvCur() : null;
+      const T = (DB.lichchay || []).filter(l => l && !l.huy && (l.ngay === td || l.ngay === day)).sort((x, y) => (cur && y.id === cur.id) - (cur && x.id === cur.id));
+      const nm = b => 'Ghế ' + (b.ghe || '') + (b.ten && b.ten !== 'KHÁCH LẺ' ? ' · ' + b.ten : ''); let ev = null;
+      T.forEach(t => {
+        const B = dvBook(t.id), snap = new Map(B.map(b => [b.id, { len: !!b.len, xn: !!b.xn, g: (b.goi || []).length }])), prev = HC.seen.get(t.id); HC.seen.set(t.id, snap);
+        if (!prev || ev) return; const was = id => prev.get(id) || { len: false, xn: false, g: 0 };
+        const up = B.filter(b => b.len && !was(b.id).len);
+        if (up.length) { ev = { cap: `${t.gio} ${t.tuyen} · ${up.length > 1 ? up.length + ' khách' : nm(up[0])} đã lên xe` }; return; }
+        const cg = B.filter(b => (b.goi || []).length > was(b.id).g);   // tài xế / nhân viên vừa ghi kết quả gọi khách
+        if (cg.length) { const b = cg[0], k = b.goi[b.goi.length - 1] || {}, o = typeof callKQ === 'function' ? callKQ(k.kq) : { t: 'Gọi khách' }; ev = { mode: 'call', kq: k.kq, cap: `${t.gio} · ${nm(b)} · ${(k.vai || '')} ${o.t}`.replace(/\s+/g, ' ') }; return; }
+        const xn = B.filter(b => b.xn && !was(b.id).xn);
+        if (xn.length) ev = { mode: 'call', kq: 'ok', cap: `${t.gio} · ${xn.length > 1 ? xn.length + ' vé' : nm(xn[0])} đã xác nhận` };
+      });
+      if (ev) HC.play(ev);
     } catch (e) { console.warn('HC.check', e); }
   }
 };
-addCSS(`.hc-box{position:fixed;right:14px;bottom:86px;z-index:480;width:min(360px,92vw);border-radius:14px;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.28);background:#0f172a;animation:hcIn .3s ease}
+addCSS(`.hc-box{position:fixed;right:14px;bottom:86px;z-index:2000;width:min(360px,92vw);border-radius:14px;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.28);background:#0f172a;animation:hcIn .3s ease}
 .hc-box svg{display:block;width:100%;height:auto;aspect-ratio:340/130}.hc-box.out{opacity:0;transform:translateY(12px);transition:.3s}
 .hc-cap{position:absolute;left:8px;top:6px;right:34px;font-size:11.5px;font-weight:700;color:#0f172a;background:#ffffffd9;border-radius:8px;padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:1}
 .hc-x{position:absolute;right:6px;top:5px;z-index:2;width:24px;height:24px;border-radius:50%;border:0;background:#ffffffd9;font-size:16px;line-height:1;cursor:pointer}
