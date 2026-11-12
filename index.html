@@ -4215,7 +4215,7 @@ function dvForm(trip, b, seat, one) {
       if (!grp && !d.ghe) { toast('Chuyến đã hết ghế trống', 'err'); return false; }
       if (!grp && used.has(d.ghe)) { toast('Ghế ' + d.ghe + ' đã có người đặt', 'err'); return false; }
       if (isNew || d.sdt) { const ph = dvPhone(d.sdt); if (!ph) { toast('Số điện thoại không hợp lệ (VD: 0973460763)', 'err'); return false; } d.sdt = ph; }
-      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d); if (isNew) dvEndsFill(trip, d, mm && mm.el);
+      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d, mm && mm.el); if (isNew) dvEndsFill(trip, d, mm && mm.el);
       if (grp) { G.forEach(x => { const ch = dvLog.diff(x, d); if (ch.length) (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') + ' (sửa cả nhóm)' }); Object.assign(x, d); }); App.changed(); toast('Đã lưu ' + G.length + ' vé: ' + dvSeatsTxt(G), 'ok'); return; }
       if (isNew) { const nb = { id: uid(), chuyen: trip.id, nguoiBan: (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d }; DB.datve.push(nb); dvAutoGrp(trip.id, [nb]); } else { const ch = dvLog.diff(b, d); if (ch.length) (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: ch.join('; ') }); Object.assign(b, d); }
       App.changed(); toast('Đã lưu vé ghế ' + d.ghe, 'ok');
@@ -4223,7 +4223,7 @@ function dvForm(trip, b, seat, one) {
     cancelText: 'Đóng', delText: 'Hủy vé', delOk: 'Hủy vé', delMsg: (grp ? 'Hủy cả <b>' + G.length + ' vé</b> (ghế ' + dvSeatsTxt(G) + ') đặt cùng nhau? ' : 'Hủy vé này? ') + 'Vé sẽ chuyển xuống mục <b>Vé hủy</b> bên dưới sơ đồ, ghế được trả lại. Chỉ Admin mới xóa hẳn được.',
     onDelete: isNew || !canEdit ? null : () => { dvSetB(null); dvCancelGrp(G); App.changed(); toast('Đã hủy ' + G.length + ' vé, chuyển xuống mục Vé hủy', 'ok'); }
   });
-  dvMore(m, b);
+  dvMore(m, b, trip);
   if (!isNew && canEdit && Auth.can('lichchay', 'add')) dvAddBtn(m, trip, b);
   if (!isNew && canEdit) { const del = m.el.querySelector('[data-del]'); if (del) del.onclick = () => dvAskCancel(G, b.id).then(C => { if (!C) return; dvSetB(null); dvCancelSome(G, C); App.changed(); m.close(); toast('Đã hủy ' + C.length + ' vé (ghế ' + dvSeatsTxt(C) + '), chuyển xuống mục Vé hủy', 'ok'); }); }
   dvPrintBtn(m, trip, () => isNew ? (() => { const g = m.el.querySelector('[name="ghe"]'); return dvBook(trip.id).filter(x => x.ghe === (g && g.value)); })() : dvGrp(DB.datve.find(x => x.id === b.id)), canEdit, isNew);
@@ -4482,14 +4482,14 @@ function dvFormMulti(trip, seats) {
       const ph = dvPhone(d.sdt); if (!ph) { toast('Số điện thoại không hợp lệ (VD: 0973460763)', 'err'); return false; } d.sdt = ph;
       const used = new Set(dvBook(trip.id).map(x => x.ghe)), bad = seats.filter(g => used.has(g));
       if (bad.length) { toast('Ghế ' + bad.join(', ') + ' đã có người đặt', 'err'); return false; }
-      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d); dvEndsFill(trip, d, mm && mm.el);
+      d.ten = String(d.ten || '').trim() || 'KHÁCH LẺ'; dvExtra(d, mm && mm.el); dvEndsFill(trip, d, mm && mm.el);
       const nb = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
       const nhom = DV.clone && DV.clone.nhom && DV.clone.chuyen === trip.id ? DV.clone.nhom : seats.length > 1 ? uid() : undefined;
       const nw = seats.map(g => ({ id: uid(), chuyen: trip.id, nguoiBan: nb, tg, ...d, ghe: g, ...(nhom ? { nhom } : {}) })); DB.datve.push(...nw); dvAutoGrp(trip.id, nw);
       Lock.release(trip.id, seats); DV.sel = []; DV.selTT = 'giu'; DV.clone = null; App.changed(); toast('Đã đặt ' + seats.length + ' vé: ' + seats.join(', '), 'ok');
     }
   });
-  dvMore(m, null);
+  dvMore(m, null, trip);
   dvPrintBtn(m, trip, () => dvBook(trip.id).filter(x => seats.includes(x.ghe)), true, true);
   bgBind(m, trip, true);
   LT.bind(m, trip);
@@ -4737,13 +4737,14 @@ const DV_XF = [
   { key: 'khongHuy', label: 'Giữ chỗ không thời hạn (không nhắc, không tự nhả)', type: 'checkbox' }
 ];
 // Gọn form: các ô phụ nằm trong mục "Thêm tùy chọn", tự mở khi đã có dữ liệu; hiện tổng tiền khi có phụ thu
-function dvMore(m, b) {
+function dvMore(m, b, trip) {
   const el = m.el, form = el.querySelector('.modal-b .form'); if (!form) return;
   const ks = ['httt', 'coc', 'phuThu', 'xuatCT', 'khongHuy'], labs = ks.map(k => { const i = el.querySelector(`[name="${k}"]`); return i && i.closest('.field'); }).filter(Boolean);
   const det = document.createElement('details'); det.className = 'field full dv-more';
   const has = b && (b.httt || +b.coc || +b.phuThu || b.xuatCT || b.khongHuy);
   det.open = !!has; det.innerHTML = '<summary>Thêm tùy chọn <span class="muted small">· thanh toán, đặt cọc, phụ thu, chứng từ, hủy tự động</span></summary><div class="form dv-more-b"></div>';
   form.appendChild(det); const box = det.querySelector('.dv-more-b'); labs.forEach(l => box.appendChild(l));
+  VDT.ctBind(m, b, trip);
   const gk = el.querySelector('[name="ghiChuKH"]'); if (gk && b && b.sdt && !gk.value) gk.value = KHN.get(b.sdt);
   const g = el.querySelector('[name="gia"]'), pt = el.querySelector('[name="phuThu"]');
   if (g && pt) { const tot = document.createElement('small'); tot.className = 'dv-tot'; pt.closest('.field').appendChild(tot);
@@ -4751,7 +4752,8 @@ function dvMore(m, b) {
     g.addEventListener('input', up); pt.addEventListener('input', up); up(); }
   if (b && b.ma) { const h = el.querySelector('.modal-h h3'); if (h) h.insertAdjacentHTML('beforeend', ` <span class="dv-ma">Mã ${esc(b.ma)}</span>`); }
 }
-function dvExtra(d) {
+function dvExtra(d, el) {
+  if (el && el._ct) d.ct = d.xuatCT ? el._ct() : null;
   if ('ghiChuKH' in d) { if (d.sdt) KHN.set(d.sdt, d.ghiChuKH); delete d.ghiChuKH; }
   d.coc = +d.coc || 0; d.phuThu = +d.phuThu || 0; d.xuatCT = !!d.xuatCT; d.khongHuy = !!d.khongHuy;
   if (d.tt === 'tra') d.coc = 0;
@@ -4825,13 +4827,13 @@ const VDT = {
     Object.keys(o).forEach(k => { if (!o[k]) delete o[k]; }); return o;
   },
   html(x, t) {
-    const c = VDT.cfg(), co = S().company || {}, xe = lcXe(t) || {}, h = x.hd || {}, ok = VDT.has(x), tot = dvTot(x);
+    const c = VDT.cfg(), co = S().company || {}, xe = lcXe(t) || {}, h = x.hd || {}, ok = VDT.has(x), ct = x.ct || {}, tot = +ct.tien || dvTot(x), vat = ct.vat !== undefined && ct.vat !== '' ? +ct.vat : +c.vat, mst = ct.mst || co.mst;
     const nd = h.ngay || D.today(), [yy, mo, dd] = nd.split('-'), qr = ok && c.link ? QR.svg(c.link, 22) : '';
     const r = (k, v, cls) => `<div class="vd-r${cls ? ' ' + cls : ''}"><span>${k}:</span><b>${v || ''}</b></div>`;
     return `<div class="vd">
   <div class="vd-hd">${co.logo ? `<img src="${co.logo}" alt="">` : '<i></i>'}<div class="vd-kh">${ok ? `<div>Ký hiệu: <b>${esc(h.kh || '')}</b></div><div>Số: <b class="vd-red">${esc(h.so)}</b></div>` : '<div class="vd-chua">CHƯA PHÁT HÀNH<br>HÓA ĐƠN</div>'}</div></div>
   <div class="vd-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div>
-  ${co.mst ? `<div class="vd-s">MST: ${esc(co.mst)}</div>` : ''}${co.diaChi ? `<div class="vd-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}
+  ${mst ? `<div class="vd-s">MST: ${esc(mst)}</div>` : ''}${co.diaChi ? `<div class="vd-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}
   <div class="vd-tt">VÉ XE KHÁCH</div>
   ${ok && h.cqt ? `<div class="vd-cqt">Mã CQT: ${esc(h.cqt)}</div>` : ''}
   <div class="vd-b">
@@ -4839,7 +4841,7 @@ const VDT = {
   ${r('Thời gian khởi hành', esc(t.gio || '') + ' ' + F.date(t.ngay))}${r('Điểm đón', esc(x.diemDon || ''))}${r('Điểm đến', esc(x.diemTra || ''))}
   <div class="vd-r2">${r('Số ghế', esc(x.ghe || ''))}${r('Số xe', esc(xe.bks || ''))}</div>
   ${r('Giá vé', F.money(tot) + ' đ', 'vd-gia')}${r('Bằng chữ', '<i>' + docSo(tot) + '</i>')}
-  ${+c.vat ? `<div class="vd-vat">(Giá vé đã bao gồm thuế GTGT ${+c.vat}%)</div>` : ''}
+  ${vat ? `<div class="vd-vat">(Giá vé đã bao gồm thuế GTGT ${vat}%)</div>` : ''}
   </div>
   <div class="vd-ft">${qr ? `<div class="vd-qr">${qr}</div>` : ''}<div class="vd-sg"><div>Ngày ${dd} tháng ${mo} năm ${yy}</div><div class="vd-ntt">Người thu tiền</div>
   ${ok ? `<div class="vd-sig">Hóa đơn điện tử đã ký số<br>Ký bởi: ${esc(String(co.ten || '').toUpperCase())}<br>Ký ngày: ${dd}/${mo}/${yy}</div>` : '<div class="vd-sp"></div>'}</div></div>
@@ -4854,13 +4856,13 @@ const VDT = {
   open(G, t, canEdit, after) {
     G = G.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
     const c = VDT.cfg(), adm = Auth.user && Auth.user.role === 'admin', dis = canEdit ? '' : ' disabled';
-    const inp = (x, k, ph) => `<input class="inp" data-id="${esc(x.id)}" data-k="${k}" value="${esc((x.hd || {})[k] || '')}" placeholder="${ph}"${dis}>`;
+    const inp = (x, k, ph) => `<input class="inp" data-id="${esc(x.id)}" data-k="${k}" value="${esc((x.hd || {})[k] || (k === 'kh' && x.ct && x.ct.kh) || '')}" placeholder="${ph}"${dis}>`;
     const m = Modal.open({ title: 'Vé điện tử · ' + esc(t.gio + ' ' + t.tuyen), width: 720, body: `
       ${canEdit ? `<div class="vd-pa"><textarea class="inp" rows="3" data-paste placeholder="Dán nội dung hóa đơn (copy từ file PDF / trang Vexere, Mắt Bão) để tự điền Ký hiệu, Số, Mã CQT, Mã tra cứu"></textarea>
       ${G.length > 1 ? `<label class="muted small">Điền vào ghế <select class="inp" data-tg style="width:auto;display:inline-block">${G.map(x => `<option value="${esc(x.id)}">${esc(x.ghe)}</option>`).join('')}</select></label>` : ''}</div>` : ''}
       <div class="vd-l">${G.map(x => `<div class="vd-it"><div class="vd-ih"><b>Ghế ${esc(x.ghe)}</b> · ${esc(x.ten || 'KHÁCH LẺ')} · ${F.money(dvTot(x))} đ ${VDT.has(x) ? '<span class="badge b-green">Đã nhập mã</span>' : '<span class="badge b-gray">Chưa phát hành</span>'}</div>
         <div class="vd-g"><label>Ký hiệu${inp(x, 'kh', 'VD: 1C26TPH')}</label><label>Số${inp(x, 'so', 'VD: 8757')}</label><label>Mã CQT${inp(x, 'cqt', '')}</label><label>Mã tra cứu${inp(x, 'tc', '')}</label><label>Ngày lập<input class="inp" type="date" data-id="${esc(x.id)}" data-k="ngay" value="${esc((x.hd || {}).ngay || '')}"${dis}></label></div></div>`).join('')}</div>
-      ${adm ? `<details class="dv-more" style="margin-top:10px"><summary>Cài đặt mẫu vé điện tử</summary><div class="vd-g" style="padding:4px 12px 12px"><label>Thuế GTGT (%)<input class="inp" data-c="vat" value="${esc(c.vat)}"></label><label>Nhà cung cấp<input class="inp" data-c="ncc" value="${esc(c.ncc)}"></label><label style="grid-column:span 2">Trang tra cứu<input class="inp" data-c="link" value="${esc(c.link)}"></label></div></details>` : ''}
+      ${adm ? `<button type="button" class="btn sm" data-setup style="margin-top:10px">${ic('settings')} Cài đặt mẫu chứng từ</button>` : ''}
       <div class="muted small" style="margin-top:8px">Phát hành hóa đơn trên hệ thống nhà cung cấp trước, rồi nhập đúng mã vào đây. Vé chưa có Số hóa đơn sẽ in dòng "Chưa phát hành hóa đơn".</div>`,
       foot: `<button class="btn" data-cancel>Đóng</button>${canEdit ? '<button class="btn" data-sv>Lưu</button>' : ''}<button class="btn pri" data-pr>${ic('printer')} ${canEdit ? 'Lưu &amp; in' : 'In'} vé điện tử</button>` });
     const el = m.el, $ = s => el.querySelector(s);
@@ -4884,20 +4886,86 @@ const VDT = {
         if (v.so) x.hd = v; else delete x.hd;
         (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: v.so ? 'Vé điện tử: Ký hiệu: ' + (v.kh || '') + '; Số: ' + v.so : 'Xóa thông tin vé điện tử' }); n++;
       }
-      if (adm) { const nc = {}; el.querySelectorAll('[data-c]').forEach(i => nc[i.dataset.c] = i.dataset.c === 'vat' ? (+String(i.value).replace(',', '.') || 0) : String(i.value || '').trim());
-        const cur = VDT.cfg(); if (Object.keys(nc).some(k => nc[k] !== cur[k])) { DB.settings.veDT = nc; n++; } }
       if (n) { App.changed(); toast('Đã lưu vé điện tử', 'ok'); } return true;
     };
     $('[data-cancel]').onclick = () => m.close();
+    const su = $('[data-setup]'); if (su) su.onclick = () => VDT.setup();
     const sv = $('[data-sv]'); if (sv) sv.onclick = () => { if (save()) { m.close(); after && after(); } };
     $('[data-pr]').onclick = () => { if (!save()) return; m.close(); after && after(); VDT.print(G.map(x => DB.datve.find(y => y.id === x.id) || x), t); };
     return m;
   },
+  /* mẫu chứng từ theo tuyến (giống Vexere: "180.000 | HN-VT180 | 5C26MTG; 160.000 | HN-BR160 | 5C26MTG") */
+  items(str) { return String(str || '').split(/[;\n]+/).map(p => p.split('|').map(x => x.trim())).filter(a => a.length >= 2 && a[1]).map(a => ({ gia: F.parse(a[0]) || 0, ma: a[1], kh: a[2] || '', txt: a.filter(Boolean).join(' | ') })); },
+  mauFor(trip) {
+    const c = VDT.cfg(), n = (trip && trip.ngay) || D.today(), tn = bgNorm(trip && trip.tuyen || '');
+    const L = (c.mau || []).filter(r => r.on !== false && (!r.tu || r.tu <= n) && (!r.den || r.den >= n));
+    const own = L.filter(r => r.tuyen && bgNorm(r.tuyen) === tn), use = own.length ? own : L.filter(r => !r.tuyen);
+    return use.flatMap(r => VDT.items(r.list));
+  },
+  msts() { const c = VDT.cfg(), co = S().company || {}; return [...new Set([co.mst, ...String(c.mst || '').split(/[,;]+/)].map(x => String(x || '').trim()).filter(Boolean))]; },
+  ctBind(m, b, trip0) {
+    const el = m.el, xc = el.querySelector('[name="xuatCT"]'); if (!xc) return; const fx = xc.closest('.field'); if (!fx) return;
+    const trip = trip0 || (b ? dvTripOf(b) : dvCur() || {}), M = VDT.mauFor(trip), c = VDT.cfg(), ct = (b && b.ct) || {}, ms = VDT.msts();
+    const khs = [...new Set([...M.map(x => x.kh), ct.kh].filter(Boolean))], ms2 = [...new Set([...ms, ct.mst].filter(Boolean))];
+    const opt = (L, v) => L.map(o => `<option value="${esc(o.v)}"${o.v === v ? ' selected' : ''}>${esc(o.l)}</option>`).join('');
+    const w = document.createElement('div'); w.className = 'field full dv-ct';
+    w.innerHTML = `<div class="dv-ct-r"><label><input type="radio" name="_ctLoai" value="hd"${ct.loai === 'hd' ? ' checked' : ''}> Hóa đơn điện tử</label><label><input type="radio" name="_ctLoai" value="ve"${ct.loai !== 'hd' ? ' checked' : ''}> Vé điện tử</label>${Auth.user && Auth.user.role === 'admin' ? `<button type="button" class="btn sm" data-ctset title="Cài đặt mẫu chứng từ">${ic('settings')}</button>` : ''}</div>
+      <div class="dv-ct-g"><label>Mẫu hóa đơn<select class="inp" data-ct="mau"><option value="">${M.length ? '— Chọn mẫu —' : '(Chưa cài mẫu cho tuyến này)'}</option>${opt(M.map(x => ({ v: x.txt, l: x.txt })), ct.mau || '')}</select></label>
+      <label>MST bên bán<select class="inp" data-ct="mst">${opt(ms2.map(x => ({ v: x, l: x })), ct.mst || ms2[0])}</select></label>
+      <label>Ký hiệu<select class="inp" data-ct="kh"><option value=""></option>${opt(khs.map(x => ({ v: x, l: x })), ct.kh || khs[0] || '')}</select></label>
+      <label>Thuế suất (%)<input class="inp" data-ct="vat" value="${esc(ct.vat !== undefined && ct.vat !== '' ? ct.vat : c.vat)}"></label>
+      <label>Tiền VĐT<input class="inp" data-ct="tien" inputmode="numeric" value="${ct.tien ? F.money(ct.tien) : ''}"></label>
+      <label>Tổng tiền VĐT<input class="inp" data-ct="tong" readonly tabindex="-1"></label>
+      <label class="full">Ghi chú cho kế toán<textarea class="inp" rows="2" data-ct="gc">${esc(ct.gc || '')}</textarea></label></div>`;
+    fx.after(w); const q = k => w.querySelector(`[data-ct="${k}"]`), g = el.querySelector('[name="gia"]'), pt = el.querySelector('[name="phuThu"]');
+    const formTot = () => (F.parse(g && g.value) || 0) + (F.parse(pt && pt.value) || 0);
+    let manM = !!ct.mau, manT = !!ct.tien;
+    const tong = () => { q('tong').value = F.money(F.parse(q('tien').value) || formTot()); };
+    const pick = () => { if (manM || !M.length) return; const t = formTot(), x = M.find(i => i.gia === t); q('mau').value = x ? x.txt : ''; apply(); };
+    const apply = () => { const x = M.find(i => i.txt === q('mau').value); if (!x) return tong(); if (x.kh) q('kh').value = x.kh; if (!manT && x.gia) q('tien').value = F.money(x.gia); tong(); };
+    q('mau').onchange = () => { manM = true; apply(); };
+    q('tien').oninput = () => { manT = !!q('tien').value; tong(); }; q('tien').onblur = () => { const v = F.parse(q('tien').value); q('tien').value = v ? F.money(v) : ''; };
+    [g, pt].forEach(i => i && i.addEventListener('input', () => { pick(); tong(); }));
+    const show = () => { w.hidden = !xc.checked; }; xc.addEventListener('change', () => { show(); if (xc.checked) { pick(); tong(); } }); show(); if (!ct.mau) pick(); tong();
+    const cs = w.querySelector('[data-ctset]'); if (cs) cs.onclick = () => VDT.setup();
+    el._ct = () => { const o = { loai: (w.querySelector('[name="_ctLoai"]:checked') || {}).value || 've' }; ['mau', 'mst', 'kh', 'gc'].forEach(k => { const v = String(q(k).value || '').trim(); if (v) o[k] = v; });
+      const v = String(q('vat').value).trim(); if (v !== '') o.vat = +v.replace(',', '.') || 0; o.tien = F.parse(q('tien').value) || formTot(); return o; };
+  },
+  setup() {
+    const c = VDT.cfg(), R = bgRoutes(); let L = (c.mau || []).map(x => ({ ...x }));
+    const row = (r, i) => `<div class="vds-r" data-i="${i}"><select class="inp" data-f="tuyen"><option value="">(Mọi tuyến)</option>${[...new Set([...R, r.tuyen].filter(Boolean))].map(t => `<option${t === r.tuyen ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <input class="inp" data-f="list" value="${esc(r.list || '')}" placeholder="180.000 | HN-VT180 | 5C26MTG; 160.000 | HN-BR160 | 5C26MTG">
+      <input class="inp" type="date" data-f="tu" value="${esc(r.tu || '')}" title="Ngày bắt đầu"><input class="inp" type="date" data-f="den" value="${esc(r.den || '')}" title="Ngày kết thúc">
+      <select class="inp" data-f="on"><option value="1">Áp dụng</option><option value="0"${r.on === false ? ' selected' : ''}>Không áp dụng</option></select><button type="button" class="ibtn" data-rm title="Xóa">${ic('trash')}</button></div>`;
+    const m = Modal.open({ title: 'Cài đặt mẫu thông tin chứng từ', width: 980, body: `
+      <div class="vd-g"><label>MST bên bán (nhiều số cách nhau dấu phẩy)<input class="inp" data-c="mst" value="${esc(c.mst || (S().company || {}).mst || '')}"></label><label>Thuế suất mặc định (%)<input class="inp" data-c="vat" value="${esc(c.vat)}"></label><label>Nhà cung cấp hóa đơn<input class="inp" data-c="ncc" value="${esc(c.ncc)}"></label><label>Trang tra cứu<input class="inp" data-c="link" value="${esc(c.link)}"></label></div>
+      <div class="vds-h"><b>Danh sách tuyến · mẫu vé</b><span class="muted small">Mỗi mẫu: Giá | Mã mẫu | Ký hiệu, nhiều mẫu cách nhau dấu chấm phẩy</span></div>
+      <div class="vds-hd"><span>Tuyến đường</span><span>Mẫu vé</span><span>Ngày bắt đầu</span><span>Ngày kết thúc</span><span>Trạng thái</span><span></span></div><div class="vds-l"></div>
+      <button type="button" class="btn sm" data-add>${ic('plus')} Thêm mới</button>`,
+      foot: '<button class="btn" data-cancel>Đóng</button><button class="btn pri" data-ok>Lưu</button>' });
+    const el = m.el, box = el.querySelector('.vds-l');
+    const read = () => { L = [...box.querySelectorAll('.vds-r')].map(d => { const v = k => String(d.querySelector(`[data-f="${k}"]`).value || '').trim(); const o = { id: (L[+d.dataset.i] || {}).id || uid(), tuyen: v('tuyen'), list: v('list'), tu: v('tu'), den: v('den') }; if (v('on') === '0') o.on = false; return o; }); };
+    const draw = () => { box.innerHTML = L.map(row).join('') || '<div class="muted small" style="padding:8px">Chưa có mẫu nào</div>'; };
+    draw();
+    el.querySelector('[data-add]').onclick = () => { read(); L.push({ tuyen: '', list: '', tu: D.today(), den: '' }); draw(); };
+    box.onclick = e => { const b = e.target.closest('[data-rm]'); if (!b) return; read(); L.splice(+b.closest('.vds-r').dataset.i, 1); draw(); };
+    el.querySelector('[data-cancel]').onclick = () => m.close();
+    el.querySelector('[data-ok]').onclick = () => {
+      read(); const bad = L.find(r => r.list && !VDT.items(r.list).length); if (bad) return toast('Mẫu vé chưa đúng dạng: Giá | Mã mẫu | Ký hiệu', 'err');
+      const nc = { ...((DB.settings && DB.settings.veDT) || {}) }; el.querySelectorAll('[data-c]').forEach(i => nc[i.dataset.c] = i.dataset.c === 'vat' ? (+String(i.value).replace(',', '.') || 0) : String(i.value || '').trim());
+      nc.mau = L.filter(r => r.list); DB.settings.veDT = nc; App.changed(); m.close(); toast('Đã lưu mẫu chứng từ', 'ok');
+    };
+  },
   btn(m, trip, getG, canEdit) {
     const foot = m.el.querySelector('.modal-f'), pb = m.el.querySelector('.dv-pbtn'); if (!foot || !pb) return;
-    const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn dv-ebtn'; bt.innerHTML = ic('file') + ' Vé điện tử';
-    pb.before(bt);
-    bt.onclick = () => { const G = getG(); if (!G.length) return toast('Không tìm thấy vé', 'err'); VDT.open(G, trip, canEdit); };
+    const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn dv-ebtn'; bt.innerHTML = ic('file') + ' In vé điện tử';
+    pb.before(bt); const sv = m.el.querySelector('[data-save]');
+    const go = G => G.length ? VDT.open(G, trip, canEdit) : toast('Không tìm thấy vé', 'err');
+    bt.onclick = () => {
+      if (!canEdit || !sv) return go(getG());
+      const pre = getG(); sv.click();   // lưu thay đổi trong form trước (giống Lưu & in vé)
+      setTimeout(() => { if (m.el.isConnected) return; go(pre.map(x => DB.datve.find(y => y.id === x.id)).filter(Boolean)); }, 60);
+    };
   },
   CSS: `<style>.vd{width:72mm;max-width:100%;margin:0 auto;color:#000;font-family:'Be Vietnam Pro',Arial,sans-serif;font-size:11.5px;line-height:1.4;page-break-after:always;break-after:page}.vd:last-child{page-break-after:auto;break-after:auto}
 .vd-hd{display:flex;justify-content:space-between;align-items:center;gap:6px}.vd-hd img{height:13mm;max-width:30mm;object-fit:contain}.vd-kh{text-align:right;font-size:11.5px}.vd-red{color:#d00;font-size:15px}.vd-chua{font-weight:800;font-size:10px;border:1.5px solid #000;padding:2px 5px;border-radius:3px;text-align:center}
@@ -4907,7 +4975,11 @@ const VDT = {
 .vd-tc{font-size:9.5px;text-align:center;margin-top:6px;border-top:1px dashed #000;padding-top:4px;word-break:break-all}
 @media print{.vd-red,.vd-sig{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>`
 };
-addCSS(`.dv-ebtn{border-color:#2e90fa;color:#175cd3}.dv-ebtn:hover{background:#eff8ff}.vd-pa{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.vd-l{display:flex;flex-direction:column;gap:8px}.vd-it{border:1px solid #e3e7ef;border-radius:10px;padding:8px 10px}.vd-ih{font-size:13px;margin-bottom:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+addCSS(`.dv-ct{border:1px dashed #d0d5dd;border-radius:10px;padding:8px 10px;background:#fafbfd}.dv-ct[hidden]{display:none}.dv-ct-r{display:flex;gap:16px;align-items:center;font-size:13px;margin-bottom:6px}.dv-ct-r label{display:flex;gap:5px;align-items:center;cursor:pointer}.dv-ct-r .btn{margin-left:auto}
+.dv-ct-g{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}.dv-ct-g label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475467}.dv-ct-g .full{grid-column:1/-1}.dv-ct-g [readonly]{background:#f2f4f7}
+.vds-h{display:flex;gap:10px;align-items:baseline;margin:14px 0 6px;flex-wrap:wrap}.vds-hd,.vds-r{display:grid;grid-template-columns:170px 1fr 130px 130px 120px 34px;gap:6px;align-items:center}.vds-hd{font-size:11.5px;color:#475467;font-weight:600;padding:0 2px 4px}.vds-r{margin-bottom:6px}.vds-l{margin-bottom:8px}
+@media(max-width:760px){.vds-hd{display:none}.vds-r{grid-template-columns:1fr 1fr;border:1px solid #e3e7ef;border-radius:8px;padding:6px}.vds-r [data-f="list"]{grid-column:1/-1}.dv-ct-g{grid-template-columns:1fr}}`);
+addCSS(`.modal-f:has(.dv-ebtn){flex-wrap:wrap;row-gap:6px}.dv-ebtn{border-color:#2e90fa;color:#175cd3}.dv-ebtn:hover{background:#eff8ff}.vd-pa{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.vd-l{display:flex;flex-direction:column;gap:8px}.vd-it{border:1px solid #e3e7ef;border-radius:10px;padding:8px 10px}.vd-ih{font-size:13px;margin-bottom:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .vd-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 10px}.vd-g label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475467}`);
 /* ===== Ctrl (hoặc ⌘) + bấm vào vé để chọn nhiều vé, in một lượt ===== */
 function dvPkList(cur) { if (!cur) return []; DV.pk = (DV.pk || []).filter(id => DB.datve.some(x => x.id === id && x.chuyen === cur.id && !x.huy)); return DV.pk.map(id => DB.datve.find(x => x.id === id)); }
@@ -14179,7 +14251,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T08:00';
+const APP_BUILD = '2026-11-13T09:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
