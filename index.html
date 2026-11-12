@@ -4227,6 +4227,7 @@ function dvForm(trip, b, seat, one) {
   if (!isNew && canEdit && Auth.can('lichchay', 'add')) dvAddBtn(m, trip, b);
   if (!isNew && canEdit) { const del = m.el.querySelector('[data-del]'); if (del) del.onclick = () => dvAskCancel(G, b.id).then(C => { if (!C) return; dvSetB(null); dvCancelSome(G, C); App.changed(); m.close(); toast('Đã hủy ' + C.length + ' vé (ghế ' + dvSeatsTxt(C) + '), chuyển xuống mục Vé hủy', 'ok'); }); }
   dvPrintBtn(m, trip, () => isNew ? (() => { const g = m.el.querySelector('[name="ghe"]'); return dvBook(trip.id).filter(x => x.ghe === (g && g.value)); })() : dvGrp(DB.datve.find(x => x.id === b.id)), canEdit, isNew);
+  if (!isNew) VDT.btn(m, trip, () => dvGrp(DB.datve.find(x => x.id === b.id)), canEdit);
   if (grp) { const G2 = G.slice().sort((a, c) => String(a.ghe).localeCompare(String(c.ghe), 'vi', { numeric: true })), box = document.createElement('div'); box.className = 'dv-one';
     box.innerHTML = `<span>Sửa riêng từng vé:</span>${G2.map(x => `<button type="button" class="btn sm" data-one="${x.id}" title="${esc((x.ten || '') + (x.sdt ? ' · ' + x.sdt : ''))}">Ghế ${esc(x.ghe)}</button>`).join('')}`;
     const mb = m.el.querySelector('.modal-b'); if (mb) mb.prepend(box); box.onclick = e => { const q = e.target.closest('[data-one]'); if (!q) return; const x = DB.datve.find(y => y.id === q.dataset.one); if (!x) return; m.close(); dvForm(trip, x, null, true); }; }
@@ -4810,6 +4811,104 @@ function dvPrintBtn(m, trip, getG, canEdit, isNew) {
   };
 }
 addCSS(`.dv-pbtn{border-color:#f59e0b;color:#b45309}.dv-pbtn:hover{background:#fffbeb;border-color:#d97706;color:#92400e}`);
+/* ===== Vé điện tử (hóa đơn vé xe khách theo mẫu Mắt Bão / Vexere) =====
+   Nhân viên phát hành hóa đơn trên hệ thống nhà cung cấp, rồi nhập Ký hiệu / Số / Mã CQT / Mã tra cứu vào vé để in đúng mẫu.
+   Không tự sinh mã: vé chưa nhập mã in kèm dòng "CHƯA PHÁT HÀNH HÓA ĐƠN". */
+const VDT = {
+  cfg: () => Object.assign({ vat: 8, ncc: 'Mắt Bão', link: 'https://matbao.in/tra-cuu-hoa-don/' }, (DB.settings && DB.settings.veDT) || {}),
+  has: x => !!(x && x.hd && x.hd.so),
+  parse(s) {
+    s = String(s || '').replace(/ /g, ' '); const g = re => { const m = s.match(re); return m ? m[1].trim() : ''; };
+    const o = { kh: g(/K[ýy]\s*hi[ệe]u[^:\n]*:\s*([0-9A-Z]{1,2}[A-Z0-9]{4,8})/i), so: g(/(?:^|\s)S[ốo](?:\s*h[óo]a\s*đ[ơo]n)?\s*:\s*0*(\d{1,10})/im),
+      cqt: g(/M[ãa]\s*(?:c[ủu]a\s*)?CQT[^:\n]*:\s*([A-Z0-9]{10,40})/i), tc: g(/M[ãa]\s*tra\s*c[ứu]u[^:\n]*:\s*([A-Za-z0-9_\-]{4,40})/i) };
+    const d = s.match(/Ng[àa]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})/i); if (d) o.ngay = d[3] + '-' + d[2].padStart(2, '0') + '-' + d[1].padStart(2, '0');
+    Object.keys(o).forEach(k => { if (!o[k]) delete o[k]; }); return o;
+  },
+  html(x, t) {
+    const c = VDT.cfg(), co = S().company || {}, xe = lcXe(t) || {}, h = x.hd || {}, ok = VDT.has(x), tot = dvTot(x);
+    const nd = h.ngay || D.today(), [yy, mo, dd] = nd.split('-'), qr = ok && c.link ? QR.svg(c.link, 22) : '';
+    const r = (k, v, cls) => `<div class="vd-r${cls ? ' ' + cls : ''}"><span>${k}:</span><b>${v || ''}</b></div>`;
+    return `<div class="vd">
+  <div class="vd-hd">${co.logo ? `<img src="${co.logo}" alt="">` : '<i></i>'}<div class="vd-kh">${ok ? `<div>Ký hiệu: <b>${esc(h.kh || '')}</b></div><div>Số: <b class="vd-red">${esc(h.so)}</b></div>` : '<div class="vd-chua">CHƯA PHÁT HÀNH<br>HÓA ĐƠN</div>'}</div></div>
+  <div class="vd-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div>
+  ${co.mst ? `<div class="vd-s">MST: ${esc(co.mst)}</div>` : ''}${co.diaChi ? `<div class="vd-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}
+  <div class="vd-tt">VÉ XE KHÁCH</div>
+  ${ok && h.cqt ? `<div class="vd-cqt">Mã CQT: ${esc(h.cqt)}</div>` : ''}
+  <div class="vd-b">
+  ${r('Khách hàng', esc(x.ten || 'KHÁCH LẺ'))}${r('Điện thoại', esc(x.sdt || ''))}${r('Tuyến đường', esc(t.tuyen || ''))}
+  ${r('Thời gian khởi hành', esc(t.gio || '') + ' ' + F.date(t.ngay))}${r('Điểm đón', esc(x.diemDon || ''))}${r('Điểm đến', esc(x.diemTra || ''))}
+  <div class="vd-r2">${r('Số ghế', esc(x.ghe || ''))}${r('Số xe', esc(xe.bks || ''))}</div>
+  ${r('Giá vé', F.money(tot) + ' đ', 'vd-gia')}${r('Bằng chữ', '<i>' + docSo(tot) + '</i>')}
+  ${+c.vat ? `<div class="vd-vat">(Giá vé đã bao gồm thuế GTGT ${+c.vat}%)</div>` : ''}
+  </div>
+  <div class="vd-ft">${qr ? `<div class="vd-qr">${qr}</div>` : ''}<div class="vd-sg"><div>Ngày ${dd} tháng ${mo} năm ${yy}</div><div class="vd-ntt">Người thu tiền</div>
+  ${ok ? `<div class="vd-sig">Hóa đơn điện tử đã ký số<br>Ký bởi: ${esc(String(co.ten || '').toUpperCase())}<br>Ký ngày: ${dd}/${mo}/${yy}</div>` : '<div class="vd-sp"></div>'}</div></div>
+  ${ok ? `<div class="vd-tc">${c.ncc ? 'Cung cấp bởi ' + esc(c.ncc) + '. ' : ''}Tra cứu tại: <b>${esc(String(c.link || '').replace(/^https?:\/\//, ''))}</b>${h.tc ? '<br>Mã tra cứu: <b>' + esc(h.tc) + '</b>' : ''}</div>` : ''}
+</div>`;
+  },
+  async print(G, t) {
+    await QR.load().catch(() => { });
+    const L = G.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
+    Print.run(VDT.CSS + L.map(x => VDT.html(x, dvTripOf(x).id ? dvTripOf(x) : t)).join(''), { title: 'Ve dien tu ' + t.gio + ' ' + dvSeatsTxt(G), paper: '80' });
+  },
+  open(G, t, canEdit, after) {
+    G = G.slice().sort((a, b) => String(a.ghe).localeCompare(String(b.ghe), 'vi', { numeric: true }));
+    const c = VDT.cfg(), adm = Auth.user && Auth.user.role === 'admin', dis = canEdit ? '' : ' disabled';
+    const inp = (x, k, ph) => `<input class="inp" data-id="${esc(x.id)}" data-k="${k}" value="${esc((x.hd || {})[k] || '')}" placeholder="${ph}"${dis}>`;
+    const m = Modal.open({ title: 'Vé điện tử · ' + esc(t.gio + ' ' + t.tuyen), width: 720, body: `
+      ${canEdit ? `<div class="vd-pa"><textarea class="inp" rows="3" data-paste placeholder="Dán nội dung hóa đơn (copy từ file PDF / trang Vexere, Mắt Bão) để tự điền Ký hiệu, Số, Mã CQT, Mã tra cứu"></textarea>
+      ${G.length > 1 ? `<label class="muted small">Điền vào ghế <select class="inp" data-tg style="width:auto;display:inline-block">${G.map(x => `<option value="${esc(x.id)}">${esc(x.ghe)}</option>`).join('')}</select></label>` : ''}</div>` : ''}
+      <div class="vd-l">${G.map(x => `<div class="vd-it"><div class="vd-ih"><b>Ghế ${esc(x.ghe)}</b> · ${esc(x.ten || 'KHÁCH LẺ')} · ${F.money(dvTot(x))} đ ${VDT.has(x) ? '<span class="badge b-green">Đã nhập mã</span>' : '<span class="badge b-gray">Chưa phát hành</span>'}</div>
+        <div class="vd-g"><label>Ký hiệu${inp(x, 'kh', 'VD: 1C26TPH')}</label><label>Số${inp(x, 'so', 'VD: 8757')}</label><label>Mã CQT${inp(x, 'cqt', '')}</label><label>Mã tra cứu${inp(x, 'tc', '')}</label><label>Ngày lập<input class="inp" type="date" data-id="${esc(x.id)}" data-k="ngay" value="${esc((x.hd || {}).ngay || '')}"${dis}></label></div></div>`).join('')}</div>
+      ${adm ? `<details class="dv-more" style="margin-top:10px"><summary>Cài đặt mẫu vé điện tử</summary><div class="vd-g" style="padding:4px 12px 12px"><label>Thuế GTGT (%)<input class="inp" data-c="vat" value="${esc(c.vat)}"></label><label>Nhà cung cấp<input class="inp" data-c="ncc" value="${esc(c.ncc)}"></label><label style="grid-column:span 2">Trang tra cứu<input class="inp" data-c="link" value="${esc(c.link)}"></label></div></details>` : ''}
+      <div class="muted small" style="margin-top:8px">Phát hành hóa đơn trên hệ thống nhà cung cấp trước, rồi nhập đúng mã vào đây. Vé chưa có Số hóa đơn sẽ in dòng "Chưa phát hành hóa đơn".</div>`,
+      foot: `<button class="btn" data-cancel>Đóng</button>${canEdit ? '<button class="btn" data-sv>Lưu</button>' : ''}<button class="btn pri" data-pr>${ic('printer')} ${canEdit ? 'Lưu &amp; in' : 'In'} vé điện tử</button>` });
+    const el = m.el, $ = s => el.querySelector(s);
+    const pa = $('[data-paste]'); if (pa) pa.oninput = () => {
+      const o = VDT.parse(pa.value); if (!Object.keys(o).length) return;
+      const id = ($('[data-tg]') || {}).value || G[0].id; let n = 0;
+      Object.entries(o).forEach(([k, v]) => { const i = el.querySelector(`[data-id="${CSS.escape(id)}"][data-k="${k}"]`); if (i) { i.value = v; n++; } });
+      if (o.kh) { const k = el.querySelector(`[data-id="${CSS.escape(id)}"][data-k="kh"]`); if (k) k.dispatchEvent(new Event('input')); }
+      if (n) toast('Đã điền ' + n + ' mục cho ghế ' + (G.find(x => x.id === id) || {}).ghe, 'ok', 2000);
+    };
+    /* ô Ký hiệu: gõ ở ghế đầu thì các ghế còn trống tự theo */
+    el.querySelectorAll('[data-k="kh"]').forEach((i, j) => { if (j === 0) i.addEventListener('input', () => el.querySelectorAll('[data-k="kh"]').forEach((o, l) => { if (l && (!o.value || o.dataset.auto)) { o.value = i.value; o.dataset.auto = 1; } })); });
+    const save = () => {
+      if (!canEdit) return true; let n = 0;
+      for (const x of G) {
+        const v = {}; el.querySelectorAll(`[data-id="${CSS.escape(x.id)}"]`).forEach(i => { const s = String(i.value || '').trim(); if (s) v[i.dataset.k] = s; });
+        if (v.so && !/^\d{1,10}$/.test(v.so)) { toast('Số hóa đơn ghế ' + x.ghe + ' chỉ gồm chữ số', 'err'); return false; }
+        if (!v.so) { if (!x.hd) continue; Object.keys(v).forEach(k => delete v[k]); }
+        const old = x.hd || {}; if (['kh', 'so', 'cqt', 'tc', 'ngay'].every(k => (old[k] || '') === (v[k] || ''))) continue;
+        if (v.so && !v.ngay) v.ngay = D.today();
+        if (v.so) x.hd = v; else delete x.hd;
+        (x.lichSu = x.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: v.so ? 'Vé điện tử: Ký hiệu: ' + (v.kh || '') + '; Số: ' + v.so : 'Xóa thông tin vé điện tử' }); n++;
+      }
+      if (adm) { const nc = {}; el.querySelectorAll('[data-c]').forEach(i => nc[i.dataset.c] = i.dataset.c === 'vat' ? (+String(i.value).replace(',', '.') || 0) : String(i.value || '').trim());
+        const cur = VDT.cfg(); if (Object.keys(nc).some(k => nc[k] !== cur[k])) { DB.settings.veDT = nc; n++; } }
+      if (n) { App.changed(); toast('Đã lưu vé điện tử', 'ok'); } return true;
+    };
+    $('[data-cancel]').onclick = () => m.close();
+    const sv = $('[data-sv]'); if (sv) sv.onclick = () => { if (save()) { m.close(); after && after(); } };
+    $('[data-pr]').onclick = () => { if (!save()) return; m.close(); after && after(); VDT.print(G.map(x => DB.datve.find(y => y.id === x.id) || x), t); };
+    return m;
+  },
+  btn(m, trip, getG, canEdit) {
+    const foot = m.el.querySelector('.modal-f'), pb = m.el.querySelector('.dv-pbtn'); if (!foot || !pb) return;
+    const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn dv-ebtn'; bt.innerHTML = ic('file') + ' Vé điện tử';
+    pb.before(bt);
+    bt.onclick = () => { const G = getG(); if (!G.length) return toast('Không tìm thấy vé', 'err'); VDT.open(G, trip, canEdit); };
+  },
+  CSS: `<style>.vd{width:72mm;max-width:100%;margin:0 auto;color:#000;font-family:'Be Vietnam Pro',Arial,sans-serif;font-size:11.5px;line-height:1.4;page-break-after:always;break-after:page}.vd:last-child{page-break-after:auto;break-after:auto}
+.vd-hd{display:flex;justify-content:space-between;align-items:center;gap:6px}.vd-hd img{height:13mm;max-width:30mm;object-fit:contain}.vd-kh{text-align:right;font-size:11.5px}.vd-red{color:#d00;font-size:15px}.vd-chua{font-weight:800;font-size:10px;border:1.5px solid #000;padding:2px 5px;border-radius:3px;text-align:center}
+.vd-co{font-weight:800;font-size:13px;text-align:center;margin-top:4px}.vd-s{text-align:center;font-size:10.5px}.vd-tt{text-align:center;font-weight:800;font-size:16px;letter-spacing:.06em;margin-top:6px}.vd-cqt{text-align:center;font-size:10px;word-break:break-all}
+.vd-b{margin-top:6px;border-top:1px dashed #000;padding-top:4px}.vd-r{display:flex;gap:5px;padding:1px 0}.vd-r span{white-space:nowrap}.vd-r b{font-weight:700;word-break:break-word}.vd-r2{display:flex;gap:10px}.vd-r2 .vd-r{flex:1}.vd-gia b{font-size:14px}.vd-vat{font-size:10px;font-style:italic;text-align:center;margin-top:2px}
+.vd-ft{display:flex;gap:6px;align-items:flex-start;margin-top:8px}.vd-qr{flex:none}.vd-sg{flex:1;text-align:center;font-size:10.5px}.vd-ntt{font-weight:700}.vd-sig{border:1.5px solid #d00;color:#d00;font-size:9.5px;padding:3px;margin-top:4px;text-align:left;line-height:1.35}.vd-sp{height:14mm}
+.vd-tc{font-size:9.5px;text-align:center;margin-top:6px;border-top:1px dashed #000;padding-top:4px;word-break:break-all}
+@media print{.vd-red,.vd-sig{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>`
+};
+addCSS(`.dv-ebtn{border-color:#2e90fa;color:#175cd3}.dv-ebtn:hover{background:#eff8ff}.vd-pa{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.vd-l{display:flex;flex-direction:column;gap:8px}.vd-it{border:1px solid #e3e7ef;border-radius:10px;padding:8px 10px}.vd-ih{font-size:13px;margin-bottom:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.vd-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 10px}.vd-g label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475467}`);
 /* ===== Ctrl (hoặc ⌘) + bấm vào vé để chọn nhiều vé, in một lượt ===== */
 function dvPkList(cur) { if (!cur) return []; DV.pk = (DV.pk || []).filter(id => DB.datve.some(x => x.id === id && x.chuyen === cur.id && !x.huy)); return DV.pk.map(id => DB.datve.find(x => x.id === id)); }
 const dvPkRedraw = () => { const st = window.scrollY; App.render(); window.scrollTo(0, st); };
@@ -14080,7 +14179,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T16:20';
+const APP_BUILD = '2026-11-13T08:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
