@@ -4194,7 +4194,7 @@ function dvForm(trip, b, seat, one) {
       { key: 'sdt', label: 'Số điện thoại', type: 'tel', required: isNew, ph: isNew ? 'Gõ vài số cuối hoặc cả số' : '09xxxxxxxx' }, { key: 'ten', label: 'Tên khách', ph: 'KHÁCH LẺ' },
       ...(grp ? [] : [{ key: 'ghe', label: 'Số ghế', type: 'select', options: dvSeatList(trip).filter(s => !used.has(s) || (b && b.ghe === s)).map(s => ({ value: s, label: s })) }]),
       { key: 'tt', label: 'Tình trạng', type: 'select', options: [{ value: 'giu', label: 'Giữ chỗ (chưa thu tiền)' }, { value: 'tra', label: 'Đã thanh toán' }] },
-      { key: 'diemDon', label: 'Điểm đón', list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
+      { key: 'diemDon', label: 'Điểm đón' }, { key: 'diemTra', label: 'Điểm trả' },
       { key: 'gia', label: grp ? 'Giá vé mỗi ghế' : 'Giá vé', type: 'money' }, { key: 'ghiChu', label: 'Ghi chú vé' }, ...DV_XF
     ],
     saveText: isNew ? 'Đặt vé' : grp ? 'Lưu ' + G.length + ' vé' : 'Lưu vé',
@@ -4459,7 +4459,7 @@ function dvFormMulti(trip, seats) {
       { key: 'sdt', label: 'Số điện thoại', type: 'tel', required: true, ph: 'Gõ vài số cuối hoặc cả số' }, { key: 'ten', label: 'Tên khách', ph: 'KHÁCH LẺ' },
       { key: 'tt', label: 'Tình trạng', type: 'select', options: [{ value: 'giu', label: 'Giữ chỗ (chưa thu tiền)' }, { value: 'tra', label: 'Đã thanh toán' }] },
       { key: 'gia', label: 'Giá vé mỗi ghế', type: 'money' },
-      { key: 'diemDon', label: 'Điểm đón', list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemDon).filter(Boolean)])] }, { key: 'diemTra', label: 'Điểm trả', list: [...new Set([...LT.get(trip.tuyen).map(x => x.ten), ...bgPoints(trip.tuyen), ...DB.datve.map(x => x.diemTra).filter(Boolean)])] },
+      { key: 'diemDon', label: 'Điểm đón' }, { key: 'diemTra', label: 'Điểm trả' },
       { key: 'ghiChu', label: 'Ghi chú vé' }, ...DV_XF
     ],
     saveText: `Đặt ${seats.length} vé`,
@@ -5719,6 +5719,7 @@ function bgPrice(tuyen, ngay, don, tra) {
 function bgBind(m, trip, auto) {
   const g = m.el.querySelector('[name="gia"]'), a = m.el.querySelector('[name="diemDon"]'), z = m.el.querySelector('[name="diemTra"]');
   if (!g || !a || !z) return;
+  [a, z].forEach(x => { x.setAttribute('autocomplete', 'off'); x.removeAttribute('list'); });   // ô trống để nhân viên tự gõ, không hiện danh sách gợi ý
   const hint = document.createElement('small'); hint.className = 'bg-hint'; g.parentNode.appendChild(hint);
   const bg = bgFind(trip.tuyen, trip.ngay); let ch = null;
   const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); ch.value = i >= 0 ? String(i) : 'all'; };
@@ -14000,7 +14001,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T09:00';
+const APP_BUILD = '2026-11-12T09:10';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
