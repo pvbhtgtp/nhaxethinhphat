@@ -121,8 +121,9 @@ const HC = {
       const td = D.today(), day = typeof dvDay === 'function' ? dvDay() : td, cur = typeof dvCur === 'function' ? dvCur() : null;
       const T = (DB.lichchay || []).filter(l => l && !l.huy && (l.ngay === td || l.ngay === day)).sort((x, y) => (cur && y.id === cur.id) - (cur && x.id === cur.id));
       const nm = b => 'Ghế ' + (b.ghe || '') + (b.ten && b.ten !== 'KHÁCH LẺ' ? ' · ' + b.ten : ''); let ev = null;
+      const ids = new Set(T.map(t => t.id)), BY = new Map(); (DB.datve || []).forEach(b => { if (!b.huy && ids.has(b.chuyen)) { const a = BY.get(b.chuyen); a ? a.push(b) : BY.set(b.chuyen, [b]); } });   // 1 lượt duyệt vé cho mọi chuyến (nhẹ cho điện thoại)
       T.forEach(t => {
-        const B = dvBook(t.id), snap = new Map(B.map(b => [b.id, { len: !!b.len, xn: !!b.xn, g: (b.goi || []).length }])), prev = HC.seen.get(t.id); HC.seen.set(t.id, snap);
+        const B = BY.get(t.id) || [], snap = new Map(B.map(b => [b.id, { len: !!b.len, xn: !!b.xn, g: (b.goi || []).length }])), prev = HC.seen.get(t.id); HC.seen.set(t.id, snap);
         if (!prev || ev) return; const was = id => prev.get(id) || { len: false, xn: false, g: 0 };
         const up = B.filter(b => b.len && !was(b.id).len);
         if (up.length) { ev = { cap: `${t.gio} ${t.tuyen} · ${up.length > 1 ? up.length + ' khách' : nm(up[0])} đã lên xe` }; return; }
