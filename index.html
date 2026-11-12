@@ -566,7 +566,7 @@ const Modal = {
 
 /* ---------- Form ---------- */
 function optList(o) { return (o || []).map(x => typeof x === 'object' ? x : { value: x, label: x }); }
-const IDC_KEYS = ['cccdTruoc', 'cccdSau', 'bangTruoc', 'bangSau'];   // ô ảnh thẻ có nút Đọc lại (AI đọc thông tin trên thẻ)
+const IDC_KEYS = ['cccdTruoc', 'cccdSau', 'bangTruoc', 'bangSau', 'theNVTruoc'];   // ô ảnh thẻ có nút Đọc lại (AI đọc thông tin trên thẻ)
 function fieldHTML(f, v) {
   if (f.type === 'section') return `<div class="fsec">${f.label}</div>`;
   const nm = `name="${f.key}"`, req = f.required ? ' <i class="req">*</i>' : '';
@@ -8684,6 +8684,22 @@ const AIX = {
     const n = V.length >= 5 && (extra || []).length + P.length >= 3 ? 5 : V.length >= 3 ? 3 : 1;
     return V.slice(0, n);
   },
+  /* Đọc nhanh thẻ / giấy tờ: nhiều AI (các model Gemini + ChatGPT / Claude nếu có khóa) đọc SONG SONG cùng lúc,
+     AI nào trả kết quả hợp lệ đầu tiên thì dùng ngay, các AI còn lại hủy; quá ms thì báo quá hạn */
+  async race(prompt, opt = {}, valid = () => true, ms = 12000) {
+    const P = AIX.provs(); if (!P.length) throw AIX.err('no_key');
+    const c = AIX.cfg(); let disc = []; try { disc = JSON.parse(localStorage.getItem('aix.models') || '{}').l || []; } catch (e) { }
+    const gm = P.includes('gemini') ? [...new Set([AIX._good, c.model, ...disc, ...AIX.MODELS].filter(m => m && !AIX.PRO.includes(m) && !/image|tts|embed|live|audio|pro/i.test(m)))].slice(0, 3) : [];
+    const R = [...gm.map(m => ({ p: 'gemini', m })), ...P.filter(p => p !== 'gemini').map(p => ({ p }))];
+    const ac = new AbortController(), up = () => ac.abort(); if (opt.signal) opt.signal.addEventListener('abort', up);
+    try {
+      return await new Promise((ok, no) => {
+        let left = R.length, last = null; const t = setTimeout(() => { ac.abort(); no(AIX.err('timeout', 'quá ' + Math.round(ms / 1000) + ' giây')); }, ms);
+        R.forEach(r => AIX.one(r.p, prompt, { ...opt, _t: 1, model: r.m, signal: ac.signal }).then(v => { if (v && valid(v)) { clearTimeout(t); AIX.lastBy = r.m || r.p; ok(v); ac.abort(); } else { last = last || AIX.err('empty', 'AI không đọc ra thông tin'); if (!--left) { clearTimeout(t); no(last); } } },
+          e => { if (!last || last.code === 'cancelled') last = e; if (!--left) { clearTimeout(t); no(last); } }));
+      });
+    } finally { if (opt.signal) opt.signal.removeEventListener('abort', up); }
+  },
   /* Quét ảnh: AI thứ nhất tối đa 15 giây, quá hạn đổi sang AI khác (hoặc model khác) thêm tối đa 20 giây */
   T1: 15000, T2: 20000,
   timed(fn, ms, signal) {
@@ -12887,8 +12903,10 @@ const IDC = {
   async read(kind, src, root, set) {
     if (!AIX.ok()) return toast('Chưa cài khóa AI nên chưa đọc đối chiếu thông tin trên thẻ', 'ok', 5000);
     toast('Đang đọc thẻ để cắt thẳng và đối chiếu thông tin…', 'ok', 3000);
-    const sm = SCN.fit(src, 1280), blob = await new Promise(r => sm.toBlob(r, 'image/jpeg', 0.9)); let d;
-    try { d = await AIX.json(IDC.P[kind] + IDC.GOC, { images: [blob] }); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
+    const sm = SCN.fit(src, 1024), blob = await new Promise(r => sm.toBlob(r, 'image/jpeg', 0.85)); let d; const t0 = Date.now();
+    const okv = v => v && typeof v === 'object' && Object.keys(IDC.MAP[kind]).some(k => String(v[k] || '').trim());
+    try { d = await AIX.race(IDC.P[kind] + IDC.GOC, { images: [blob] }, okv, 12000); } catch (e) { return toast('Không đọc được thông tin trên thẻ: ' + (e.message || e), 'err', 6000); }
+    console.info('IDC.read', kind, AIX.lastBy, Date.now() - t0, 'ms');
     if (!root.isConnected) return;
     try { const g = d && d.goc; if (Array.isArray(g) && g.length === 4 && !set.done) { const Q = g.map(p => [(+p[0] || 0) / 1000 * src.width, (+p[1] || 0) / 1000 * src.height]); if (IDC.okQ(Q, src.width, src.height)) { set(IDC.flat(src, Q)); toast('Đã cắt thẳng ảnh thẻ về đúng khổ', 'ok'); } } } catch (e) { console.warn('IDC.goc', e); }
     if (kind === 'cccd2') { const z = IDC.mrz(d && d.mrz); d = Object.assign({}, d, { so: z.so || '', ngaySinh: z.ngaySinh || '', gioiTinh: z.gioiTinh || '' }); }
@@ -12921,6 +12939,16 @@ document.addEventListener('change', e => {
 
 document.addEventListener('click', async e => {         // Đọc lại thông tin từ ảnh thẻ đã lưu
   const b = e.target.closest && e.target.closest('[data-idcre]'); if (!b) return; e.preventDefault();
+  if (b.dataset.idcre === 'theNVTruoc') {   // thẻ tập huấn nghiệp vụ: đọc nhanh nhiều AI song song → ghi vào Lý lịch hành nghề
+    const box = b.closest('.img-pick'), root = b.closest('.modal-wrap') || document; if (!box || b.disabled) return;
+    let v = box.querySelector('[data-image]').value || ''; if (!v) return toast('Chưa có ảnh thẻ để đọc', 'err');
+    const ma = (root.querySelector('[name="ma"]') || {}).value, e = (DB.employees || []).find(x => x.ma === ma);
+    if (!e) return toast('Lưu nhân viên trước rồi bấm Đọc lại', 'err');
+    b.disabled = true;
+    try { if (v.startsWith(IMGX.PRE)) { const id = v.slice(IMGX.PRE.length); if (!IMGX.img.has(id)) await IMGX.fetch([id]); v = IMGX.img.get(id) || ''; if (!v) throw new Error('Chưa tải được ảnh từ kho'); } await THR.read(e, v, false, false, true); }
+    catch (err) { toast('Không đọc lại được: ' + esc(err.message || err), 'err', 6000); } finally { b.disabled = false; }
+    return;
+  }
   const kind = IDC.K[b.dataset.idcre], box = b.closest('.img-pick'), root = b.closest('.modal-wrap') || document; if (!kind || !box || b.disabled) return;
   let v = box.querySelector('[data-image]').value || '';
   if (!v) return toast('Chưa có ảnh để đọc lại', 'err');
@@ -13162,14 +13190,23 @@ const THR = {
 - "noiDung": nội dung / loại tập huấn nếu có ghi;
 - "hetHan": ngày giấy chứng nhận có giá trị đến (dòng "GCN có giá trị đến …"), YYYY-MM-DD.
 Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để chuỗi rỗng.`,
-  async read(e, url, quiet, bg) {
+  async read(e, url, quiet, bg, fast) {
     if (!e || !url || !Auth.can('lylich', 'add')) return false;
+    if (fast && AIX.ok()) {   // bấm Đọc lại: nhiều AI đọc song song, lấy kết quả hợp lệ đầu tiên (mục tiêu vài giây)
+      toast('Đang đọc thẻ tập huấn…', '', 12000); const tw = rootEl('toasts').lastElementChild, tOff = () => { try { tw && tw.remove(); } catch (z) { } };
+      let r; try { const im = await aiImgs(url); r = await AIX.race(THR.ask, { images: im }, v => v && typeof v === 'object' && ['tuNgay', 'denNgay', 'ngayCap', 'hetHan'].some(k => /^\d{4}-\d{2}-\d{2}$/.test(String(v[k] || '').trim())), 12000); }
+      catch (x) { tOff(); toast('Không đọc được ảnh thẻ tập huấn: ' + esc((x && x.message) || x), 'err', 6000); return false; }
+      tOff(); return THR.save(e, url, r, false);
+    }
     const sample = await aiSampler(), lim = sample ? await sample.limits().catch(() => null) : null;
     if (!sample || !lim || !lim.images) { if (!quiet) AIX.need('Đọc thẻ tập huấn'); return 'noai'; }
     if (!bg) toast('Đang đọc thẻ tập huấn…', '', 12000); const tw = bg ? null : rootEl('toasts').lastElementChild, tOff = () => { try { tw && tw.remove(); } catch (z) { } };
     let r; try { r = await sample.json(THR.ask, { images: await aiImgs(url), modelTier: 'pro', deep: true, cache: false }); }
     catch (x) { tOff(); if (bg) return false; toast('Không đọc được ảnh thẻ tập huấn' + (x && x.code && sample.gemini ? ': ' + AIX.msg(x) : ''), 'err', 6000); return false; }
-    tOff(); const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
+    tOff(); return THR.save(e, url, r, bg);
+  },
+  save(e, url, r, bg) {
+    const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '';
     r = r || {}; const tu = dt(r.tuNgay), den = dt(r.denNgay), ngay = tu || den || dt(r.ngayCap), han = dt(r.hetHan);
     if (!ngay && !han) { if (bg) return false; toast('Không đọc được ngày trên thẻ tập huấn, bạn nhập tay trong Lý lịch hành nghề', 'err', 6000); return false; }
     const d = { ngay: ngay || '', donVi: String(r.donVi || '').trim(), hetHan: han,
@@ -13937,7 +13974,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T08:30';
+const APP_BUILD = '2026-11-12T08:45';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
