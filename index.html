@@ -13075,7 +13075,7 @@ const MED = {
     const P = {
       gplx: ['Giấy phép lái xe', `<div class="med-kv">${v('Số GPLX', esc(e.bangSo || ''))}${v('Hạng', esc(e.bangHang || ''))}${v('Ngày cấp', d(e.bangNgayCap))}${v('Ngày hết hạn', d(e.bangHetHan) + (e.bangHetHan ? ' ' + x.st(e.bangHetHan) : ''))}${v('Nơi cấp', esc(e.bangNoiCap || ''))}${v('Họ tên trên bằng', esc(e.ten || ''))}</div><div class="med-imgs">${img('Mặt trước', e.bangTruoc)}${img('Mặt sau', e.bangSau)}</div>${(x.th || e.theNVTruoc || (() => { try { return llIsLai(e); } catch (z) { return false; } })()) ? `<div class="med-sec">${ic('shield')} Thẻ tập huấn nghiệp vụ${e.theNVTruoc && Auth.can('lylich', 'add') ? `<button class="btn sm" style="margin-left:auto" data-thr>${ic('sparkle')} Đọc từ ảnh thẻ</button>` : ''}</div><div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Nội dung', x.th ? esc(x.th.noiDung || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ tập huấn (mặt trước)', e.theNVTruoc)}</div>` : ''}`],
       thenv: ['Thẻ nghiệp vụ lái xe', `<div class="med-kv">${v('Lần tập huấn gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị tập huấn', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ tập huấn', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-imgs">${img('Thẻ nghiệp vụ (mặt trước)', e.theNVTruoc)}</div>`],
-      cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số định danh cá nhân', esc(e.cccd || ''))}${v('Họ, chữ đệm và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Quốc tịch', esc(e.cccdQuocTich || ''))}${v('Có giá trị đến', e.cccdHetHan ? d(e.cccdHetHan) : '')}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Quê quán / Nơi đăng ký khai sinh</span><b>${esc(e.cccdQueQuan || '—')}</b></div><div class="med-full"><span>Nơi thường trú / Nơi cư trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Đặc điểm nhân dạng</span><b>${esc(e.cccdDacDiem || '—')}</b></div><div class="med-full"><span>Chỗ ở hiện nay</span><b>${esc(e.diaChiHN || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
+      cccd: ['Căn cước công dân', `<div class="med-kv">${v('Số định danh cá nhân', esc(e.cccd || ''))}${v('Họ, chữ đệm và tên', esc(e.ten || ''))}${v('Ngày sinh', d(e.ngaySinh))}${v('Giới tính', esc(e.gioiTinh || ''))}${v('Quốc tịch', esc(e.cccdQuocTich || ''))}${v('Có giá trị đến', e.cccdHetHan ? d(e.cccdHetHan) : '')}${v('Ngày cấp', d(e.cccdNgayCap))}${v('Nơi cấp', esc(e.cccdNoiCap || ''))}<div class="med-full"><span>Quê quán / Nơi đăng ký khai sinh</span><b>${esc(e.cccdQueQuan || '—')}</b></div><div class="med-full"><span>Nơi thường trú / Nơi cư trú</span><b>${esc(e.diaChiTT || '—')}</b></div><div class="med-full"><span>Đặc điểm nhân dạng</span><b>${esc(e.cccdDacDiem || '—')}</b></div></div><div class="med-imgs">${img('Mặt trước', e.cccdTruoc)}${img('Mặt sau', e.cccdSau)}</div>`],
       sk: ['Giấy khám sức khỏe', `<div class="med-kv">${v('Lần khám gần nhất', x.sk ? d(x.sk.ngay) : '')}${v('Nơi khám', x.sk ? esc(x.sk.noi || '') : '')}${v('Tình trạng sức khỏe', x.sk ? esc(x.sk.tt || '') : '')}${v('Hạn giấy khám', x.skH ? d(x.skH) + ' ' + x.st(x.skH) : '')}</div><div class="med-h">Giấy khám sức khỏe (bản gần nhất)</div>${MED.files(x.sk)}<div class="med-h">Lịch sử khám sức khỏe</div>${hist('sk', [['ngay', 'Ngày khám', 'date'], ['noi', 'Nơi khám'], ['tt', 'Tình trạng'], ['hetHan', 'Hạn', 'date']])}`],
       th: ['Tập huấn nghiệp vụ', `<div class="med-kv">${v('Lần gần nhất', x.th ? d(x.th.ngay) : '')}${v('Đơn vị', x.th ? esc(x.th.donVi || '') : '')}${v('Hạn thẻ', x.thH ? d(x.thH) + ' ' + x.st(x.thH) : '')}</div><div class="med-h">Giấy chứng nhận tập huấn (bản gần nhất)</div>${MED.files(x.th)}<div class="med-h">Lịch sử tập huấn</div>${hist('th', [['ngay', 'Thời gian', 'date'], ['noiDung', 'Nội dung'], ['donVi', 'Đơn vị'], ['hetHan', 'Hạn thẻ', 'date']])}`],
       hd: ['Hợp đồng lao động', `<div class="med-kv">${v('Số hợp đồng', esc(e.soHD || ''))}${v('Loại hợp đồng', esc(e.loaiHD || ''))}${v('Từ ngày', d(e.hdTu))}${v('Đến ngày', e.hdDen ? d(e.hdDen) + ' ' + x.st(e.hdDen) : (e.hdTu ? 'Không thời hạn' : ''))}${v('Chức vụ', esc(e.chucVu || ''))}${v('Phòng ban', esc(e.phongBan || ''))}${v('Lương CK (tháng)', m(e.luongCB))}${e.moTaCV ? `<div class="med-full"><span>Mô tả công việc</span><b style="white-space:pre-line;font-weight:500">${esc(e.moTaCV)}</b></div>` : ''}</div><div class="med-act"><button class="btn pri" data-hdv>${ic('file')} Xem nội dung hợp đồng</button></div>`],
@@ -13230,6 +13230,32 @@ Chỉ trả về JSON. Không bịa: trường nào không đọc rõ thì để
   }
 };
 setTimeout(() => THR.auto(), 120000); setInterval(() => THR.auto(), 30 * 60000);
+/* ===== Ảnh CCCD đã có mà hồ sơ còn trống trường (đặc điểm nhân dạng, quê quán, nơi thường trú, ngày cấp…): máy Admin tự đọc ảnh và CHỈ điền ô trống, không ghi đè ===== */
+const CCA = {
+  DATE: ['ngaySinh', 'cccdHetHan', 'cccdNgayCap'],
+  miss(e, kind) { return Object.values(IDC.MAP[kind]).some(f => !String(e[f] || '').trim()); },
+  async one(e) {
+    let n = 0;
+    for (const [img, kind] of [['cccdTruoc', 'cccd1'], ['cccdSau', 'cccd2']]) {
+      let u = e[img]; if (!u || !CCA.miss(e, kind)) continue;
+      if (String(u).startsWith(IMGX.PRE)) { const id = u.slice(IMGX.PRE.length); if (!IMGX.img.has(id)) await IMGX.fetch([id]); u = IMGX.img.get(id) || ''; } if (!u) continue;
+      const blob = await (await fetch(u)).blob(), okv = v => v && typeof v === 'object' && Object.keys(IDC.MAP[kind]).some(k => String(v[k] || '').trim());
+      let d; try { d = await AIX.race(IDC.P[kind], { images: [blob] }, okv, 20000); } catch (x) { continue; }
+      if (kind === 'cccd2') { const z = IDC.mrz(d && d.mrz); d = Object.assign({}, d, { so: z.so || '', ngaySinh: z.ngaySinh || '', gioiTinh: z.gioiTinh || '' }); }
+      Object.entries(IDC.MAP[kind]).forEach(([k, f]) => { let v = String((d && d[k]) || '').trim(); if (!v || String(e[f] || '').trim()) return; if (f === 'cccd') v = v.replace(/\s+/g, ''); if (CCA.DATE.includes(f) && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if (f === 'gioiTinh' && !['Nam', 'Nữ'].includes(v)) return; e[f] = v; n++; });
+    }
+    return n;
+  },
+  auto() {
+    try {
+      if (!Auth.user || Auth.user.role !== 'admin' || CCA._run || !AIX.ok() || typeof IDC === 'undefined') return;
+      const sig = e => PM.h(String(e.cccdTruoc || '') + '|' + String(e.cccdSau || '')), L = (DB.employees || []).filter(e => (e.cccdTruoc || e.cccdSau) && e.trangThai !== 'Nghỉ việc' && e.ccAI !== sig(e) && ((e.cccdTruoc && CCA.miss(e, 'cccd1')) || (e.cccdSau && CCA.miss(e, 'cccd2')))).slice(0, 3);
+      if (!L.length) return; CCA._run = 1;
+      (async () => { try { let tot = 0; for (const e of L) { const n = await CCA.one(e); e.ccAI = sig(e); tot += n; App.changed(); } if (tot) toast(ic('check') + ' Đã tự bổ sung ' + tot + ' trường còn trống trong hồ sơ nhân viên theo ảnh CCCD (chỉ điền ô trống)', 'ok', 6000); } catch (x) { console.warn('CCA', x); } finally { CCA._run = 0; } })();
+    } catch (e) { console.warn('CCA.auto', e); }
+  }
+};
+setTimeout(() => CCA.auto(), 90000); setInterval(() => CCA.auto(), 30 * 60000);
 /* ===== AI đọc tệp đính kèm khi nhập Lý lịch hành nghề (giấy khám sức khỏe, giấy chứng nhận tập huấn) → điền sẵn các ô ===== */
 const LLAI = {
   ask: {
@@ -13974,7 +14000,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T08:45';
+const APP_BUILD = '2026-11-12T09:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
