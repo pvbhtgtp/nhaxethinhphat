@@ -97,7 +97,7 @@ const CT = {
     if (!L.length) return `<div class="ct-empty sm">${ic('bus')}<b>Không có chuyến ngày ${F.date(d)}</b></div>`;
     return `<div class="ct-lbl">${L.length} chuyến ngày ${F.date(d)}</div>` + L.map(l => { const v = (DB.vehicles || []).find(x => x.id === l.xeId) || {}, mates = [l.laiXe, l.laiXe2, l.phuXe].filter(x => x && String(x) !== me).map(nm).filter(Boolean);
       let xc = null; try { xc = XC.of(l).find(z => z.kind === 'lx' && String(z.id) === me); } catch (e) { }
-      return `<div class="ct-card sm${xc ? ' cheo' : ''}"><div class="ct-h"><b class="ct-time">${esc(l.gio || '')}</b><span class="ct-when">${l.phuXe && String(l.phuXe) === me ? 'Phụ xe' : 'Lái xe'}</span></div><div class="ct-route">${esc(l.tuyen || '')}${xc ? ` <span class="ct-tag cheo">⇄ Chạy chéo · tuyến chính ${esc(xc.main.s)}</span>` : ''}</div><div class="ct-sub">${ic('bus')} ${esc(v.bks || 'Chưa gán xe')}${mates.length ? ' · Cùng: ' + esc(mates.join(', ')) : ''}</div></div>`; }).join('');
+      return `<div class="ct-card sm${xc ? ' cheo' : ''}"><div class="ct-h"><b class="ct-time">${esc(l.gio || '')}</b><span class="ct-when">${l.phuXe && String(l.phuXe) === me ? 'Phụ xe' : 'Lái xe'}</span></div><div class="ct-route">${esc(l.tuyen || '')}</div><div class="ct-sub">${ic('bus')} ${esc(v.bks || 'Chưa gán xe')}${mates.length ? ' · Cùng: ' + esc(mates.join(', ')) : ''}</div></div>`; }).join('');
   },
   /* ---------- màn hình danh sách chuyến ---------- */
   list(el, T) {
@@ -107,7 +107,7 @@ const CT = {
     const td = D.today(), nx = T.find(t => CT.mins(t) > -180) || T[T.length - 1];
     const card = (t, big) => { const s = CT.sum(t), m = CT.mins(t); return `<button class="ct-card${big ? ' big' : ''}${m < -180 ? ' gone' : ''}${t.cheo ? ' cheo' : ''}" data-ct="${esc(t.id)}">
       <div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when ${m > 0 && m <= 60 ? 'soon' : ''}">${t.ngay === td ? '' : 'Ngày mai · '}${CT.when(t)}</span></div>
-      <div class="ct-route">${esc(t.tuyen)}${t.cheo ? ` <span class="ct-tag cheo">⇄ Chạy chéo · tuyến chính ${esc(t.cheo)}</span>` : ''}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
+      <div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
       <div class="ct-kpi"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Cần thu</span></div></div></button>`; };
     el.innerHTML = `<div class="ct">${CT.cal()}${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
     el.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { CT.trip = b.dataset.ct; CT.tab = 'don'; App.render(); window.scrollTo(0, 0); });
