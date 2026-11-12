@@ -5741,7 +5741,7 @@ function bgBind(m, trip, auto) {
   [a, z].forEach(x => { x.setAttribute('autocomplete', 'off'); x.removeAttribute('list'); });   // ô trống để nhân viên tự gõ, không hiện danh sách gợi ý
   const hint = document.createElement('small'); hint.className = 'bg-hint'; g.parentNode.appendChild(hint);
   const bg = bgFind(trip.tuyen, trip.ngay); let ch = null;
-  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); if (i >= 0) ch.value = String(i); };
+  const sync = () => { if (!ch || !bg) return; const i = bg.chang.findIndex(c => (c.don || c.tra) && bgNorm(c.don) === bgNorm(a.value) && bgNorm(c.tra) === bgNorm(z.value)); if (i >= 0) ch.value = String(i); ch.dataset.prev = ch.value; };
   if (bg && bg.chang.some(c => c.don || c.tra)) {
     const lab = document.createElement('label'); lab.className = 'field full';
     /* luôn gắn sẵn chặng toàn tuyến (điểm đầu → điểm cuối); giá: dòng toàn tuyến của bảng giá, không có thì chặng trùng 2 đầu tuyến, không nữa thì chặng giá cao nhất */
@@ -5751,8 +5751,13 @@ function bgBind(m, trip, auto) {
     a.closest('label').before(lab); ch = lab.querySelector('select'); ch.dataset.def = defV;
     if (auto && !(DV.clone && +DV.clone.gia) && !a.value.trim() && !z.value.trim()) g.value = F.money(all.gia);
     ch.onchange = () => {
-      if (ch.value === 'all') { g.value = F.money(all.gia); hint.textContent = 'Giá theo bảng giá'; return; }
-      const c = bg.chang[+ch.value]; if (!c || ch.value === '') return; g.value = F.money(c.gia); hint.textContent = 'Giá theo bảng giá · chặng ' + c.don + ' → ' + c.tra; };   // chỉ lấy giá: điểm đón/trả để nhân viên tự gõ, để trống thì khi lưu lấy theo chặng
+      /* đổi chặng: ô điểm đón/trả đang trống hoặc đang là điểm do chặng cũ điền → đổi theo chặng mới; điểm nhân viên tự gõ thì giữ nguyên */
+      const pc = /^\d+$/.test(ch.dataset.prev || '') ? bg.chang[+ch.dataset.prev] : null, N = dvNorm, auto = (x, v) => !x.value.trim() || N(x.value) === N(x.dataset.auto || '') || (pc && N(x.value) === N(v)) || N(x.value) === N(x === a ? E.di : E.den);
+      const put = (x, v, pv) => { if (!auto(x, pv)) return; x.value = v || ''; x.dataset.auto = v || ''; x.dispatchEvent(new Event('input', { bubbles: true })); };
+      if (ch.value === 'all') { put(a, '', pc && pc.don); put(z, '', pc && pc.tra); g.value = F.money(all.gia); hint.textContent = 'Giá theo bảng giá'; ch.dataset.prev = 'all'; return; }
+      const c = bg.chang[+ch.value]; if (!c || ch.value === '') return; put(a, c.don, pc && pc.don); put(z, c.tra, pc && pc.tra); g.value = F.money(c.gia); hint.textContent = 'Giá theo bảng giá · chặng ' + c.don + ' → ' + c.tra; ch.dataset.prev = ch.value; sync(); };
+    ch.dataset.prev = ch.value;
+    [a, z].forEach(x => x.addEventListener('focus', () => { try { x.select(); } catch (e) { } }));   // bấm vào ô là chọn sẵn chữ: gõ đè luôn, không phải xóa   // chỉ lấy giá: điểm đón/trả để nhân viên tự gõ, để trống thì khi lưu lấy theo chặng
   }
   const run = force => {
     const r = bgPrice(trip.tuyen, trip.ngay, a.value, z.value);
@@ -13874,10 +13879,10 @@ ${txt}`, { modelTier: 'default', cache: false }) || {};
   /* ---------- QR chuyển khoản (VietQR) ---------- */
   BANK: [[/vietcom|vcb/, 'VCB'], [/vietin|ctg|icb/, 'ICB'], [/bidv/, 'BIDV'], [/agri|vba/, 'VBA'], [/techcom|tcb/, 'TCB'], [/\bacb\b|a ?chau/, 'ACB'], [/\bmb\b|quan doi|mbbank/, 'MB'], [/sacom|stb/, 'STB'], [/vpbank|vp bank|thinh vuong/, 'VPB'], [/tpbank|tp bank|tien phong/, 'TPB'], [/\bvib\b|quoc te/, 'VIB'], [/\bshb\b|sai gon ha noi/, 'SHB'], [/hdbank|hd bank|phat trien/, 'HDB'], [/\bocb\b|phuong dong/, 'OCB'], [/\bmsb\b|hang hai|maritime/, 'MSB'], [/seabank|dong nam a/, 'SEAB'], [/eximbank|exim/, 'EIB'], [/lpbank|lienviet|loc phat/, 'LPB'], [/nam a|nab/, 'NAB'], [/bac a|bab/, 'BAB'], [/pvcom/, 'PVCB'], [/kienlong|klb/, 'KLB'], [/abbank|an binh/, 'ABB'], [/viet a|vab/, 'VAB'], [/bao viet|bvb/, 'BVB'], [/saigonbank|sai gon cong thuong/, 'SGICB'], [/\bncb\b|quoc dan/, 'NCB'], [/dong a|dab/, 'DOB'], [/gpbank|dau khi/, 'GPB'], [/\bscb\b|sai gon\b/, 'SCB'], [/cake/, 'CAKE'], [/timo/, 'TIMO']],
   bank(c) { const n = TTT.nm(c.nganHangDN || '').toLowerCase(); const f = DVP.BANK.find(([re]) => re.test(n)); return f ? f[1] : ''; },
-  qr(G) {
+  qr(G, amt0) {
     const c = S().company || {}, acc = String(c.stkDN || '').replace(/\s/g, ''), bk = DVP.bank(c);
     if (!acc || !bk) return toast('Chưa có tài khoản công ty: vào Cài đặt › Công ty, nhập Số tài khoản và Ngân hàng (VD: Vietcombank)', 'err', 8000);
-    const t = dvTripOf(G[0]), amt = Math.max(0, G.reduce((a, x) => a + dvTot(x) - (+x.coc || 0), 0)), info = `VE ${dvSeatsTxt(G)} ${String(t.gio || '').replace(':', 'H')} ${String(G[0].sdt || '').slice(-4)}`.replace(/[^0-9A-Za-z ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 25);
+    const t = dvTripOf(G[0]), amt = amt0 != null ? Math.max(0, Math.round(amt0)) : Math.max(0, G.reduce((a, x) => a + dvTot(x) - (+x.coc || 0), 0)), info = `VE ${dvSeatsTxt(G)} ${String(t.gio || '').replace(':', 'H')} ${String(G[0].sdt || '').slice(-4)}`.replace(/[^0-9A-Za-z ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 25);
     const url = `https://img.vietqr.io/image/${bk}-${encodeURIComponent(acc)}-compact2.png?amount=${amt}&addInfo=${encodeURIComponent(info)}&accountName=${encodeURIComponent(TTT.nm(c.ten || ''))}`;
     const paid = G.every(x => x.tt === 'tra');
     const m = Modal.open({ title: 'QR chuyển khoản · ghế ' + esc(dvSeatsTxt(G)), width: 420, body: `<div style="text-align:center"><img src="${url}" alt="QR" style="width:100%;max-width:320px;border-radius:12px;border:1px solid #e4e7ec;background:#fff" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'muted',textContent:'Không tải được mã QR (kiểm tra mạng hoặc số tài khoản)'}))">
@@ -13895,7 +13900,8 @@ addCSS(`.dvp-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:
     try {
       const m = [...document.querySelectorAll('.modal-wrap')].pop(); if (!m) return r;
       if (!b) DVP.attach({ el: m, _trip: trip }, trip, [seat]);
-      else if (!b.huy) { const G = arguments[3] ? [b] : dvGrp(b), ft = m.querySelector('.modal-f'); if (ft && !ft.querySelector('[data-dvqr]')) { ft.insertAdjacentHTML('afterbegin', `<button type="button" class="btn left" data-dvqr>${ic('wallet')} QR chuyển khoản</button>`); ft.querySelector('[data-dvqr]').onclick = () => DVP.qr(G); } }
+      else if (!b.huy) { const G = arguments[3] ? [b] : dvGrp(b), ft = m.querySelector('.modal-f'); if (ft && !ft.querySelector('[data-dvqr]')) { ft.insertAdjacentHTML('afterbegin', `<button type="button" class="btn left" data-dvqr>${ic('wallet')} QR chuyển khoản</button>`); ft.querySelector('[data-dvqr]').onclick = () => { const v = n => { const i = m.querySelector(`[name="${n}"]`); return i && String(i.value).trim() !== '' ? F.parse(i.value) : null; }, gia = v('gia');   // số tiền theo form đang sửa (đổi chặng / giá chưa bấm Lưu vẫn đúng)
+          DVP.qr(G, gia == null ? null : G.length * (gia + (v('phuThu') || 0) - (v('coc') || 0))); }; } }
     } catch (e) { console.warn('DVP', e); }
     return r;
   };
@@ -14067,7 +14073,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T13:55';
+const APP_BUILD = '2026-11-12T14:15';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
