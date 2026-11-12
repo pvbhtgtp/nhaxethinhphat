@@ -15,6 +15,9 @@ const HC = {
   LUG: ['vali', 'vali', 'thung', 'bao', 'none', 'vali2'],
   SAY_D: ['Mời anh chị lên xe!', 'Để em xếp hành lý cho', 'Xe chạy đúng giờ nha!', 'Cẩn thận bậc lên xuống', 'Có ghế đẹp cho mình rồi', 'Hành lý để cốp an toàn nhé'],
   SAY_P: ['Cảm ơn tài xế!', 'Đi Vũng Tàu thôi!', 'Kịp giờ rồi', 'Xe sạch quá', 'Nhớ đón đúng chỗ nha', 'Lên đường nào!'],
+  CALL: { ok: [['📞 Alo, xe sắp tới điểm đón rồi nha!', 'Dạ, em đang đợi!'], ['📞 Anh/chị ra điểm đón giúp em nhé', 'Ok, ra liền!'], ['📞 Còn khoảng 10 phút xe tới', 'Cảm ơn tài xế!']],
+    nr: [['📞 Alo… alo…', '📵 Khách không nghe máy'], ['📞 Tút… tút…', '📵 Chưa liên lạc được']], hl: [['📞 Alo, xe sắp tới rồi ạ', '⏰ Khách hẹn gọi lại sau'], ['📞 Anh/chị ra điểm đón chưa?', '⏰ Chờ chút, gọi lại sau nha']],
+    tb: [['📞 Alo…', '⚠ Thuê bao / sai số'], ['📞 Gọi mãi không được', '⚠ Số không liên lạc được']] },
   GO: ['Xuất bến!', 'Lên đường an toàn!', 'Bíp bíp!', 'Chúc quý khách thượng lộ bình an'],
   on() { try { return !!(THM.get() || {}).anim && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } },
   /* vẽ 1 người; trả về nhóm SVG + thông tin để di chuyển */
@@ -46,7 +49,7 @@ const HC = {
     return new Promise(done => {
       const R = HC.R, tod = R(['day', 'day', 'sunset', 'night', 'dawn']), rain = Math.random() < .25, bgk = R(HC.BG), col = R(HC.BUS), np = 1 + Math.floor(Math.random() * 3);
       const P = Array.from({ length: np }, () => ({ k: R(HC.KIND), s: R(HC.SHIRT), l: R(HC.LUG) })), sky = HC.SKY[tod], dk = tod === 'night';
-      const sayD = R(HC.SAY_D), sayP = R(HC.SAY_P), go = R(HC.GO), dog = Math.random() < .2, birds = !dk && Math.random() < .35, honk = Math.random() < .5;
+      const call = o.mode === 'call', cl = call ? R(HC.CALL[o.kq] || HC.CALL.ok) : null, sayD = call ? cl[0] : R(HC.SAY_D), sayP = call ? cl[1] : R(HC.SAY_P), go = R(HC.GO), dog = Math.random() < .2, birds = !dk && Math.random() < .35, honk = Math.random() < .5;
       const box = document.createElement('div'); box.className = 'hc-box'; box.dataset.runtime = '1';
       box.innerHTML = `<button type="button" class="hc-x" aria-label="Đóng">×</button>${o.cap ? `<div class="hc-cap">${esc(o.cap)}</div>` : ''}
         <svg viewBox="0 0 340 130" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="hcS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient></defs>
@@ -69,7 +72,7 @@ const HC = {
       document.body.appendChild(box);
       const q = s => box.querySelector(s), qa = s => [...box.querySelectorAll(s)], bus = q('.hc-bus'), door = q('.hc-door'), hatch = q('.hc-hatch'), hole = q('.hc-hole'), drv = q('.hc-drv'), say = q('.hc-say'), sayT = say.querySelector('text'), dust = q('.hc-dust');
       const PX = qa('.hc-px'), dogEl = q('.hc-dog'), birdEl = q('.hc-bird'), rainL = qa('.hc-rain line'), dash = q('.hc-dash'), wheels = qa('.hc-w');
-      const STOP = 70, BX = t => t < 1.6 ? -160 + (STOP + 160) * (1 - Math.pow(1 - t / 1.6, 2)) : t < 8.2 ? STOP : STOP + Math.pow((t - 8.2) / 1.8, 2) * 300;
+      const STOP = 70, BX = t => call ? -160 + t * 20 : t < 1.6 ? -160 + (STOP + 160) * (1 - Math.pow(1 - t / 1.6, 2)) : t < 8.2 ? STOP : STOP + Math.pow((t - 8.2) / 1.8, 2) * 300;
       const walk = (g, x, y, mv, face = 1) => { g.setAttribute('transform', `translate(${x},${y}) scale(${face},1)`); const a = mv ? Math.sin(performance.now() / 70) * 3 : 0; const l1 = g.querySelector('.hc-l1'), l2 = g.querySelector('.hc-l2'); if (l1) { l1.setAttribute('x2', -3 + a); l2.setAttribute('x2', 3 - a); } };
       const talk = (txt, x, y) => { if (!txt) { say.setAttribute('opacity', 0); return; } if (sayT.textContent !== txt) { sayT.textContent = txt; const w = Math.min(200, txt.length * 4.1 + 10); say.querySelector('rect').setAttribute('width', w); } say.setAttribute('opacity', 1); say.setAttribute('transform', `translate(${Math.max(4, Math.min(336 - txt.length * 4.1 - 10, x))},${y})`); };
       const home = P.map((_, i) => 246 - i * 15), t0 = performance.now(); let stop = false;
@@ -77,8 +80,15 @@ const HC = {
       q('.hc-x').onclick = end;
       const frame = () => {
         if (stop) return; const t = (performance.now() - t0) / 1000; if (t > 10.2) return end();
-        const bx = BX(t), moving = t < 1.6 || t > 8.2; bus.setAttribute('transform', `translate(${bx},108)`);
+        const bx = BX(t), moving = call || t < 1.6 || t > 8.2; bus.setAttribute('transform', `translate(${bx},108)`);
         wheels.forEach(w => w.setAttribute('transform', `rotate(${(bx * 6) % 360})`)); dash.setAttribute('transform', `translate(${moving ? -((performance.now() / 8) % 32) : 0},0)`);
+        if (call) {   // gọi khách: xe đang trên đường tới điểm đón, tài xế gọi, khách ở điểm đón trả lời
+          drv.setAttribute('opacity', 0); PX.forEach((g, i) => { g.setAttribute('opacity', 1); walk(g.firstElementChild, home[i], 108, false, -1); const lg = g.querySelector('.hc-lg'); if (lg) lg.setAttribute('transform', `translate(${home[i] + 7},108)`); });
+          if (dogEl) dogEl.setAttribute('transform', `translate(${300 - t * 4},108)`); if (birdEl) birdEl.setAttribute('transform', `translate(${(t * 28) % 380 - 30},${22 + Math.sin(t * 2) * 4})`);
+          rainL.forEach((l, k) => { const y = (k * 37 + t * 220) % 140 - 10, x = (k * 53 + t * 30) % 340; l.setAttribute('x1', x); l.setAttribute('y1', y); l.setAttribute('x2', x - 2); l.setAttribute('y2', y + 6); });
+          if (t > .6 && t < 4.6) talk(sayD, Math.max(4, bx + 60), 46); else if (t > 5 && t < 9.6) talk(sayP, home[0] - 110, 62); else talk(''); dust.setAttribute('opacity', 0);
+          requestAnimationFrame(frame); return;
+        }
         const dOpen = t < 1.8 ? 0 : t < 2.3 ? HC.seg(t, 1.8, 2.3) : t < 7.6 ? 1 : 1 - HC.seg(t, 7.6, 8.1); door.setAttribute('width', 14 - 11 * dOpen);
         const hOpen = t < 3 ? 0 : t < 3.5 ? HC.seg(t, 3, 3.5) : t < 5.8 ? 1 : 1 - HC.seg(t, 5.8, 6.3); hatch.setAttribute('transform', `translate(0,${-12 * hOpen}) scale(1,${1 - .6 * hOpen})`); hole.setAttribute('opacity', .8 * hOpen);
         // tài xế: bước xuống cửa → ra cốp → quay lại cửa
@@ -107,9 +117,14 @@ const HC = {
   check() {
     try {
       if (!HC.on() || App.cur !== 'lichchay' || typeof dvCur !== 'function') return; const t = dvCur(); if (!t) return;
-      const L = dvBook(t.id).filter(b => b.len), now = new Set(L.map(b => b.id)), prev = HC.seen.get(t.id); HC.seen.set(t.id, now);
-      if (!prev) return; const nw = L.filter(b => !prev.has(b.id)); if (!nw.length) return;
-      HC.play({ cap: `${t.gio} ${t.tuyen} · ${nw.length > 1 ? nw.length + ' khách' : 'Ghế ' + (nw[0].ghe || '') + (nw[0].ten && nw[0].ten !== 'KHÁCH LẺ' ? ' · ' + nw[0].ten : '')} đã lên xe` });
+      const B = dvBook(t.id), snap = new Map(B.map(b => [b.id, { len: !!b.len, xn: !!b.xn, g: (b.goi || []).length }])), prev = HC.seen.get(t.id); HC.seen.set(t.id, snap);
+      if (!prev) return; const nm = b => 'Ghế ' + (b.ghe || '') + (b.ten && b.ten !== 'KHÁCH LẺ' ? ' · ' + b.ten : ''), was = id => prev.get(id) || { len: false, xn: false, g: 0 };
+      const up = B.filter(b => b.len && !was(b.id).len);
+      if (up.length) return HC.play({ cap: `${t.gio} ${t.tuyen} · ${up.length > 1 ? up.length + ' khách' : nm(up[0])} đã lên xe` });
+      const cg = B.filter(b => (b.goi || []).length > was(b.id).g);   // tài xế / nhân viên vừa ghi kết quả gọi khách
+      if (cg.length) { const b = cg[0], k = b.goi[b.goi.length - 1], o = typeof callKQ === 'function' ? callKQ(k.kq) : { t: 'Gọi khách' }; return HC.play({ mode: 'call', kq: k.kq, cap: `${t.gio} · ${nm(b)} · ${(k.vai || '')} ${o.t}`.replace(/\s+/g, ' ') }); }
+      const xn = B.filter(b => b.xn && !was(b.id).xn);
+      if (xn.length) HC.play({ mode: 'call', kq: 'ok', cap: `${t.gio} · ${xn.length > 1 ? xn.length + ' vé' : nm(xn[0])} đã xác nhận` });
     } catch (e) { console.warn('HC.check', e); }
   }
 };
