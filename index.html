@@ -10238,8 +10238,8 @@ const LCR = {
   },
   async open() {
     if (!PERM.admin()) return toast('Chỉ Admin dùng được', 'err');
-    const td = D.today(), m = Modal.open({ title: 'Khôi phục dữ liệu bị thiếu', width: 600, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: `<button class="btn" data-cl>Dọn chuyến trùng${LCR.dups().length ? ' (' + LCR.dups().length + ')' : ''}</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>` });
-    const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close(); q('[data-cl]').onclick = () => { m.close(); LCR.clean(); };
+    const td = D.today(), m = Modal.open({ title: 'Khôi phục dữ liệu bị thiếu', width: 600, body: `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><div class="field"><label>Từ ngày</label><input type="date" class="inp" data-f value="${D.add(td, -10)}"></div><div class="field"><label>Đến ngày</label><input type="date" class="inp" data-t value="${D.add(td, 30)}"></div><button class="btn pri" data-go>Tìm</button></div><div data-out class="small" style="margin-top:10px">Bấm Tìm để rà mọi nguồn còn lưu.</div>`, foot: `<button class="btn" data-cl>Dọn / gộp chuyến trùng${LCR.dups().length + LCR.merges().length ? ' (' + (LCR.dups().length + LCR.merges().length) + ')' : ''}</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-ok disabled>Khôi phục</button>` });
+    const q = x => m.el.querySelector(x); let R = null; q('[data-no]').onclick = () => m.close(); q('[data-cl]').onclick = async () => { m.close(); if (LCR.dups().length) await LCR.clean(); if (LCR.merges().length) await LCR.merge(); else if (!LCR.dups().length) toast('Không có chuyến trùng giờ nào', 'ok', 3000); };
     q('[data-go]').onclick = async () => {
       q('[data-out]').innerHTML = 'Đang rà…'; q('[data-go]').disabled = true;
       try { R = await LCR.collect(q('[data-f]').value, q('[data-t]').value, t => { q('[data-out]').textContent = t; }); } catch (e) { q('[data-out]').innerHTML = '<span class="sc-bad">' + esc(e.message || e) + '</span>'; return; } finally { q('[data-go]').disabled = false; }
@@ -10264,6 +10264,33 @@ LCR.clean = async function () {
   const rm = LCR.dups(); if (!rm.length) return toast('Không có chuyến trùng giờ nào cần dọn', 'ok', 3000);
   if (!await Modal.confirm(`Bỏ <b>${rm.length}</b> chuyến trùng giờ (bản trống: không lái xe, không xe, không vé, không hàng; luôn giữ lại bản đã gán)?`, { ok: 'Dọn', danger: true })) return;
   const S = new Set(rm); try { PS.okUntil = Date.now() + 120000; } catch (e) { } DB.lichchay = DB.lichchay.filter(l => !S.has(l)); App.changed(); toast(ic('check') + ' Đã dọn ' + rm.length + ' chuyến trùng', 'ok', 3000);
+};
+/* Gộp chuyến trùng giờ (cùng ngày, tuyến, giờ): Điều hành sửa một bản, Đặt vé bán vé ở bản kia → 2 màn không khớp nhau.
+   Giữ 1 bản (ưu tiên bản đã gán lái xe/xe, nhiều vé), chuyển vé + phiếu gửi hàng của bản kia sang, điền lái xe/xe còn thiếu, rồi bỏ bản thừa.
+   Bỏ qua (không gộp) nếu 2 bản trùng ghế đã bán, hoặc bản thừa đã có lệnh vận chuyển. */
+LCR.merges = function () {
+  const by = {}, out = []; (DB.lichchay || []).forEach(l => { if (!l || l.huy || !l.ngay) return; const k = l.ngay + '|' + l.tuyen + '|' + l.gio; (by[k] = by[k] || []).push(l); });
+  const lenh = id => { try { return (typeof LVC !== 'undefined' ? LVC.all() : []).some(o => o.chuyen === id || o.chuyenVe === id); } catch (e) { return false; } };
+  Object.values(by).forEach(L => {
+    if (L.length < 2) return; const nv = l => dvBook(l.id).length, score = l => (l.laiXe || l.xeId ? 1000 : 0) + nv(l) * 10 + (lenh(l.id) ? 5000 : 0);
+    const keep = L.slice().sort((a, b) => score(b) - score(a))[0], seats = new Set(dvBook(keep.id).map(b => String(b.ghe)));
+    L.forEach(l => { if (l === keep) return; const V = dvBook(l.id), clash = V.some(b => seats.has(String(b.ghe))); if (clash || lenh(l.id) || (l.laiXe && keep.laiXe && l.laiXe !== keep.laiXe) || (l.xeId && keep.xeId && l.xeId !== keep.xeId)) return; V.forEach(b => seats.add(String(b.ghe))); out.push({ keep, drop: l, ve: V.length }); });
+  });
+  return out;
+};
+LCR.merge = async function () {
+  const M = LCR.merges(); if (!M.length) return toast('Không có chuyến trùng giờ nào cần gộp', 'ok', 3000);
+  const nv = M.reduce((a, x) => a + x.ve, 0);
+  if (!await Modal.confirm(`Gộp <b>${M.length}</b> chuyến trùng giờ vào chuyến chính cùng giờ${nv ? ` (chuyển <b>${nv}</b> vé sang)` : ''}? Lái xe, xe, vé, hàng gửi đều giữ lại; chỉ bỏ bản thừa.`, { ok: 'Gộp' })) return;
+  const at = dvLog.now(), who = dvLog.who(); let n = 0;
+  M.forEach(({ keep, drop }) => {
+    ['laiXe', 'laiXe2', 'phuXe', 'xeId'].forEach(k => { if (!keep[k] && drop[k]) keep[k] = drop[k]; });
+    (DB.datve || []).forEach(b => { if (b.chuyen === drop.id) { b.chuyen = keep.id; (b.lichSu = b.lichSu || []).push({ tg: at, nguoi: who, nd: 'Gộp chuyến trùng giờ ' + keep.gio }); } });
+    (DB.guihang || []).forEach(g => { if (g.chuyen === drop.id) g.chuyen = keep.id; });
+    const i = DB.lichchay.indexOf(drop); if (i >= 0) { DB.lichchay.splice(i, 1); n++; }
+  });
+  try { PS.okUntil = Date.now() + 120000; } catch (e) { }
+  App.changed(); toast(ic('check') + ' Đã gộp ' + n + ' chuyến trùng giờ', 'ok', 4000);
 };
 ACT.lcRestore = () => LCR.open();
 /* Lịch chạy theo chuyến: nếu Rules chưa cho phép (Admin chưa Publish luật mới) thì tạm chạy như cũ, cứ 2 phút thử lại; được là tự chuyển */
@@ -14020,7 +14047,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T11:45';
+const APP_BUILD = '2026-11-12T12:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
