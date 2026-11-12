@@ -26,7 +26,7 @@ const CT = {
     App.render();
   },
   /* vé đoàn (cùng nhóm): bấm 1 lần cho cả đoàn, gửi 1 lần */
-  actAll(L, o) { if (L.length < 2) return CT.act(L[0], o); const A = {}; L.forEach(p => { A[p.id] = CT.act(p, o, true); }); FB.col().doc('tx_' + CT.me()).set({ acts: A }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng', 'err')); App.render(); },
+  actAll(L, o) { if (L.length < 2) return CT.act(L[0], o); const A = {}; L.forEach(p => { const a = CT.act(p, o, true); if (a) A[p.id] = a; }); if (Object.keys(A).length) FB.col().doc('tx_' + CT.me()).set({ acts: A }, { merge: true }).catch(() => toast('Chưa gửi được, kiểm tra mạng', 'err')); App.render(); },   // máy có đủ dữ liệu: act đã ghi thẳng vào vé, không cần gửi tờ
   grp: (t, p) => p && p.nhom ? t.pax.filter(x => x.nhom === p.nhom) : [p],
   eta(t, name) { const n = LT.nm(name); if (!n) return ''; let i = t.lt.findIndex(x => LT.nm(x.ten) === n); if (i < 0) i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a)); }); return i < 0 ? '' : LT.time(t, t.lt[i].phut); },
   idx(t, name) { const n = LT.nm(name); const i = t.lt.findIndex(x => { const a = LT.nm(x.ten); return a === n || (a.length > 3 && n.length > 3 && (a.includes(n) || n.includes(a))); }); return i < 0 ? 999 : i; },
