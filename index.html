@@ -5900,6 +5900,13 @@ const llIsLai = e => /lái\s*xe/i.test(String(e.chucVu || ''));
 const llDrivers = all => DB.employees.filter(e => llIsLai(e) && (all || e.trangThai !== 'Nghỉ việc'));
 const llRecs = (id, loai) => (DB.lylich || []).filter(r => r.lai === id && (!loai || r.loai === loai)).sort((a, b) => String(b.ngay || '').localeCompare(String(a.ngay || '')));
 const llAddM = (s, n) => { const d = D.parse(s); d.setMonth(d.getMonth() + n); return D.iso(d); };
+/* Lý lịch cần cảnh báo hạn: chỉ bản MỚI NHẤT của từng người × từng loại, người đang làm, và được cập nhật trong 6 tháng gần đây; bản cũ hơn coi là lưu trữ, không cảnh báo */
+function llAlertRecs() {
+  const lim = D.add(D.today(), -183), M = new Map(), on = id => { const e = (DB.employees || []).find(x => x.id === id || x.ten === id); return e && e.trangThai !== 'Nghỉ việc' ? e : null; };
+  (DB.lylich || []).forEach(r => { if (!r || !r.lai || !r.loai) return; const k = r.lai + '|' + r.loai, o = M.get(k), dk = x => String(x.ngay || x.tg || '').slice(0, 10); if (!o || dk(r) > dk(o)) M.set(k, r); });
+  const up = r => [String(r.ngay || '').slice(0, 10), String(r.tg || '').slice(0, 10)].sort().pop();   // ngày cập nhật = ngày trên giấy hoặc ngày nhập, lấy ngày sau
+  return [...M.values()].filter(r => on(r.lai) && up(r) >= lim);
+}
 const llHan = r => r.hetHan || (r.loai === 'sk' && r.ngay ? llAddM(r.ngay, LL_SK_MONTHS) : '');
 const llBadge = (d, none) => { if (!d) return `<span class="badge b-red">${none || 'Chưa có'}</span>`; const [t, c] = vehExp(d); return `${F.date(d)}<br><span class="badge ${c}">${t}</span>`; };
 const llWarn = d => { if (!d) return true; const n = vehExp(d)[2]; return n !== null && n <= 30; };
@@ -7381,7 +7388,7 @@ const BOT = {
         const n = Number.isFinite(+a.so_ngay) && a.so_ngay !== undefined ? +a.so_ngay : 30, out = [], add = (loai, doiTuong, giayTo, han) => { if (!han) return; const d = D.diff(han, D.today()); if (d <= n) out.push({ loai, doiTuong, giayTo, hetHan: han, soNgayConLai: d }); };
         if (Auth.can('phuongtien', 'view')) (DB.vehicles || []).filter(v => !v.ngayNgung).forEach(v => [['hhDangKiem', 'Đăng kiểm'], ['hhBHDS', 'Bảo hiểm dân sự'], ['hhBHVC', 'Bảo hiểm vật chất'], ['hhPhuHieu', 'Phù hiệu']].forEach(([k, t]) => add('Xe', v.bks, t, v[k])));
         if (Auth.can('nhanvien', 'view')) (DB.employees || []).filter(e => e.trangThai === 'Đang làm').forEach(e => add('Nhân viên', e.ten, 'Giấy phép lái xe' + (e.bangHang ? ' hạng ' + e.bangHang : ''), e.bangHetHan));
-        if (Auth.can('lylich', 'view')) (DB.lylich || []).forEach(l => { const e = BOT.emp(l.lai); add('Lái xe', e ? e.ten : '', 'Lý lịch loại ' + l.loai, l.hetHan); });
+        if (Auth.can('lylich', 'view')) llAlertRecs().forEach(l => { const e = BOT.emp(l.lai); add('Lái xe', e ? e.ten : '', LL[l.loai] ? LL[l.loai].label : 'Lý lịch loại ' + l.loai, llHan(l)); });
         out.sort((x, y) => x.soNgayConLai - y.soNgayConLai); return { tong: out.length, danhSach: out.slice(0, 60) };
       }),
       T('km_xe', 'Tổng km đã nhập từ báo cáo Skysoft. Có thể lọc theo biển số và khoảng ngày YYYY-MM-DD; nếu không chỉ biển số thì trả tổng theo từng xe.', { bien_so: { type: 'string' }, tu_ngay: { type: 'string' }, den_ngay: { type: 'string' } }, [], a => {
@@ -7513,7 +7520,7 @@ const HUB = {
       hanItem('e' + e.id + 'gplx', 'user', e.ten, 'Giấy phép lái xe' + (e.bangHang ? ' hạng ' + e.bangHang : ''), e.bangHetHan, () => HUB.openEmp(e));
       hanItem('e' + e.id + 'hd', 'file', e.ten, 'Hợp đồng lao động', e.hdDen, () => HUB.openEmp(e));
     });
-    if (HUB.can('lylich')) (DB.lylich || []).forEach(l => { const e = DB.employees.find(x => x.id === l.lai || x.ten === l.lai); hanItem('l' + l.id, 'book', e ? e.ten : String(l.lai || 'Lái xe'), 'Lý lịch: ' + (l.loai || ''), l.hetHan, () => App.go('lylich')); });
+    if (HUB.can('lylich')) llAlertRecs().forEach(l => { const e = DB.employees.find(x => x.id === l.lai || x.ten === l.lai); hanItem('l' + l.id, 'book', e ? e.ten : String(l.lai || 'Lái xe'), (LL[l.loai] ? LL[l.loai].label : 'Lý lịch: ' + (l.loai || '')), llHan(l), () => App.go('lylich')); });
     if (HUB.can('nhienlieu') && typeof nlLedger === 'function') {
       try { const s = nlS(), ton = nlLedger().ton, ng = +s.nguong || 0;
         if (ton <= ng) add('nl:' + today, ton <= 0 ? 0 : 1, 'alert', s.tenBon || 'Bồn dầu', `Tồn ${F.num(ton)} lít, dưới mức cảnh báo ${F.num(ng)} lít. Cần nhập thêm dầu.`, today, () => App.go('nhienlieu')); } catch (err) { }
@@ -14073,7 +14080,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-12T14:40';
+const APP_BUILD = '2026-11-12T16:10';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
