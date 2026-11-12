@@ -19,7 +19,7 @@ const HC = {
     nr: [['📞 Alo… alo…', '📵 Khách không nghe máy'], ['📞 Tút… tút…', '📵 Chưa liên lạc được']], hl: [['📞 Alo, xe sắp tới rồi ạ', '⏰ Khách hẹn gọi lại sau'], ['📞 Anh/chị ra điểm đón chưa?', '⏰ Chờ chút, gọi lại sau nha']],
     tb: [['📞 Alo…', '⚠ Thuê bao / sai số'], ['📞 Gọi mãi không được', '⚠ Số không liên lạc được']] },
   GO: ['Xuất bến!', 'Lên đường an toàn!', 'Bíp bíp!', 'Chúc quý khách thượng lộ bình an'],
-  on() { try { return !!(THM.get() || {}).anim && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } },
+  on() { try { return !!(THM.get() || {}).anim; } catch (e) { return false; } },   // người dùng đã tự bật thì luôn chạy (Windows tắt 'hiệu ứng động' cũng không chặn)
   /* vẽ 1 người; trả về nhóm SVG + thông tin để di chuyển */
   person(k, shirt) {
     const sc = k === 'child' ? .72 : k === 'student' ? .88 : 1, hair = k === 'elder' ? '#d1d5db' : '#1f2937';
