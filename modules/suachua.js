@@ -92,7 +92,7 @@ function scSigns(p) {
   let h = Print.signs(['Người lập phiếu', 'Lái xe', 'Giám đốc']); const e = scCreator(p), ten = (e && e.ten) || (p.id ? p.nguoiTao : dvLog.who()) || '';
   const img = e && e.chuKy && /^(data:|https?:)/.test(e.chuKy) ? `<img class="sig-img" src="${esc(e.chuKy)}" alt="" style="display:block;max-height:64px;max-width:160px;object-fit:contain;margin:4px auto 0">` : '';
   if (img) h = h.replace('<i>(Ký, ghi rõ họ tên)</i>', '');
-  if (img || ten) h = h.replace('<div class="sp"></div>', `${img || '<div class="sp" style="height:56px"></div>'}${ten ? `<div style="margin-top:4px;font-weight:700">${esc(ten)}</div>` : ''}`);
+  if (img || ten) h = h.replace('<div class="sp"></div>', `${img || '<div class="sp" style="height:56px"></div>'}${ten ? `<div${img ? ' class="sig-nm"' : ''} style="margin-top:4px;font-weight:700">${esc(ten)}</div>` : ''}`);
   return h;
 }
 function scPrint(p) {
