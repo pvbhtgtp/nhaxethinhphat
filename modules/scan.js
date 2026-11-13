@@ -327,7 +327,7 @@ Object.assign(SCN, {
   AIR: `Đọc tài liệu trong ảnh (tiếng Việt, có chữ viết tay). Trả về JSON:
 {"loai":"Lệnh vận chuyển | Hợp đồng vận chuyển | Hóa đơn | Phiếu thu/chi | Giấy tờ xe | Giấy tờ cá nhân | Khác","tieuDe":"","soVanBan":"","ngay":"YYYY-MM-DD","tomTat":"1-2 câu",
 "truong":[{"ten":"tên mục","giaTri":"giá trị đọc được"}],
-"lenh":{"so":"","tuNgay":"YYYY-MM-DD","denNgay":"YYYY-MM-DD","laiXe1":"","hangGPLX1":"","laiXe2":"","bienSo":"","soGhe":"","tuyen":"","maTuyen":"","cuLy":"","di":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""},"ve":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""}}}
+"lenh":{"so":"số lệnh, chép đúng như in (vd 26040714/LVC-CT)","tuNgay":"YYYY-MM-DD","denNgay":"YYYY-MM-DD","laiXe1":"","hangGPLX1":"","laiXe2":"","bienSo":"","soGhe":"","tuyen":"","maTuyen":"","cuLy":"","di":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""},"ve":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""}}}
 "lenh" chỉ điền khi là Lệnh vận chuyển. Năm viết tắt (vd 26) là 2026. Không đoán: chỗ không đọc được để trống. "truong" liệt kê đủ các thông tin quan trọng đọc được.`,
   async aiRead() {
     const pg = SCN.P[SCN.cur]; if (!pg) return;
@@ -348,7 +348,9 @@ Object.assign(SCN, {
     return true;
   },
   /* quy tắc lưu: Lệnh vận chuyển → Năm / 08. Điều hành xe / Lệnh vận chuyển / Tuyến / Tháng MM-YYYY, tên = số lệnh */
-  docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return String(L.so).trim().replace(/[\\/:*?"<>|]+/g, '-'); const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
+  /* tên tệp lệnh thống nhất = phần số của số lệnh (vd "Số: 26040714/LVC-CT" → "26040714"); không có dãy số thì giữ chữ đọc được */
+  soLenh(so) { const t = String(so || '').trim(), m = t.match(/\d{4,}/); return m ? m[0] : t.replace(/^s[ốo]\s*[:.]?\s*/i, '').replace(/[\\/:*?"<>|]+/g, '-').trim(); },
+  docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return SCN.soLenh(L.so); const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
   routeOf(t) {   // tên thư mục tuyến: khớp tuyến trong app (không phân chiều), không khớp thì lấy chữ đọc được, bỏ "BX"
     const cl = String(t || '').replace(/\b(BX|B\.X|Bến xe)\.?\s*/gi, '').replace(/\s*(?:⇄|<>|->|→|–|-)\s*/g, ' - ').replace(/\s+/g, ' ').trim(); if (!cl) return 'Chưa rõ tuyến';
     const R = [...new Set([...(DB.giochay || []).map(g => g.tuyen), ...(DB.lichchay || []).slice(-3000).map(l => l.tuyen)].filter(Boolean))];
