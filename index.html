@@ -9746,19 +9746,23 @@ const SLOG = {
       else if (JSON.stringify(a) !== JSON.stringify(b)) out[k] = [0, 0, 1]; });
     return out;
   },
+  /* mỗi ngày 1 tài liệu lg_YYYYMMDD, các lần lưu nối thêm vào mảng e (đọc bằng id, không cần quyền liệt kê) */
+  day: d => 'lg_' + d.replace(/-/g, ''),
   put(o, who) {
-    if (typeof FB === 'undefined' || !FB.db) return; const t = new Date(), id = 'lg_' + t.toISOString().replace(/[-:TZ.]/g, '').slice(0, 17) + '_' + Math.random().toString(36).slice(2, 6);
-    const doc = { k: 'lg', at: t.toISOString(), who: who || (typeof dvLog !== 'undefined' ? dvLog.who() : '') || '', dev: SLOG.dev(), app: typeof APP_BUILD !== 'undefined' ? APP_BUILD : '', parts: o.parts || [], d: o.d || {}, ...(o.blocked ? { blocked: o.blocked } : {}), ...(o.force ? { force: true } : {}) };
-    FB.col().doc(id).set(doc).catch(() => { });
+    if (typeof FB === 'undefined' || !FB.db) return; const t = new Date();
+    const e = { at: t.toISOString(), who: who || (typeof dvLog !== 'undefined' ? dvLog.who() : '') || '', dev: SLOG.dev(), app: typeof APP_BUILD !== 'undefined' ? APP_BUILD : '', parts: o.parts || [], d: o.d || {}, ...(o.blocked ? { blocked: o.blocked } : {}), ...(o.force ? { force: true } : {}) };
+    FB.col().doc(SLOG.day(D.iso(t))).set({ k: 'lg', e: firebase.firestore.FieldValue.arrayUnion(e) }, { merge: true }).catch(() => { });
     SLOG.clean();
   },
-  clean() {   // Admin: mỗi ngày dọn nhật ký cũ hơn 60 ngày
+  clean() {   // Admin: mỗi ngày xóa tài liệu nhật ký của các ngày 61–75 ngày trước
     try { if (!(Auth.user && Auth.user.role === 'admin')) return; const k = 'nx.lgclean'; if (localStorage.getItem(k) === D.today()) return; localStorage.setItem(k, D.today());
-      const cut = 'lg_' + D.add(D.today(), -60).replace(/-/g, ''), FP = firebase.firestore.FieldPath.documentId();
-      FB.col().where(FP, '>=', 'lg_').where(FP, '<', cut).limit(400).get().then(sn => { if (sn.empty) return; const b = FB.db.batch(); sn.docs.forEach(d => b.delete(d.ref)); return b.commit(); }).catch(() => { });
+      for (let n = 61; n <= 75; n++) FB.col().doc(SLOG.day(D.add(D.today(), -n))).delete().catch(() => { });
     } catch (e) { }
   },
-  async load(days) { const FP = firebase.firestore.FieldPath.documentId(), from = 'lg_' + D.add(D.today(), -(days - 1)).replace(/-/g, ''); const sn = await FB.col().where(FP, '>=', from).where(FP, '<', 'lg_~').limit(1500).get(); return sn.docs.map(d => d.data()).sort((a, b) => String(b.at).localeCompare(String(a.at))); },
+  async load(days) {
+    const R = await Promise.all(Array.from({ length: days }, (_, n) => FB.col().doc(SLOG.day(D.add(D.today(), -n))).get().then(s => s.exists ? (s.data().e || []) : []).catch(() => [])));
+    return R.flat().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  },
   KN: () => (typeof LCR !== 'undefined' && LCR.KN) || {},
   txt(d) { const K = SLOG.KN(); return Object.entries(d || {}).map(([k, [a, x, m]]) => `${K[k] || k}${a ? ' <b class="lg-a">+' + a + '</b>' : ''}${x ? ' <b class="lg-x">−' + x + '</b>' : ''}${m ? ' <span class="muted">sửa ' + m + '</span>' : ''}`).join(' · '); },
   async open() {
@@ -9777,6 +9781,53 @@ const SLOG = {
   }
 };
 addCSS(`.lg-a{color:#15803d}.lg-x{color:#b91c1c}.lg-t tr.lg-big td{background:#fef2f2}`);
+
+/* ===== GĐ2 · bản ghi song song (chỉ GHI, chưa đọc) =====
+   Nhân viên, Phương tiện, Lý lịch: ngoài khối dữ liệu như cũ, mỗi bản ghi còn được ghi thành 1 tài liệu riêng trên Firebase.
+   Khối cũ vẫn là dữ liệu chính, app chưa đọc từ các tài liệu này → không thể làm mất hay sai dữ liệu đang dùng.
+   Chỉ máy Admin ghi (nhận mọi thay đổi của các máy khác qua đồng bộ). Xóa bản ghi chỉ đánh dấu del, không xóa tài liệu.
+   Tên tài liệu nằm trong nhóm quyền sẵn có: pnhansu_* (cần quyền Nhân sự), pvanhanh_* (Vận hành), pcore_* (mọi tài khoản). */
+const SHD = {
+  K: { employees: ['pnhansu_e_', 'se', 'nhansu'], vehicles: ['pcore_k_', 'sk', 'core'], lylich: ['pvanhanh_y_', 'sy', 'vanhanh'] },
+  LS: 'nx.shd', busy: false, t: null,
+  on() { try { return DB.settings.shdOff !== true && !!(FB && FB.db && Auth.user && Auth.user.role === 'admin' && GS.on && !(typeof FO !== 'undefined' && FO.on)); } catch (e) { return false; } },
+  h(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length.toString(36) + h.toString(36); },
+  mem() { if (!SHD._m) { try { SHD._m = JSON.parse(localStorage.getItem(SHD.LS) || '{}') || {}; } catch (e) { SHD._m = {}; } } return SHD._m; },
+  keep() { try { localStorage.setItem(SHD.LS, JSON.stringify(SHD.mem())); } catch (e) { } },
+  soon(ms = 4000) { clearTimeout(SHD.t); SHD.t = setTimeout(() => SHD.push(), ms); },
+  async push() {
+    if (!SHD.on() || SHD.busy) return; SHD.busy = true; let n = 0;
+    try {
+      const M = SHD.mem(), W = [], who = dvLog.who() || '';
+      Object.entries(SHD.K).forEach(([key, [pre, t]]) => {
+        const L = (DB[key] || []).filter(x => x && x.id), m = M[key] = M[key] || {}, cur = new Set();
+        L.forEach(x => { const id = String(x.id), s = JSON.stringify(x), hh = SHD.h(s); cur.add(id); if (m[id] !== hh) W.push([pre + id, { t, id, d: s, u: Date.now(), by: who }, key, id, hh]); });
+        if (L.length) Object.keys(m).forEach(id => { if (!cur.has(id) && m[id] !== 'del') W.push([pre + id, { t, id, del: true, u: Date.now(), by: who }, key, id, 'del']); });
+      });
+      for (let i = 0; i < W.length; i += 300) {
+        const b = FB.db.batch(), part = W.slice(i, i + 300); part.forEach(([doc, v]) => b.set(FB.col().doc(doc), v));
+        await b.commit(); part.forEach(([, , key, id, hh]) => { M[key][id] = hh; }); n += part.length; SHD.keep();
+      }
+      if (n) console.info('SHD: ghi', n, 'bản ghi song song');
+    } catch (e) { console.warn('SHD', e && e.code || e); try { SYS.add('Bản ghi song song', e); } catch (x) { } }
+    finally { SHD.busy = false; }
+    return n;
+  },
+  /* đối chiếu: đọc lại từng tài liệu, so với khối dữ liệu đang dùng */
+  async check() {
+    const out = {};
+    for (const [key, [pre]] of Object.entries(SHD.K)) {
+      const L = (DB[key] || []).filter(x => x && x.id); let ok = 0, miss = 0, diff = 0;
+      for (let i = 0; i < L.length; i += 40) await Promise.all(L.slice(i, i + 40).map(async x => { try { const sn = await FB.col().doc(pre + x.id).get(); if (!sn.exists || sn.data().del) miss++; else if (sn.data().d === JSON.stringify(x)) ok++; else diff++; } catch (e) { miss++; } }));
+      out[key] = { n: L.length, ok, miss, diff };
+    }
+    const r = { t: Date.now(), r: out, ok: Object.values(out).every(v => v.ok === v.n) }; try { localStorage.setItem('nx.shdck', JSON.stringify(r)); } catch (e) { } return r;
+  },
+  last() { try { return JSON.parse(localStorage.getItem('nx.shdck') || 'null'); } catch (e) { return null; } },
+  txt(r) { const K = SLOG.KN(); return Object.entries((r && r.r) || {}).map(([k, v]) => `${K[k] || k} ${v.ok}/${v.n} khớp${v.miss ? ', thiếu ' + v.miss : ''}${v.diff ? ', lệch ' + v.diff : ''}`).join(' · '); }
+};
+{ const ch0 = Store.changed; Store.changed = function () { const r = ch0.apply(this, arguments); try { if (SHD.on()) SHD.soon(8000); } catch (e) { } return r; }; }
+setTimeout(() => { try { SHD.soon(1000); } catch (e) { } setInterval(() => { try { SHD.soon(1000); } catch (e) { } }, 10 * 60000); }, 60000);
 /* ---- AI qua Apps Script (giấu khóa) ---- */
 {
   const PX = '__px', cfg0 = AIX.cfg;
@@ -14479,7 +14530,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T17:00';
+const APP_BUILD = '2026-11-13T17:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
