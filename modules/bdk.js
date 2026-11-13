@@ -124,9 +124,6 @@ const BDK = {
     el.querySelectorAll('[data-go]').forEach(x => x.onclick = e => { if (BDK.edit || e.target.closest('button')) return; App.go(x.dataset.go); });
     el.querySelectorAll('[data-lcr]').forEach(x => x.onclick = () => { if (!BDK.edit) LCR.open(); });
     el.querySelectorAll('[data-dup]').forEach(x => x.onclick = async () => { if (BDK.edit) return; if (LCR.dups().length) await LCR.clean(); if (LCR.merges().length) await LCR.merge(); });
-    el.querySelectorAll('[data-slog]').forEach(x => x.onclick = () => SLOG.open());
-    el.querySelectorAll('[data-shd]').forEach(x => x.onclick = async () => { x.disabled = true; x.textContent = 'Đang ghi và đối chiếu…'; try { await SHD.push(); const r = await SHD.check(); toast(SHD.txt(r), r.ok ? 'ok' : 'err', 7000); } catch (e) { toast('Chưa đối chiếu được: ' + esc(e.message || e), 'err'); } App.render(); });
-    el.querySelectorAll('[data-bkv]').forEach(x => x.onclick = async () => { x.disabled = true; x.textContent = 'Đang kiểm tra…'; const r = await BKV.run(true); toast(r ? r.msg : 'Chưa cài sao lưu Drive trên máy này', r && r.ok ? 'ok' : 'err', 6000); App.render(); });
     el.querySelectorAll('[data-lcdoc]').forEach(x => x.onclick = async () => {   // bật/tắt kênh gửi tức thì từng chuyến (khối Vận hành luôn giữ đủ chuyến nên tắt lúc nào cũng an toàn)
       if (BDK.edit) return; const st = S();
       if (TK.lcUse()) { st.lcDocs = false; App.changed(); return toast('Đã tắt. Lịch chạy vẫn đồng bộ như cũ qua khối dữ liệu Vận hành', 'ok', 5000); }
@@ -152,3 +149,20 @@ addCSS(`.bdk{display:flex;flex-direction:column;gap:12px}.bdk-tool{display:flex;
 .bdk.editing .bdk-c{outline:2px dashed #cbd5e1;outline-offset:-2px;cursor:grab}.bdk-c.drag{opacity:.4}.bdk-c.over{outline-color:var(--p)}
 .bdk.dark{--card:#1e293b;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:16px}.bdk.dark .bdk-c{border-color:#334155}.bdk.dark .bdk-h{border-color:#334155}.bdk.dark .bdk-k,.bdk.dark .bdk-ul li,.bdk.dark .bdk-tr{background:#273449;color:#e2e8f0}.bdk.dark .bdk-e button,.bdk.dark .bdk-tool .inp,.bdk.dark .bdk-tool .btn:not(.pri){background:#1e293b;color:#e2e8f0;border-color:#475569}`);
 MODL.def('bdk', { title: 'Bảng điều khiển', icon: 'kanban', desc: 'Bảng điều khiển của Admin: tự sắp xếp thẻ, nhiều bố cục, màu và cỡ chữ tùy chọn', render(el) { if (!PERM.admin()) { el.innerHTML = '<div class="card"><div class="empty">Chỉ Admin dùng màn hình này</div></div>'; return; } BDK.render(el); } });
+
+/* nút Hệ thống (nhật ký, đối chiếu, kiểm tra sao lưu): bắt ở cấp trang để thẻ có vẽ lại vẫn bấm được */
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
+  e.preventDefault(); e.stopPropagation();
+  if (b.hasAttribute('data-slog')) return SLOG.open();
+  if (BDK._run) return toast('Đang chạy, chờ chút…', '', 2000); BDK._run = true;
+  try {
+    if (b.hasAttribute('data-shd')) {
+      if (!SHD.on()) toast('Máy này chưa ghi bản song song (cần tài khoản Admin, đang kết nối Firebase). Vẫn đối chiếu với những gì đã ghi…', '', 5000);
+      toast('Đang ghi bản ghi song song…', '', 4000); let tp = 0; const n = await SHD.push(false, (k, all) => { if (Date.now() - tp > 1500) { tp = Date.now(); toast('Đang ghi ' + k + '/' + all + ' bản ghi…', '', 2000); } });
+      toast((n ? 'Đã ghi ' + n + ' bản ghi. ' : '') + 'Đang đối chiếu…', '', 4000); const r = await SHD.check();
+      toast(SHD.txt(r) || 'Không có dữ liệu để đối chiếu', r.ok ? 'ok' : 'err', 9000);
+    } else { toast('Đang kiểm tra bản sao lưu Drive…', '', 4000); const r = await BKV.run(true); toast(r ? r.msg : 'Máy này chưa cài sao lưu Drive (chỉ máy Admin đã cài mới kiểm tra được)', r && r.ok ? 'ok' : 'err', 8000); }
+  } catch (x) { toast('Chưa chạy được: ' + esc(x.message || x), 'err', 7000); }
+  finally { BDK._run = false; try { App.render(); } catch (x) { } }
+}, true);
