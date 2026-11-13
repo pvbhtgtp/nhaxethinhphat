@@ -4827,13 +4827,13 @@ const VDT = {
     Object.keys(o).forEach(k => { if (!o[k]) delete o[k]; }); return o;
   },
   html(x, t) {
-    const c = VDT.cfg(), co = S().company || {}, xe = lcXe(t) || {}, h = x.hd || {}, ok = VDT.has(x), ct = x.ct || {}, tot = +ct.tien || dvTot(x), vat = ct.vat !== undefined && ct.vat !== '' ? +ct.vat : +c.vat, mst = ct.mst || co.mst;
+    const c = VDT.cfg(), co = S().company || {}, xe = lcXe(t) || {}, h = x.hd || {}, ok = VDT.has(x), ct = x.ct || {}, tot = +ct.tien || dvTot(x), vat = ct.kct ? 0 : ct.vat !== undefined && ct.vat !== '' ? +ct.vat : +c.vat, tp = (c.tpl || []).find(y => y.id === ct.tpl) || {}, mst = ct.mst || tp.mst || co.mst, ten = tp.ten || co.ten, dc = tp.diaChi || co.diaChi;
     const nd = h.ngay || D.today(), [yy, mo, dd] = nd.split('-'), qr = ok && c.link ? QR.svg(c.link, 22) : '';
     const r = (k, v, cls) => `<div class="vd-r${cls ? ' ' + cls : ''}"><span>${k}:</span><b>${v || ''}</b></div>`;
     return `<div class="vd">
   <div class="vd-hd">${co.logo ? `<img src="${co.logo}" alt="">` : '<i></i>'}<div class="vd-kh">${ok ? `<div>Ký hiệu: <b>${esc(h.kh || '')}</b></div><div>Số: <b class="vd-red">${esc(h.so)}</b></div>` : '<div class="vd-chua">CHƯA PHÁT HÀNH<br>HÓA ĐƠN</div>'}</div></div>
-  <div class="vd-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div>
-  ${mst ? `<div class="vd-s">MST: ${esc(mst)}</div>` : ''}${co.diaChi ? `<div class="vd-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}
+  <div class="vd-co">${esc(String(ten || 'NHÀ XE').toUpperCase())}</div>
+  ${mst ? `<div class="vd-s">MST: ${esc(mst)}</div>` : ''}${dc ? `<div class="vd-s">Địa chỉ: ${esc(dc)}</div>` : ''}${tp.sdt ? `<div class="vd-s">Điện thoại: ${esc(tp.sdt)}</div>` : ''}
   <div class="vd-tt">VÉ XE KHÁCH</div>
   ${ok && h.cqt ? `<div class="vd-cqt">Mã CQT: ${esc(h.cqt)}</div>` : ''}
   <div class="vd-b">
@@ -4841,10 +4841,10 @@ const VDT = {
   ${r('Thời gian khởi hành', esc(t.gio || '') + ' ' + F.date(t.ngay))}${r('Điểm đón', esc(x.diemDon || ''))}${r('Điểm đến', esc(x.diemTra || ''))}
   <div class="vd-r2">${r('Số ghế', esc(x.ghe || ''))}${r('Số xe', esc(xe.bks || ''))}</div>
   ${r('Giá vé', F.money(tot) + ' đ', 'vd-gia')}${r('Bằng chữ', '<i>' + docSo(tot) + '</i>')}
-  ${vat ? `<div class="vd-vat">(Giá vé đã bao gồm thuế GTGT ${vat}%)</div>` : ''}
+  ${ct.kct ? '<div class="vd-vat">(Giá vé không chịu thuế GTGT)</div>' : vat ? `<div class="vd-vat">(Giá vé đã bao gồm thuế GTGT ${vat}%)</div>` : ''}
   </div>
   <div class="vd-ft">${qr ? `<div class="vd-qr">${qr}</div>` : ''}<div class="vd-sg"><div>Ngày ${dd} tháng ${mo} năm ${yy}</div><div class="vd-ntt">Người thu tiền</div>
-  ${ok ? `<div class="vd-sig">Hóa đơn điện tử đã ký số<br>Ký bởi: ${esc(String(co.ten || '').toUpperCase())}<br>Ký ngày: ${dd}/${mo}/${yy}</div>` : '<div class="vd-sp"></div>'}</div></div>
+  ${ok ? `<div class="vd-sig">Hóa đơn điện tử đã ký số<br>Ký bởi: ${esc(String(ten || '').toUpperCase())}<br>Ký ngày: ${dd}/${mo}/${yy}</div>` : '<div class="vd-sp"></div>'}</div></div>
   ${ok ? `<div class="vd-tc">${c.ncc ? 'Cung cấp bởi ' + esc(c.ncc) + '. ' : ''}Tra cứu tại: <b>${esc(String(c.link || '').replace(/^https?:\/\//, ''))}</b>${h.tc ? '<br>Mã tra cứu: <b>' + esc(h.tc) + '</b>' : ''}</div>` : ''}
 </div>`;
   },
@@ -4895,7 +4895,7 @@ const VDT = {
     return m;
   },
   /* mẫu chứng từ theo tuyến (giống Vexere: "180.000 | HN-VT180 | 5C26MTG; 160.000 | HN-BR160 | 5C26MTG") */
-  items(str) { return String(str || '').split(/[;\n]+/).map(p => p.split('|').map(x => x.trim())).filter(a => a.length >= 2 && a[1]).map(a => ({ gia: F.parse(a[0]) || 0, ma: a[1], kh: a[2] || '', txt: a.filter(Boolean).join(' | ') })); },
+  items(str) { return String(str || '').split(/[;\n]+/).map(p => p.split('|').map(x => x.trim())).filter(a => a.length >= 2 && a[1]).map(a => ({ gia: F.parse(a[0]) || 0, ma: a[1], kh: a[2] || '', txt: a.filter(Boolean).join(' | '), t: VDT.tplOf(a[1], a[2] || '') })); },
   mauFor(trip) {
     const c = VDT.cfg(), n = (trip && trip.ngay) || D.today(), tn = bgNorm(trip && trip.tuyen || '');
     const L = (c.mau || []).filter(r => r.on !== false && (!r.tu || r.tu <= n) && (!r.den || r.den >= n));
@@ -4913,7 +4913,7 @@ const VDT = {
       <div class="dv-ct-g"><label>Mẫu hóa đơn<select class="inp" data-ct="mau"><option value="">${M.length ? '— Chọn mẫu —' : '(Chưa cài mẫu cho tuyến này)'}</option>${opt(M.map(x => ({ v: x.txt, l: x.txt })), ct.mau || '')}</select></label>
       <label>MST bên bán<select class="inp" data-ct="mst">${opt(ms2.map(x => ({ v: x, l: x })), ct.mst || ms2[0])}</select></label>
       <label>Ký hiệu<select class="inp" data-ct="kh"><option value=""></option>${opt(khs.map(x => ({ v: x, l: x })), ct.kh || khs[0] || '')}</select></label>
-      <label>Thuế suất (%)<input class="inp" data-ct="vat" value="${esc(ct.vat !== undefined && ct.vat !== '' ? ct.vat : c.vat)}"></label>
+      <label>Thuế suất (%)<input class="inp" data-ct="vat" value="${esc(ct.kct ? 'KCT' : ct.vat !== undefined && ct.vat !== '' ? ct.vat : c.vat)}" title="Gõ KCT nếu không chịu thuế"></label>
       <label>Tiền VĐT<input class="inp" data-ct="tien" inputmode="numeric" value="${ct.tien ? F.money(ct.tien) : ''}"></label>
       <label>Tổng tiền VĐT<input class="inp" data-ct="tong" readonly tabindex="-1"></label>
       <label class="full">Ghi chú cho kế toán<textarea class="inp" rows="2" data-ct="gc">${esc(ct.gc || '')}</textarea></label></div>`;
@@ -4921,41 +4921,76 @@ const VDT = {
     const formTot = () => (F.parse(g && g.value) || 0) + (F.parse(pt && pt.value) || 0);
     let manM = !!ct.mau, manT = !!ct.tien;
     const tong = () => { q('tong').value = F.money(F.parse(q('tien').value) || formTot()); };
-    const pick = () => { if (manM || !M.length) return; const t = formTot(), x = M.find(i => i.gia === t); q('mau').value = x ? x.txt : ''; apply(); };
-    const apply = () => { const x = M.find(i => i.txt === q('mau').value); if (!x) return tong(); if (x.kh) q('kh').value = x.kh; if (!manT && x.gia) q('tien').value = F.money(x.gia); tong(); };
+    const pick = () => { if (manM || !M.length) return; const t = formTot(), x = M.find(i => i.gia === t) || M.find(i => i.t && i.t.giaKieu === 'thu'); q('mau').value = x ? x.txt : ''; apply(); };
+    const setSel = (s, v) => { if (!v) return; if (![...s.options].some(o => o.value === v)) s.insertAdjacentHTML('beforeend', `<option>${esc(v)}</option>`); s.value = v; };
+    const apply = () => { const x = M.find(i => i.txt === q('mau').value); if (!x) return tong(); const tp = x.t;
+      setSel(q('kh'), x.kh); if (tp) { setSel(q('mst'), tp.mst); q('vat').value = tp.kct ? 'KCT' : (tp.vat ?? c.vat); }
+      if (!manT) { const gia = tp && tp.giaKieu === 'thu' ? 0 : x.gia; q('tien').value = gia ? F.money(gia) : ''; } tong(); };
     q('mau').onchange = () => { manM = true; apply(); };
     q('tien').oninput = () => { manT = !!q('tien').value; tong(); }; q('tien').onblur = () => { const v = F.parse(q('tien').value); q('tien').value = v ? F.money(v) : ''; };
     [g, pt].forEach(i => i && i.addEventListener('input', () => { pick(); tong(); }));
     const show = () => { w.hidden = !xc.checked; }; xc.addEventListener('change', () => { show(); if (xc.checked) { pick(); tong(); } }); show(); if (!ct.mau) pick(); tong();
     const cs = w.querySelector('[data-ctset]'); if (cs) cs.onclick = () => VDT.setup();
     el._ct = () => { const o = { loai: (w.querySelector('[name="_ctLoai"]:checked') || {}).value || 've' }; ['mau', 'mst', 'kh', 'gc'].forEach(k => { const v = String(q(k).value || '').trim(); if (v) o[k] = v; });
-      const v = String(q('vat').value).trim(); if (v !== '') o.vat = +v.replace(',', '.') || 0; o.tien = F.parse(q('tien').value) || formTot(); return o; };
+      const v = String(q('vat').value).trim(); if (/^kct$/i.test(v)) { o.kct = true; o.vat = 0; } else if (v !== '') o.vat = +v.replace(',', '.') || 0; const x = M.find(i => i.txt === o.mau); if (x && x.t && x.t.id) o.tpl = x.t.id; o.tien = F.parse(q('tien').value) || formTot(); return o; };
   },
-  setup() {
-    const c = VDT.cfg(), R = bgRoutes(); let L = (c.mau || []).map(x => ({ ...x }));
+  /* Cài đặt mẫu thông tin chứng từ (giống Vexere): tab 1 mẫu thông tin (MST, chi nhánh, ký hiệu, tên gợi nhớ, giá, VAT); tab 2 gán mẫu cho tuyến */
+  TF: [['mst', 'Mã số thuế'], ['ten', 'Tên chi nhánh'], ['diaChi', 'Địa chỉ'], ['sdt', 'Số điện thoại'], ['stk', 'Số tài khoản'], ['nh', 'Ngân hàng'], ['email', 'Email'], ['tuyen', 'Tuyến đường'], ['di', 'Nơi đi (Bến đi)'], ['den', 'Nơi đến (Bến đến)']],
+  setup(tab) {
+    const c = VDT.cfg(), R = bgRoutes(), co = S().company || {}; let L = (c.mau || []).map(x => ({ ...x })), T = (c.tpl || []).map(x => ({ ...x })), cur = null, qs = '';
     const row = (r, i) => `<div class="vds-r" data-i="${i}"><select class="inp" data-f="tuyen"><option value="">(Mọi tuyến)</option>${[...new Set([...R, r.tuyen].filter(Boolean))].map(t => `<option${t === r.tuyen ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-      <input class="inp" data-f="list" value="${esc(r.list || '')}" placeholder="180.000 | HN-VT180 | 5C26MTG; 160.000 | HN-BR160 | 5C26MTG">
+      <div class="vds-li"><input class="inp" data-f="list" value="${esc(r.list || '')}" placeholder="180.000 | HN-VT180 | 5C26MTG; 160.000 | HN-BR160 | 5C26MTG">${T.length ? `<select class="inp" data-addt title="Thêm mẫu từ danh sách mẫu thông tin"><option value="">+ mẫu</option>${T.map((t, j) => `<option value="${j}">${esc(VDT.itxt(t))}</option>`).join('')}</select>` : ''}</div>
       <input class="inp" type="date" data-f="tu" value="${esc(r.tu || '')}" title="Ngày bắt đầu"><input class="inp" type="date" data-f="den" value="${esc(r.den || '')}" title="Ngày kết thúc">
       <select class="inp" data-f="on"><option value="1">Áp dụng</option><option value="0"${r.on === false ? ' selected' : ''}>Không áp dụng</option></select><button type="button" class="ibtn" data-rm title="Xóa">${ic('trash')}</button></div>`;
-    const m = Modal.open({ title: 'Cài đặt mẫu thông tin chứng từ', width: 980, body: `
-      <div class="vd-g"><label>MST bên bán (nhiều số cách nhau dấu phẩy)<input class="inp" data-c="mst" value="${esc(c.mst || (S().company || {}).mst || '')}"></label><label>Thuế suất mặc định (%)<input class="inp" data-c="vat" value="${esc(c.vat)}"></label><label>Nhà cung cấp hóa đơn<input class="inp" data-c="ncc" value="${esc(c.ncc)}"></label><label>Trang tra cứu<input class="inp" data-c="link" value="${esc(c.link)}"></label></div>
-      <div class="vds-h"><b>Danh sách tuyến · mẫu vé</b><span class="muted small">Mỗi mẫu: Giá | Mã mẫu | Ký hiệu, nhiều mẫu cách nhau dấu chấm phẩy</span></div>
-      <div class="vds-hd"><span>Tuyến đường</span><span>Mẫu vé</span><span>Ngày bắt đầu</span><span>Ngày kết thúc</span><span>Trạng thái</span><span></span></div><div class="vds-l"></div>
-      <button type="button" class="btn sm" data-add>${ic('plus')} Thêm mới</button>`,
-      foot: '<button class="btn" data-cancel>Đóng</button><button class="btn pri" data-ok>Lưu</button>' });
-    const el = m.el, box = el.querySelector('.vds-l');
+    const blank = () => ({ loai: 've', mst: co.mst || '', ten: String(co.ten || '').toUpperCase(), diaChi: co.diaChi || '', sdt: co.sdt || '', stk: co.stkDN || '', nh: co.nganHangDN || '', email: '', tuyen: '', di: '', den: '', kh: '', ma: '', giaKieu: 'ny', gia: 0, vat: c.vat, kct: false, tenKH: '', dcKH: '' });
+    const fi = (k, l, v, x = '') => `<label>${l}<input class="inp" data-t="${k}" value="${esc(v ?? '')}"${x}></label>`;
+    const m = Modal.open({ title: 'Cài đặt mẫu thông tin chứng từ', width: 1100, body: `
+      <div class="vds-tabs"><button type="button" data-tab="1">Cài đặt mẫu chứng từ</button><button type="button" data-tab="2">Gán mẫu chứng từ</button><button type="button" data-tab="3">Cài đặt nâng cao</button></div>
+      <div data-pane="1"><div class="vds-f"></div>
+        <div class="vds-btns"><button type="button" class="btn sm" data-tn>${ic('plus')} Thêm mới</button><button type="button" class="btn sm" data-tc>Sao chép</button><button type="button" class="btn sm pri" data-ts>Lưu</button><button type="button" class="btn sm danger" data-td>Xóa</button><button type="button" class="btn sm" data-tx>Clear</button></div>
+        <div class="vds-h"><b>DANH SÁCH MẪU THÔNG TIN</b><input class="inp" data-tq placeholder="Nhập MST, ký hiệu, giá,..." style="max-width:280px;margin-left:auto"></div><div class="vds-tw"></div></div>
+      <div data-pane="2" hidden><div class="vds-h"><b>DANH SÁCH TUYẾN · MẪU VÉ</b><span class="muted small">Mỗi mẫu: Giá | Tên gợi nhớ | Ký hiệu, nhiều mẫu cách nhau dấu chấm phẩy</span></div>
+        <div class="vds-hd"><span>Tuyến đường</span><span>Mẫu vé</span><span>Ngày bắt đầu</span><span>Ngày kết thúc</span><span>Trạng thái</span><span></span></div><div class="vds-l"></div>
+        <button type="button" class="btn sm" data-add>${ic('plus')} Thêm mới</button></div>
+      <div data-pane="3" hidden><div class="vd-g"><label>MST bên bán (nhiều số cách nhau dấu phẩy)<input class="inp" data-c="mst" value="${esc(c.mst || co.mst || '')}"></label><label>Thuế suất mặc định (%)<input class="inp" data-c="vat" value="${esc(c.vat)}"></label><label>Nhà cung cấp hóa đơn<input class="inp" data-c="ncc" value="${esc(c.ncc)}"></label><label>Trang tra cứu<input class="inp" data-c="link" value="${esc(c.link)}"></label></div></div>`,
+      foot: '<button class="btn" data-cancel>Đóng</button><button class="btn pri" data-ok>Lưu tất cả</button>' });
+    const el = m.el, $ = s => el.querySelector(s), box = $('.vds-l'), fbox = $('.vds-f'), tw = $('.vds-tw');
+    const form = t => { fbox.innerHTML = `<div class="vds-lo"><span>Cài đặt thông tin cho</span>${[['ve', 'Vé điện tử'], ['hd', 'Hóa đơn điện tử'], ['lenh', 'Lệnh vận chuyển điện tử']].map(([v, l]) => `<label><input type="radio" name="_tl" value="${v}"${(t.loai || 've') === v ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+      <b class="vds-st">Thông tin chung</b><div class="vds-g">${VDT.TF.map(([k, l]) => fi(k, l, t[k], k === 'tuyen' ? ' list="vdsR"' : '')).join('')}</div><datalist id="vdsR">${R.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+      <b class="vds-st">Thông tin vé điện tử</b><div class="vds-g">${fi('kh', 'Ký hiệu', t.kh)}${fi('ma', 'Tên gợi nhớ', t.ma)}
+      <label>Giá <span class="vds-rd"><label><input type="radio" name="_tg" value="ny"${t.giaKieu !== 'thu' ? ' checked' : ''}> Giá niêm yết</label><label title="Lấy đúng số tiền thu của vé"><input type="radio" name="_tg" value="thu"${t.giaKieu === 'thu' ? ' checked' : ''}> Số tiền thu</label></span><input class="inp" data-t="gia" value="${t.gia ? F.money(t.gia) : ''}" inputmode="numeric"></label>
+      <label>VAT <span class="vds-rd"><label><input type="checkbox" data-t="kct"${t.kct ? ' checked' : ''}> Không chịu thuế</label></span><input class="inp" data-t="vat" value="${esc(t.vat ?? '')}" placeholder="%"></label>
+      ${fi('tenKH', 'Tên khách hàng', t.tenKH)}${fi('dcKH', 'Địa chỉ khách hàng', t.dcKH)}</div>`; };
+    const readF = () => { const o = { loai: (fbox.querySelector('[name="_tl"]:checked') || {}).value || 've', giaKieu: (fbox.querySelector('[name="_tg"]:checked') || {}).value || 'ny' };
+      fbox.querySelectorAll('[data-t]').forEach(i => { const k = i.dataset.t; o[k] = k === 'kct' ? i.checked : k === 'gia' ? (F.parse(i.value) || 0) : k === 'vat' ? (i.value === '' ? '' : +String(i.value).replace(',', '.') || 0) : String(i.value || '').trim(); }); return o; };
+    const tbl = () => { const k = bgNorm(qs), V = T.map((t, i) => [t, i]).filter(([t]) => !k || bgNorm([t.mst, t.ten, t.kh, t.ma, F.money(t.gia), t.tuyen].join(' ')).includes(k));
+      tw.innerHTML = `<div class="tbl-wrap"><table class="tbl compact vds-t"><thead><tr><th>Mã số thuế</th><th>Tên chi nhánh</th><th>Loại</th><th>Ký hiệu</th><th>Tên gợi nhớ</th><th class="r">Giá</th><th class="r">VAT(%)</th><th>Tuyến</th></tr></thead><tbody>${V.map(([t, i]) => `<tr data-ti="${i}" class="${cur === i ? 'on' : ''}"><td>${esc(t.mst)}</td><td>${esc(t.ten)}</td><td>${{ ve: 'Vé', hd: 'Hóa đơn', lenh: 'Lệnh' }[t.loai] || 'Vé'}</td><td>${esc(t.kh)}</td><td>${esc(t.ma)}</td><td class="r">${t.giaKieu === 'thu' ? 'Số tiền thu' : F.money(t.gia)}</td><td class="r">${t.kct ? 'KCT' : esc(t.vat) + '%'}</td><td>${esc(t.tuyen)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:12px">Chưa có mẫu thông tin</td></tr>'}</tbody></table></div>`; };
     const read = () => { L = [...box.querySelectorAll('.vds-r')].map(d => { const v = k => String(d.querySelector(`[data-f="${k}"]`).value || '').trim(); const o = { id: (L[+d.dataset.i] || {}).id || uid(), tuyen: v('tuyen'), list: v('list'), tu: v('tu'), den: v('den') }; if (v('on') === '0') o.on = false; return o; }); };
-    const draw = () => { box.innerHTML = L.map(row).join('') || '<div class="muted small" style="padding:8px">Chưa có mẫu nào</div>'; };
-    draw();
+    const draw = () => { box.innerHTML = L.map(row).join('') || '<div class="muted small" style="padding:8px">Chưa gán mẫu cho tuyến nào</div>'; };
+    const tabs = n => { el.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === n)); el.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== n); if (n === '2') { read(); draw(); } };
+    form(blank()); tbl(); draw(); tabs(String(tab || 1));
+    setTimeout(() => { if (el.contains(document.activeElement)) document.activeElement.blur(); m.body.scrollTop = 0; }, 60);
+    el.querySelector('.vds-tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) tabs(b.dataset.tab); };
+    const chk = o => { if (!o.ma || !o.kh) { toast('Nhập Ký hiệu và Tên gợi nhớ', 'err'); return false; } if (T.some((t, i) => i !== cur && t.ma === o.ma && t.kh === o.kh && t.mst === o.mst)) { toast('Đã có mẫu ' + o.ma + ' · ' + o.kh, 'err'); return false; } return true; };
+    $('[data-tn]').onclick = () => { const o = readF(); cur = null; if (!chk(o)) return; o.id = uid(); T.push(o); cur = T.length - 1; tbl(); toast('Đã thêm mẫu ' + o.ma + ' (bấm Lưu tất cả để ghi)', 'ok'); };
+    $('[data-tc]').onclick = () => { if (cur === null) return toast('Chọn 1 mẫu trong danh sách để sao chép', 'err'); const o = { ...T[cur], id: uid(), ma: T[cur].ma + ' (sao)' }; T.push(o); cur = T.length - 1; form(o); tbl(); };
+    $('[data-ts]').onclick = () => { if (cur === null) return toast('Chọn 1 mẫu trong danh sách để sửa, hoặc bấm Thêm mới', 'err'); const o = readF(); if (!chk(o)) return; T[cur] = { ...T[cur], ...o }; tbl(); toast('Đã sửa mẫu (bấm Lưu tất cả để ghi)', 'ok'); };
+    $('[data-td]').onclick = () => { if (cur === null) return toast('Chọn 1 mẫu để xóa', 'err'); T.splice(cur, 1); cur = null; form(blank()); tbl(); };
+    $('[data-tx]').onclick = () => { cur = null; form(blank()); tbl(); };
+    $('[data-tq]').oninput = e => { qs = e.target.value; tbl(); };
+    tw.onclick = e => { const r = e.target.closest('[data-ti]'); if (!r) return; cur = +r.dataset.ti; form(T[cur]); tbl(); };
     el.querySelector('[data-add]').onclick = () => { read(); L.push({ tuyen: '', list: '', tu: D.today(), den: '' }); draw(); };
     box.onclick = e => { const b = e.target.closest('[data-rm]'); if (!b) return; read(); L.splice(+b.closest('.vds-r').dataset.i, 1); draw(); };
+    box.onchange = e => { const s = e.target.closest('[data-addt]'); if (!s || s.value === '') return; const t = T[+s.value], i = s.closest('.vds-li').querySelector('[data-f="list"]'); i.value = [i.value.trim(), VDT.itxt(t)].filter(Boolean).join('; '); s.value = ''; };
     el.querySelector('[data-cancel]').onclick = () => m.close();
     el.querySelector('[data-ok]').onclick = () => {
-      read(); const bad = L.find(r => r.list && !VDT.items(r.list).length); if (bad) return toast('Mẫu vé chưa đúng dạng: Giá | Mã mẫu | Ký hiệu', 'err');
+      read(); const bad = L.find(r => r.list && !VDT.items(r.list).length); if (bad) { tabs('2'); return toast('Mẫu vé chưa đúng dạng: Giá | Tên gợi nhớ | Ký hiệu', 'err'); }
       const nc = { ...((DB.settings && DB.settings.veDT) || {}) }; el.querySelectorAll('[data-c]').forEach(i => nc[i.dataset.c] = i.dataset.c === 'vat' ? (+String(i.value).replace(',', '.') || 0) : String(i.value || '').trim());
-      nc.mau = L.filter(r => r.list); DB.settings.veDT = nc; App.changed(); m.close(); toast('Đã lưu mẫu chứng từ', 'ok');
+      nc.mau = L.filter(r => r.list); nc.tpl = T; DB.settings.veDT = nc; App.changed(); m.close(); toast('Đã lưu mẫu chứng từ', 'ok');
     };
   },
+  itxt: t => [t.giaKieu === 'thu' ? 'Số tiền thu' : F.money(t.gia || 0), t.ma, t.kh].join(' | '),
+  tplOf(ma, kh) { const T = VDT.cfg().tpl || []; return T.find(t => t.ma === ma && t.kh === kh) || T.find(t => t.ma === ma) || null; },
   btn(m, trip, getG, canEdit) {
     const foot = m.el.querySelector('.modal-f'), pb = m.el.querySelector('.dv-pbtn'); if (!foot || !pb) return;
     const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn dv-ebtn'; bt.innerHTML = ic('file') + ' In vé điện tử';
@@ -4979,6 +5014,11 @@ addCSS(`.dv-ct{border:1px dashed #d0d5dd;border-radius:10px;padding:8px 10px;bac
 .dv-ct-g{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}.dv-ct-g label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475467}.dv-ct-g .full{grid-column:1/-1}.dv-ct-g [readonly]{background:#f2f4f7}
 .vds-h{display:flex;gap:10px;align-items:baseline;margin:14px 0 6px;flex-wrap:wrap}.vds-hd,.vds-r{display:grid;grid-template-columns:170px 1fr 130px 130px 120px 34px;gap:6px;align-items:center}.vds-hd{font-size:11.5px;color:#475467;font-weight:600;padding:0 2px 4px}.vds-r{margin-bottom:6px}.vds-l{margin-bottom:8px}
 @media(max-width:760px){.vds-hd{display:none}.vds-r{grid-template-columns:1fr 1fr;border:1px solid #e3e7ef;border-radius:8px;padding:6px}.vds-r [data-f="list"]{grid-column:1/-1}.dv-ct-g{grid-template-columns:1fr}}`);
+addCSS(`.vds-tabs{display:flex;gap:2px;border-bottom:1px solid #e3e7ef;margin-bottom:12px;flex-wrap:wrap}.vds-tabs button{border:1px solid transparent;border-bottom:0;background:none;padding:8px 14px;border-radius:8px 8px 0 0;color:#175cd3;cursor:pointer;font:inherit;font-size:13px}.vds-tabs button.on{border-color:#e3e7ef;background:#fff;color:#101828;font-weight:600;margin-bottom:-1px}
+.vds-lo{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:13px;margin-bottom:8px}.vds-lo label,.vds-rd label{display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-weight:400}.vds-st{display:block;margin:10px 0 6px;font-size:14px}
+.vds-g{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}.vds-g>label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:#344054;font-weight:600}.vds-rd{display:inline-flex;gap:12px;margin-left:8px;font-size:12.5px}
+.vds-btns{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.vds-t tbody tr{cursor:pointer}.vds-t tr.on td{background:#d1e9ff}.vds-tw{max-height:320px;overflow:auto}.vds-li{display:flex;gap:4px}.vds-li [data-addt]{width:90px;flex:none}
+@media(max-width:760px){.vds-g{grid-template-columns:1fr}}`);
 addCSS(`.modal-f:has(.dv-ebtn){flex-wrap:wrap;row-gap:6px}.dv-ebtn{border-color:#2e90fa;color:#175cd3}.dv-ebtn:hover{background:#eff8ff}.vd-pa{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.vd-l{display:flex;flex-direction:column;gap:8px}.vd-it{border:1px solid #e3e7ef;border-radius:10px;padding:8px 10px}.vd-ih{font-size:13px;margin-bottom:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .vd-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 10px}.vd-g label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475467}`);
 /* ===== Ctrl (hoặc ⌘) + bấm vào vé để chọn nhiều vé, in một lượt ===== */
@@ -14251,7 +14291,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T09:00';
+const APP_BUILD = '2026-11-13T09:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
