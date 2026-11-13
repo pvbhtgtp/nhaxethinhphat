@@ -9972,10 +9972,10 @@ const CF = {
   async run(force) {
     const c = CF.cfg(); if (!BK.admin() || !CF.ok(c) || (!c.on && !force) || CF.busy || !DB || (FO.on && FO.tgt === 'cf')) return;
     const st = CF.st(), due = !st.at || (Date.now() - new Date(st.at).getTime()) >= (+c.every || 30) * 60000; if (!force && !due) return;
-    const txt = JSON.stringify(DB), sg = BK.hash(txt);
+    const dat = BK.lite(), txt = JSON.stringify(dat), sg = BK.hash(txt);
     if (!force && (!due || sg === (st.sig || ''))) return;
     CF.busy = true; CF.paint();
-    try { const j = await CF.call({ action: 'put', data: DB, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c); CF.setSt({ at: new Date().toISOString(), sig: sg, err: '', ver: j.ver, kb: Math.round(txt.length / 1024) }); if (force) toast(`${ic('check')} Đã sao lưu sang Cloudflare (đã mã hóa)`, 'ok', 3500); }
+    try { const j = await CF.call({ action: 'put', data: dat, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c); CF.setSt({ at: new Date().toISOString(), sig: sg, err: '', ver: j.ver, kb: Math.round(txt.length / 1024) }); if (force) toast(`${ic('check')} Đã sao lưu sang Cloudflare (đã mã hóa)`, 'ok', 3500); }
     catch (e) { CF.setSt({ err: e.message }); if (force) toast(esc(e.message), 'err', 8000); }
     finally { CF.busy = false; CF.paint(); }
   },
@@ -12962,6 +12962,7 @@ const IMGX = {
   const sz0 = SB.sizes;              // dung lượng Firestore ước tính: không tính ảnh đã chuyển sang Drive
   SB.sizes = function () { const r = sz0.apply(this, arguments); try { const s = IMGX.stat(); r.core = Math.max(0, r.core - s.sz + s.n * 40); } catch (e) { } return r; };
   IMGX.open().then(() => { try { if (typeof DB !== 'undefined' && DB) IMGX.fill(DB); } catch (e) { } IMGX.paint(); });
+  { const ap = GS.apply; GS.apply = function () { const r = ap.apply(this, arguments); IMGX._need = true; setTimeout(() => { try { IMGX.open().then(() => { IMGX.fill(DB); IMGX.paint(); }); } catch (e) { } }, 0); return r; }; }
   addCSS('img[src^="nxdrv:"]{visibility:hidden}');
   { let t = 0; new MutationObserver(() => { if (t) return; t = setTimeout(() => { t = 0; IMGX.open().then(() => IMGX.paint()); }, 150); }).observe(document.body, { childList: true, subtree: true }); }
   setInterval(() => { if (IMGX.pend.size) IMGX.fetch([]); }, 15000);
@@ -13044,15 +13045,17 @@ const BK = {
   why(u) { if (!u) return 'Chưa nhập địa chỉ Web app sao lưu'; if (/\/dev$/.test(u)) return 'Đây là link chạy thử (kết thúc bằng /dev). Vào Apps Script → Triển khai → Quản lý bản triển khai, sao chép "URL ứng dụng web" kết thúc bằng /exec'; if (/\/(home|edit)\b|\/d\//.test(u)) return 'Đây là link trình soạn thảo Apps Script, không phải link Web app. Bấm Triển khai → Quản lý bản triển khai, sao chép "URL ứng dụng web" (kết thúc bằng /exec)'; if (/^AKfyc/.test(u)) return 'Đây là "Mã triển khai". Cần dán cả "URL ứng dụng web" dạng https://script.google.com/macros/s/…/exec'; return 'Địa chỉ chưa đúng dạng https://script.google.com/macros/s/…/exec. Phần cuối link đang nhập: …' + esc(u.slice(-25)); },
   call(body, c = BK.cfg(), ms = 90000) { return GS.call(body, { url: c.url, key: c.key, mode: 'gas' }, ms).catch(e => { throw new Error(String(e.message || e).replace('máy chủ Google', 'máy chủ sao lưu Drive')); }); },
   hash(s) { let h = 5381; for (let i = 0; i < s.length; i += 7) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + ':' + h; },
+  /* bản sao lưu không chở ảnh đã có trên Drive (thay bằng mã tham chiếu, giống bản lưu Firebase): gửi nhẹ, Apps Script không còn quá thời gian */
+  lite() { try { return typeof IMGX !== 'undefined' && IMGX.map.size ? IMGX.strip(DB) : DB; } catch (e) { return DB; } },
   async run(force) {
     const c = BK.cfg(); if (!BK.admin() || !BK.ok(c) || (!c.on && !force) || BK.busy || !DB || (typeof FO !== 'undefined' && FO.on)) return;
     const st = BK.st(), due = !st.at || (Date.now() - new Date(st.at).getTime()) >= (+c.every || 30) * 60000;
     if (!force && !due) return;   // chưa tới hạn: không dựng chuỗi toàn bộ dữ liệu (rất nặng khi có nhiều ảnh)
-    const txt = JSON.stringify(DB), sg = BK.hash(txt);
+    const dat = BK.lite(), txt = JSON.stringify(dat), sg = BK.hash(txt);
     if (!force && (!due || sg === (st.sig || ''))) return;
     BK.busy = true; BK.paint();
     try {
-      const j = await BK.call({ action: 'put', data: DB, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c);
+      const j = await BK.call({ action: 'put', data: dat, force: true, who: 'Sao lưu tự động · ' + GS.who() }, c);
       BK.setSt({ at: new Date().toISOString(), sig: sg, err: '', ver: j.ver, kb: Math.round(txt.length / 1024) });
       if (force) toast(`${ic('check')} Đã sao lưu sang Google Drive`, 'ok', 3500);
     } catch (e) { BK.setSt({ err: e.message, errAt: new Date().toISOString() }); if (force) toast(esc(e.message), 'err', 8000); }
@@ -14545,7 +14548,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T19:00';
+const APP_BUILD = '2026-11-13T19:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
