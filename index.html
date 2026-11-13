@@ -3910,6 +3910,15 @@ const vcById = id => DB.hdvc.find(x => x.id === id);
 /* ===== Giờ chạy ===== */
 const gcSorted = () => DB.giochay.slice().sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
 const gcById = id => DB.giochay.find(x => x.id === id);
+/* Ngày chạy của giờ chạy + hiệu lực lịch theo tuyến (Quản lý lịch chạy): dùng khi tạo lịch chạy */
+const GC_NGAY = [['', 'Tất cả các ngày'], ['chan', 'Ngày chẵn'], ['le', 'Ngày lẻ'], ['t26', 'Thứ 2 đến thứ 6'], ['t7cn', 'Thứ 7, Chủ nhật']];
+const gcNgayTxt = k => (GC_NGAY.find(x => x[0] === (k || '')) || GC_NGAY[0])[1];
+const gcLich = t => ((DB.settings || {}).gcLich || {})[t] || {};
+function gcRuns(g, ngay) {
+  const L = gcLich(g.tuyen); if (L.tt === 'ngung' || (L.tu && ngay < L.tu) || (L.den && ngay > L.den)) return false;
+  const d = D.parse(ngay), dd = d.getDate(), w = d.getDay();
+  switch (g.ngayChay || '') { case 'chan': return dd % 2 === 0; case 'le': return dd % 2 === 1; case 't26': return w >= 1 && w <= 5; case 't7cn': return w === 0 || w === 6; default: return true; }
+}
 const gcXe = g => DB.vehicles.find(v => v.id === g.xeId) || {};
 const gcLai = g => (DB.employees.find(e => e.id === g.laiXe) || {}).ten || '';
 /* thứ tự ưu tiên tuyến trong ô chọn tuyến */
@@ -4002,9 +4011,9 @@ function lcAutoRun(silent) {
     for (let k = 0; k <= (+a.days || 7); k++) {
       const ngay = D.add(D.today(), k);
       open.forEach(g => {
-        if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(ngay, g.tuyen, g.gio)) return;
+        if (!gcRuns(g, ngay) || DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(ngay, g.tuyen, g.gio)) return;
         const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < ngay).sort((p, q) => q.ngay.localeCompare(p.ngay))[0];
-        DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
+        DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
       });
     }
     a.last = D.today(); Store.changed();
@@ -4033,9 +4042,9 @@ Object.assign(ACT, {
     for (let k = 0; k < days; k++) {
       const ngay = D.add(tu, k);
       open.forEach(g => {
-        if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
+        if (!gcRuns(g, ngay) || DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
         const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < ngay).sort((a, b) => b.ngay.localeCompare(a.ngay))[0];
-        DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
+        DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
       });
     }
     App.changed(); toast(n ? `Đã tạo ${n} chuyến cho ${days} ngày tới (từ hôm nay)` : `${days} ngày tới đã có đủ chuyến`, n ? 'ok' : '');
@@ -4056,9 +4065,9 @@ Object.assign(ACT, {
         for (let k = 0; k < days; k++) {
           const ngay = D.add(d.tu, k);
           open.forEach(g => {
-            if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
+            if (!gcRuns(g, ngay) || DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
             const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < ngay).sort((a, b) => b.ngay.localeCompare(a.ngay))[0];
-            DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
+            DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
           });
         }
         LC.ngay = d.tu; App.changed(); toast(n ? `Đã tạo ${n} chuyến cho ${days} ngày (${F.date(d.tu)} đến ${F.date(d.den)})` : 'Các ngày này đã có đủ chuyến', n ? 'ok' : '');
@@ -6172,7 +6181,7 @@ const Auth = {
     dvNav: ['lichchay', 'view'], dvDay: ['lichchay', 'view'], dvTrip: ['lichchay', 'view'], dvPick: ['lichchay', 'view'], dvRestore: ['lichchay', 'edit'], dvPurge: ['lichchay', 'del'], dvCall: ['lichchay', 'view'], dvLocked: ['lichchay', 'view'], dvSearch: ['lichchay', 'view'], dvMvPick: ['lichchay', 'edit'], dvMvCancel: ['lichchay', 'view'], dvMvOther: ['lichchay', 'edit'], dvBA: ['lichchay', 'view'], dvTT: ['lichchay', 'add'], dvPickSeat: ['lichchay', 'add'], dvClearSel: ['lichchay', 'add'], dvBookSel: ['lichchay', 'add'], dvTab: ['lichchay', 'view'], dvRoute: ['lichchay', 'view'], dvPrintMap: ['lichchay', 'view'], dvSeat: ['lichchay', 'view'],
     dhNav: ['lichchay', 'view'], dhPrint: ['lichchay', 'view'], dhG: ['lichchay', 'view'], dhGo: ['lichchay', 'view'], dhChip: ['lichchay', 'view'], dhMode: ['lichchay', 'view'], dhDD: ['lichchay', 'view'], dhAll: ['lichchay', 'view'], dhAddGio: ['lichchay', 'add'], vtSet: ['lichchay', 'view'], dhUnlock: ['lichchay', 'edit'], dhAdd: ['lichchay', 'add'], dhScan: ['lichchay', 'edit'], dhImport: ['lichchay', 'edit'],
     lcAdd: ['lichchay', 'add'], lcQuick: ['lichchay', 'edit'], lcEdit: ['lichchay', 'edit'], lcDel: ['lichchay', 'del'], lcGen: ['lichchay', 'add'], lcNow: ['lichchay', 'add'], lcCopy: ['lichchay', 'add'], lcNav: ['lichchay', 'view'],
-    gcAdd: ['giochay', 'add'], gcBulk: ['giochay', 'add'], gcEdit: ['giochay', 'edit'], gcDel: ['giochay', 'del'], gcToggle: ['giochay', 'edit'], gcRoute: ['giochay', 'view'], bgAdd: ['banggia', 'add'], bgEdit: ['banggia', 'edit'], bgDup: ['banggia', 'add'], bgDel: ['banggia', 'del'],
+    gcAdd: ['giochay', 'add'], gcBulk: ['giochay', 'add'], gcEdit: ['giochay', 'edit'], gcDel: ['giochay', 'del'], gcToggle: ['giochay', 'edit'], gcRoute: ['giochay', 'view'], gcQL: ['giochay', 'view'], bgAdd: ['banggia', 'add'], bgEdit: ['banggia', 'edit'], bgDup: ['banggia', 'add'], bgDel: ['banggia', 'del'],
     nlAdd: ['nhienlieu', 'add'], nlEdit: ['nhienlieu', 'edit'], nlDel: ['nhienlieu', 'del'], nlPrint: ['nhienlieu', 'view'], nlSet: ['nhienlieu', 'edit'],
     qdPrint: ['caidat', 'view'], qdOpen: ['caidat', 'view'], paOpen: ['caidat', 'view'], nqOpen: ['caidat', 'view'], nqPrint: ['caidat', 'view'], nqSave: ['caidat', 'edit'], paPrint: ['caidat', 'view'], scAdd: ['suachua', 'add'], scEdit: ['suachua', 'edit'], scDel: ['suachua', 'del'], scPrint: ['suachua', 'view'], scDocs: ['suachua', 'view'], scImport: ['suachua', 'add'], kmImport: ['kmxe', 'add'], kmManual: ['kmxe', 'add'], llPrint: ['lylich', 'view'], llImport: ['lylich', 'add'], llAdd: ['lylich', 'add'],
     vcAdd: ['hdvc', 'add'], vcEdit: ['hdvc', 'edit'], vcDel: ['hdvc', 'del'], vcDup: ['hdvc', 'add'], vcPrint: ['hdvc', 'view'],
@@ -11413,9 +11422,9 @@ const LCX = {
       const open = (DB.giochay || []).filter(g => g.tt !== 'ĐÓNG'); if (!open.length) return 0;
       const tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5); let n = 0;
       open.forEach(g => {
-        if (DB.lichchay.some(x => x.ngay === day && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(day, g.tuyen, g.gio)) return;
+        if (!gcRuns(g, day) || DB.lichchay.some(x => x.ngay === day && x.tuyen === g.tuyen && x.gio === g.gio) || lcIsBo(day, g.tuyen, g.gio)) return;
         const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < day).sort((p, q) => q.ngay.localeCompare(p.ngay))[0];
-        DB.lichchay.push({ id: uid(), ngay: day, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: 'Tự động', tgCham: tg }); n++;
+        DB.lichchay.push({ id: uid(), ngay: day, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: 'Tự động', tgCham: tg }); n++;
       });
       if (n) Store.changed(); return n;
     } catch (e) { return 0; }
@@ -11437,7 +11446,7 @@ const LCX = {
         const gio = d.gioChon || d.gio; if (!gio) { toast('Hãy chọn hoặc nhập giờ', 'err'); return false; }
         if (DB.lichchay.some(x => x.ngay === day && x.tuyen === tuyen && x.gio === gio)) { toast('Giờ này đã có chuyến', 'err'); return false; }
         const g = DB.giochay.find(x => x.tuyen === tuyen && x.gio === gio) || {};
-        const t = { id: uid(), ngay: day, tuyen, gio, xeId: g.xeId || '', laiXe: g.laiXe || '', soChuyen: 1, tienCong: 0 };
+        const t = { id: uid(), ngay: day, tuyen, gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: 0 };
         DB.lichchay.push(t); DV.tuyen = tuyen; DV.trip = t.id; App.changed(); toast('Đã thêm chuyến ' + esc(gio), 'ok');
       }
     });
@@ -14339,7 +14348,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T14:00';
+const APP_BUILD = '2026-11-13T14:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
