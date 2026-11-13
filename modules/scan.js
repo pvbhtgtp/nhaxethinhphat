@@ -328,10 +328,25 @@ Object.assign(SCN, {
     m.el.querySelector('[data-cancel]').onclick = () => m.close();
     let v; try { const c = SCN.out(pg, 1800), blob = await SCN.blob(c, 'image/jpeg', .9); v = await AIX.race(SCN.AIR, { images: [blob] }, x => x && typeof x === 'object' && (x.loai || (x.truong || []).length), 30000); }
     catch (e) { m.body.innerHTML = `<div style="padding:16px;color:#b91c1c">AI chưa đọc được: ${esc(e.message || e)}</div>`; return; }
-    pg.doc = v; SCN.showDoc(m, v);
+    pg.doc = v;
+    if (/lệnh/i.test(v.loai || '')) {   // tự áp quy tắc lưu: tên = số lệnh, thư mục theo năm / tuyến / tháng
+      SCN.name = SCN.docName(v); const n = $('#scnName'); if (n) n.value = SCN.name;
+      const path = SCN.docPath(v); if (path && Auth.can('hoso', 'add') && typeof HS !== 'undefined') { SCN.fd = HS.ensure(path); Store.changed(); }
+      SCN.paint(); toast('Đã đặt tên “' + esc(SCN.name) + '”' + (SCN.fd ? ' và chọn thư mục ' + esc(HS.ptxt(SCN.fd)) : ''), 'ok', 5000);
+    }
+    SCN.showDoc(m, v);
   },
-  docName(v) { const L = v.lenh || {}, d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
-  docPath(v) { const d = (v.lenh && v.lenh.tuNgay) || v.ngay || D.today(), y = d.slice(0, 4), mm = d.slice(5, 7), loai = /lệnh/i.test(v.loai || '') ? 'Lệnh vận chuyển' : /hợp đồng/i.test(v.loai || '') ? 'Hợp đồng vận chuyển' : ''; return loai ? [y, '08. Điều hành xe', loai, 'Tháng ' + mm + '-' + y] : null; },
+  /* quy tắc lưu: Lệnh vận chuyển → Năm / 08. Điều hành xe / Lệnh vận chuyển / Tuyến / Tháng MM-YYYY, tên = số lệnh */
+  docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return String(L.so).trim().replace(/[\\/:*?"<>|]+/g, '-'); const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
+  routeOf(t) {   // tên thư mục tuyến: khớp tuyến trong app (không phân chiều), không khớp thì lấy chữ đọc được, bỏ "BX"
+    const cl = String(t || '').replace(/\b(BX|B\.X|Bến xe)\.?\s*/gi, '').replace(/\s*(?:⇄|<>|->|→|–|-)\s*/g, ' - ').replace(/\s+/g, ' ').trim(); if (!cl) return 'Chưa rõ tuyến';
+    const R = [...new Set([...(DB.giochay || []).map(g => g.tuyen), ...(DB.lichchay || []).slice(-3000).map(l => l.tuyen)].filter(Boolean))];
+    if (typeof TTT !== 'undefined') { const k = TTT.key(cl), m = R.find(r => TTT.key(r) === k); if (m) return TTT.ends(m).map(x => x.toUpperCase()).join(' - '); }
+    return cl.toUpperCase();
+  },
+  docPath(v) { const L = v.lenh || {}, d = [L.tuNgay, L.di && L.di.ngayXuat, v.ngay].find(x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')) || D.today(), y = d.slice(0, 4), mm = d.slice(5, 7);
+    if (/lệnh/i.test(v.loai || '')) return [y, '08. Điều hành xe', 'Lệnh vận chuyển', SCN.routeOf(L.tuyen || [L.di && L.di.ben, L.ve && L.ve.ben].filter(Boolean).join(' - ')), 'Tháng ' + mm + '-' + y];
+    return /hợp đồng/i.test(v.loai || '') ? [y, '08. Điều hành xe', 'Hợp đồng vận chuyển', 'Tháng ' + mm + '-' + y] : null; },
   tripOf(v) {
     const L = v.lenh || {}, nb = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), b = nb(L.bienSo); if (!b) return { xe: null, T: [] };
     const xe = (DB.vehicles || []).find(x => nb(x.bks) && (nb(x.bks) === b || nb(x.bks).endsWith(b.slice(-5)))) || null; if (!xe) return { xe: null, T: [] };
@@ -346,7 +361,7 @@ Object.assign(SCN, {
       <table class="scr-t">${L ? r('Số lệnh', L.so) + r('Hiệu lực', [dt(L.tuNgay), dt(L.denNgay)].filter(Boolean).join(' → ')) + r('Lái xe 1', [L.laiXe1, L.hangGPLX1 && 'GPLX hạng ' + L.hangGPLX1].filter(Boolean).join(' · ')) + r('Lái xe 2', L.laiXe2) + r('Biển số', L.bienSo) + r('Số ghế', L.soGhe) + r('Tuyến', [L.tuyen, L.maTuyen && 'mã ' + L.maTuyen, L.cuLy && L.cuLy].filter(Boolean).join(' · ')) + leg('Lượt đi', L.di) + leg('Lượt về', L.ve) : r('Số', v.soVanBan) + r('Ngày', dt(v.ngay))}
       ${(v.truong || []).filter(x => x && x.ten && x.giaTri).map(x => r(x.ten, x.giaTri)).join('')}</table>
       ${L ? `<div class="scr-m">${M.xe ? `Xe <b>${esc(M.xe.bks)}</b>: ${M.T.length ? M.T.map(t => `<span class="badge b-gray">${esc(t.gio)} ${F.date(t.ngay)} · ${esc(t.tuyen)}</span>`).join(' ') : 'chưa có chuyến trong Lịch chạy những ngày này'}` : 'Không tìm thấy xe có biển số này trong Phương tiện'}</div>` : ''}
-      <div class="scr-b"><button type="button" class="btn sm pri" data-r="name">Đặt tên tài liệu: “${esc(SCN.docName(v))}”</button>${path && Auth.can('hoso', 'add') ? `<button type="button" class="btn sm" data-r="fd">Chọn thư mục: ${esc(path.slice(1).join(' / '))}</button>` : ''}<button type="button" class="btn sm" data-r="copy">Sao chép nội dung</button></div></div>`;
+      <div class="scr-b"><button type="button" class="btn sm pri" data-r="name">Đặt tên tài liệu: “${esc(SCN.docName(v))}”</button>${path && Auth.can('hoso', 'add') ? `<button type="button" class="btn sm" data-r="fd">Thư mục: ${esc(path.join(' / '))}</button>` : ''}<button type="button" class="btn sm" data-r="copy">Sao chép nội dung</button></div></div>`;
     m.body.onclick = async e => { const b = e.target.closest('[data-r]'); if (!b) return;
       if (b.dataset.r === 'name') { SCN.name = SCN.docName(v); const n = $('#scnName'); if (n) n.value = SCN.name; toast('Đã đặt tên tài liệu', 'ok'); }
       if (b.dataset.r === 'fd') { SCN.fd = HS.ensure(path); Store.changed(); SCN.paint(); toast('Đã chọn thư mục ' + esc(HS.ptxt(SCN.fd)), 'ok'); }
