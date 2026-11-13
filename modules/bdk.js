@@ -67,7 +67,7 @@ const BDK = {
     try { L += ok(TK.live, 'Đồng bộ thời gian thực đang chạy', 'Đồng bộ thời gian thực chưa chạy'); } catch (e) { }
     
     try { L += ok(!Store.dirty, 'Mọi thay đổi đã lưu', 'Đang có thay đổi chờ lưu'); } catch (e) { }
-    try { L += ok(!SYS.L.length, 'Không có lỗi', SYS.L.length + ' lỗi trong Tình trạng hệ thống'); } catch (e) { }
+    try { L += SYS.L.length ? `<li class="bad" data-sysopen style="cursor:pointer">${SYS.L.length} lỗi trên máy này: ${esc(SYS.L.slice(0, 2).map(x => x.src + ' – ' + x.m).join(' · ').slice(0, 160))} · bấm để xem, xóa</li>` : ok(true, 'Không có lỗi', ''); } catch (e) { }
     try { const on = TK.lcUse(); L += `<li class="${on ? (TK.off.has('c') ? 'bad' : 'ok') : ''}">Lịch chạy gửi tức thì theo từng chuyến: <b>${on ? (TK.off.has('c') ? 'đã bật nhưng Firebase chưa cho phép (cập nhật Rules)' : 'đang bật') : 'đang tắt'}</b> <button class="btn sm" data-lcdoc style="margin-left:6px">${on ? 'Tắt' : 'Bật'}</button></li>`; } catch (e) { }
     try { const n = LCR.dups().length + LCR.merges().length; L += `<li class="${n ? 'bad' : 'ok'}"${n ? ' data-dup style="cursor:pointer"' : ''}>${n ? n + ' chuyến trùng giờ (Điều hành và Đặt vé có thể đang sửa 2 bản khác nhau) · bấm để gộp' : 'Không có chuyến trùng giờ'}</li>`; } catch (e) { }
     try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
@@ -153,9 +153,10 @@ MODL.def('bdk', { title: 'Bảng điều khiển', icon: 'kanban', desc: 'Bảng
 
 /* nút Hệ thống (nhật ký, đối chiếu, kiểm tra sao lưu): bắt ở cấp trang để thẻ có vẽ lại vẫn bấm được */
 document.addEventListener('click', async e => {
-  const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv],[data-shdon],[data-shdoff]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
+  const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv],[data-shdon],[data-shdoff],[data-sysopen]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
   e.preventDefault(); e.stopPropagation();
   if (b.hasAttribute('data-slog')) return SLOG.open();
+  if (b.hasAttribute('data-sysopen')) return SYS.open();
   if (b.hasAttribute('data-shdoff')) { DB.settings.shdOn = false; Store.changed(); toast('Đã tắt ghi bản ghi song song', 'ok'); try { App.render(); } catch (x) { } return; }
   if (b.hasAttribute('data-shdon')) { if (!await Modal.confirm('Bật ghi bản ghi song song cho Nhân viên, Phương tiện, Lý lịch?<br><span class="small muted">Chỉ máy Admin ghi, từng phần nhỏ, không chở ảnh. Dữ liệu đang dùng không đổi. Tắt lại bất cứ lúc nào.</span>', { ok: 'Bật' })) return; DB.settings.shdOn = true; Store.changed(); toast('Đã bật. Bấm Đối chiếu để ghi lần đầu', 'ok', 5000); try { App.render(); } catch (x) { } return; }
   if (BDK._run) return toast('Đang chạy, chờ chút…', '', 2000); BDK._run = true;
