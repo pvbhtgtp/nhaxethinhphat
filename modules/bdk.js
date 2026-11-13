@@ -71,7 +71,8 @@ const BDK = {
     try { const on = TK.lcUse(); L += `<li class="${on ? (TK.off.has('c') ? 'bad' : 'ok') : ''}">Lịch chạy gửi tức thì theo từng chuyến: <b>${on ? (TK.off.has('c') ? 'đã bật nhưng Firebase chưa cho phép (cập nhật Rules)' : 'đang bật') : 'đang tắt'}</b> <button class="btn sm" data-lcdoc style="margin-left:6px">${on ? 'Tắt' : 'Bật'}</button></li>`; } catch (e) { }
     try { const n = LCR.dups().length + LCR.merges().length; L += `<li class="${n ? 'bad' : 'ok'}"${n ? ' data-dup style="cursor:pointer"' : ''}>${n ? n + ' chuyến trùng giờ (Điều hành và Đặt vé có thể đang sửa 2 bản khác nhau) · bấm để gộp' : 'Không có chuyến trùng giờ'}</li>`; } catch (e) { }
     try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
-    try { if (typeof SHD !== 'undefined' && Auth.user && Auth.user.role === 'admin' && DB.settings.shdOn === true) { const c = SHD.last(); L += `<li class="${c ? (c.ok ? 'ok' : 'bad') : ''}">Bản ghi song song (Nhân viên, Phương tiện, Lý lịch): ${c ? esc(SHD.txt(c)) + ' (đối chiếu ' + esc(new Date(c.t).toTimeString().slice(0, 5) + ' ' + dvLog.fmt(D.iso(new Date(c.t)))) + ')' : 'chưa đối chiếu'} <button class="btn sm" data-shd>Đối chiếu</button></li>`; } } catch (e) { }
+    try { if (typeof SHD !== 'undefined' && Auth.user && Auth.user.role === 'admin' && DB.settings.shdOn !== true) L += `<li>Bản ghi song song (GĐ2): <b>đang tắt</b> <button class="btn sm" data-shdon>Bật</button></li>`; } catch (e) { }
+    try { if (typeof SHD !== 'undefined' && Auth.user && Auth.user.role === 'admin' && DB.settings.shdOn === true) { const c = SHD.last(); L += `<li class="${c ? (c.ok ? 'ok' : 'bad') : ''}">Bản ghi song song (Nhân viên, Phương tiện, Lý lịch): ${c ? esc(SHD.txt(c)) + ' (đối chiếu ' + esc(new Date(c.t).toTimeString().slice(0, 5) + ' ' + dvLog.fmt(D.iso(new Date(c.t)))) + ')' : 'chưa đối chiếu'} <button class="btn sm" data-shd>Đối chiếu</button> <button class="btn sm" data-shdoff>Tắt</button></li>`; } } catch (e) { }
     try { const v = typeof BKV !== 'undefined' && BKV.st(); if (v) L += `<li class="${v.ok ? 'ok' : 'bad'}">Kiểm tra sao lưu Drive (${esc(dvLog.fmt(new Date(v.t).toISOString().slice(0, 10)))}): ${esc(v.msg)}</li>`; } catch (e) { }
     return `<ul class="bdk-ul">${L}</ul><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn sm" data-lcr>Khôi phục chuyến bị thiếu</button><button class="btn sm" data-slog>Nhật ký lưu dữ liệu</button>${typeof BK !== 'undefined' && BK.admin() ? '<button class="btn sm" data-bkv>Kiểm tra sao lưu ngay</button>' : ''}</div>`;
   },
@@ -152,9 +153,11 @@ MODL.def('bdk', { title: 'Bảng điều khiển', icon: 'kanban', desc: 'Bảng
 
 /* nút Hệ thống (nhật ký, đối chiếu, kiểm tra sao lưu): bắt ở cấp trang để thẻ có vẽ lại vẫn bấm được */
 document.addEventListener('click', async e => {
-  const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
+  const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv],[data-shdon],[data-shdoff]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
   e.preventDefault(); e.stopPropagation();
   if (b.hasAttribute('data-slog')) return SLOG.open();
+  if (b.hasAttribute('data-shdoff')) { DB.settings.shdOn = false; Store.changed(); toast('Đã tắt ghi bản ghi song song', 'ok'); try { App.render(); } catch (x) { } return; }
+  if (b.hasAttribute('data-shdon')) { if (!await Modal.confirm('Bật ghi bản ghi song song cho Nhân viên, Phương tiện, Lý lịch?<br><span class="small muted">Chỉ máy Admin ghi, từng phần nhỏ, không chở ảnh. Dữ liệu đang dùng không đổi. Tắt lại bất cứ lúc nào.</span>', { ok: 'Bật' })) return; DB.settings.shdOn = true; Store.changed(); toast('Đã bật. Bấm Đối chiếu để ghi lần đầu', 'ok', 5000); try { App.render(); } catch (x) { } return; }
   if (BDK._run) return toast('Đang chạy, chờ chút…', '', 2000); BDK._run = true;
   try {
     if (b.hasAttribute('data-shd')) {
