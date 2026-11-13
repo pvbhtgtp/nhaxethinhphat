@@ -162,8 +162,15 @@ const SCN = {
         if (a === 'dl') { for (const f of F2) { download(f.blob, f.name); await new Promise(r => setTimeout(r, 350)); } toast(`Đã tải ${F2.length} tệp`, 'ok'); }
         else {
           if (!HS.google()) throw new Error('Chưa kết nối Google Drive (Management → Kho hồ sơ)');
-          for (const f of F2) { const by = new Uint8Array(await f.blob.arrayBuffer()); await HS.store(HS.b64bytes(by), { folder: SCN.fd || '', ten: f.name.replace(/\.[^.]+$/, ''), tenFile: f.name, mime: f.mime, size: by.length, ghiChu: 'Scan tài liệu · ' + SCN.P.length + ' trang · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() }); }
-          Store.changed(); toast(`Đã lưu ${F2.length} tệp vào “${esc(SCN.fd ? HS.ptxt(SCN.fd) : 'Gốc')}”`, 'ok', 5000);
+          /* chưa chọn thư mục và chưa cho AI đọc: tự đọc trang đầu, là Lệnh vận chuyển thì tự đặt tên + thư mục theo quy tắc rồi mới lưu */
+          let F3 = F2;
+          if (!SCN.fd && SCN.P[0] && !SCN.P[0].doc && typeof AIX !== 'undefined' && AIX.ok()) {
+            toast('🤖 AI đang đọc trang đầu để xếp thư mục…', '', 4000);
+            try { const v = await SCN.aiDoc(SCN.P[0]); if (SCN.applyRule(v)) { F3 = await SCN.files(); try { SCN.paint(); } catch (x) { } } } catch (x) { }
+          } else if (!SCN.fd && SCN.P[0] && SCN.P[0].doc && SCN.applyRule(SCN.P[0].doc)) { F3 = await SCN.files(); try { SCN.paint(); } catch (x) { } }
+          const F2b = F3;
+          for (const f of F2b) { const by = new Uint8Array(await f.blob.arrayBuffer()); await HS.store(HS.b64bytes(by), { folder: SCN.fd || '', ten: f.name.replace(/\.[^.]+$/, ''), tenFile: f.name, mime: f.mime, size: by.length, ghiChu: 'Scan tài liệu · ' + SCN.P.length + ' trang · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() }); }
+          Store.changed(); toast(`Đã lưu ${F2b.length} tệp vào “${esc(SCN.fd ? HS.ptxt(SCN.fd) : 'Gốc')}”`, 'ok', 5000);
         }
       } catch (e) { toast('Chưa lưu được: ' + esc(e.message || e), 'err', 6000); }
       SCN.busy = false; b.disabled = false;
@@ -326,15 +333,18 @@ Object.assign(SCN, {
     if (!(typeof AIX !== 'undefined' && AIX.ok())) return toast('Chưa có khóa AI (Cài đặt → AI) nên chưa đọc được nội dung', 'err', 5000);
     const m = Modal.open({ title: '🤖 AI đọc nội dung tài liệu', width: 720, body: '<div class="muted" style="padding:20px;text-align:center">⏳ AI đang đọc trang ' + (SCN.cur + 1) + '…</div>', foot: '<button class="btn" data-cancel>Đóng</button>' });
     m.el.querySelector('[data-cancel]').onclick = () => m.close();
-    let v; try { const c = SCN.out(pg, 1800), blob = await SCN.blob(c, 'image/jpeg', .9); v = await AIX.race(SCN.AIR, { images: [blob] }, x => x && typeof x === 'object' && (x.loai || (x.truong || []).length), 30000); }
+    let v; try { v = await SCN.aiDoc(pg); }
     catch (e) { m.body.innerHTML = `<div style="padding:16px;color:#b91c1c">AI chưa đọc được: ${esc(e.message || e)}</div>`; return; }
-    pg.doc = v;
-    if (/lệnh/i.test(v.loai || '')) {   // tự áp quy tắc lưu: tên = số lệnh, thư mục theo năm / tuyến / tháng
-      SCN.name = SCN.docName(v); const n = $('#scnName'); if (n) n.value = SCN.name;
-      const path = SCN.docPath(v); if (path && Auth.can('hoso', 'add') && typeof HS !== 'undefined') { SCN.fd = HS.ensure(path); Store.changed(); }
-      SCN.paint(); toast('Đã đặt tên “' + esc(SCN.name) + '”' + (SCN.fd ? ' và chọn thư mục ' + esc(HS.ptxt(SCN.fd)) : ''), 'ok', 5000);
-    }
+    if (SCN.applyRule(v)) { SCN.paint(); toast('Đã đặt tên “' + esc(SCN.name) + '”' + (SCN.fd ? ' và chọn thư mục ' + esc(HS.ptxt(SCN.fd)) : ''), 'ok', 5000); }
     SCN.showDoc(m, v);
+  },
+  async aiDoc(pg) { const c = SCN.out(pg, 1800), blob = await SCN.blob(c, 'image/jpeg', .9); const v = await AIX.race(SCN.AIR, { images: [blob] }, x => x && typeof x === 'object' && (x.loai || (x.truong || []).length), 30000); pg.doc = v; return v; },
+  /* quy tắc lưu tự áp khi là Lệnh vận chuyển (hoặc hợp đồng): tên = số lệnh, thư mục Năm / 08. Điều hành xe / Lệnh vận chuyển / Tuyến / Tháng */
+  applyRule(v) {
+    if (!v || !/lệnh|hợp đồng/i.test(v.loai || '')) return false;
+    if (/lệnh/i.test(v.loai || '')) { SCN.name = SCN.docName(v); const n = $('#scnName'); if (n) n.value = SCN.name; }
+    const path = SCN.docPath(v); if (path && Auth.can('hoso', 'add') && typeof HS !== 'undefined') { SCN.fd = HS.ensure(path); Store.changed(); const d = $('#scnFd'); if (d) { if (![...d.options].some(o => o.value === SCN.fd)) d.add(new Option(HS.ptxt(SCN.fd), SCN.fd)); d.value = SCN.fd; } }
+    return true;
   },
   /* quy tắc lưu: Lệnh vận chuyển → Năm / 08. Điều hành xe / Lệnh vận chuyển / Tuyến / Tháng MM-YYYY, tên = số lệnh */
   docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return String(L.so).trim().replace(/[\\/:*?"<>|]+/g, '-'); const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
