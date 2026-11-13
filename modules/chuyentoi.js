@@ -113,7 +113,8 @@ const CT = {
       <div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when ${m > 0 && m <= 60 ? 'soon' : ''}">${t.ngay === td ? '' : 'Ngày mai · '}${CT.when(t)}</span></div>
       <div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}${t.vai === 'Phụ xe' ? ' · Phụ xe' : ''}</div>
       <div class="ct-kpi"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Cần thu</span></div></div></button>`; };
-    el.innerHTML = `<div class="ct">${CT.cal()}${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
+    el.innerHTML = `<div class="ct"><button class="ct-b" data-nld style="width:100%;margin-bottom:10px">⛽ Báo đổ dầu</button>${CT.cal()}${T.length ? card(nx, true) + (T.filter(t => t !== nx).length ? `<div class="ct-lbl">Các chuyến khác</div>${T.filter(t => t !== nx).map(t => card(t)).join('')}` : '') : `<div class="ct-empty">${ic('bus')}<b>Chưa có chuyến hôm nay và ngày mai</b><span>${CT.why()}</span></div>`}</div>`;
+    const nb = el.querySelector('[data-nld]'); if (nb) nb.onclick = () => NLD.drv(T.find(t => t.ngay === D.today() && t.xe && t.xe.bks) || null);
     el.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { CT.trip = b.dataset.ct; CT.tab = 'don'; App.render(); window.scrollTo(0, 0); });
     CT.bindCal(el);
   },
@@ -142,7 +143,7 @@ const CT = {
     el.innerHTML = `<div class="ct ct-in">
       <div class="ct-top"><button class="ct-back" data-back>${ic('back')}</button><div class="grow"><div class="ct-h"><b class="ct-time">${esc(t.gio)}</b><span class="ct-when">${t.ngay === D.today() ? '' : F.date(t.ngay) + ' · '}${CT.when(t)}</span></div><div class="ct-route">${esc(t.tuyen)}</div><div class="ct-sub">${ic('bus')} ${esc(t.xe.bks || 'Chưa gán xe')}</div></div></div>
       <div class="ct-kpi big"><div><b>${s.n}<small>/${s.cap || '?'}</small></b><span>Khách</span></div><div><b>${s.len}</b><span>Đã lên</span></div><div><b>${F.money(s.can)}</b><span>Còn phải thu</span></div></div>
-      <div class="ct-docs"><span class="${t.lenh ? 'ok' : 'no'}">${ic('file')} ${t.lenh ? 'Lệnh ' + esc(String(t.lenh.so || '').replace(/^LVC-/, '')) + (t.lenh.tt === 'dong' ? ' · đã đóng' : ' · đang mở') : 'Chưa có lệnh vận chuyển'}</span><span class="${t.nt === 'ok' ? 'ok' : t.nt ? 'no' : 'no'}">${ic('check')} ${t.nt === 'ok' ? 'Nghiệm thu đạt' : t.nt === 'fail' ? 'Nghiệm thu không đạt' : t.nt === 'part' ? 'Nghiệm thu chưa đủ' : 'Chưa nghiệm thu'}</span><button class="ct-b warn sm" data-inc>${ic('alert')} Báo sự cố</button></div>
+      <div class="ct-docs"><span class="${t.lenh ? 'ok' : 'no'}">${ic('file')} ${t.lenh ? 'Lệnh ' + esc(String(t.lenh.so || '').replace(/^LVC-/, '')) + (t.lenh.tt === 'dong' ? ' · đã đóng' : ' · đang mở') : 'Chưa có lệnh vận chuyển'}</span><span class="${t.nt === 'ok' ? 'ok' : t.nt ? 'no' : 'no'}">${ic('check')} ${t.nt === 'ok' ? 'Nghiệm thu đạt' : t.nt === 'fail' ? 'Nghiệm thu không đạt' : t.nt === 'part' ? 'Nghiệm thu chưa đủ' : 'Chưa nghiệm thu'}</span><button class="ct-b warn sm" data-inc>${ic('alert')} Báo sự cố</button><button class="ct-b sm" data-nld>⛽ Đổ dầu</button></div>
       ${done}
       <div class="ct-tabs">${[['don', 'Đón khách'], ['ghe', 'Sơ đồ ghế'], ['tra', 'Trả & hàng']].map(([k, n]) => `<button class="${CT.tab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
       <div class="ct-body">${body}</div>
@@ -154,6 +155,7 @@ const CT = {
     el.querySelectorAll('[data-vang]').forEach(b => b.onclick = () => { const p = P(b.dataset.vang); if (p) CT.act(p, { vang: !CT.st(p).vang }); });
     el.querySelectorAll('[data-xuong]').forEach(b => b.onclick = () => { const p = P(b.dataset.xuong); if (p) CT.act(p, { xuong: !CT.st(p).xuong }); });
     el.querySelector('[data-inc]').onclick = () => CT.report(t);
+    el.querySelector('[data-nld]').onclick = () => NLD.drv(t);
     el.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => { const p = P(b.dataset.pay); if (!p) return; const st = CT.st(p);
       if (st.tt === 'tra') { if (!st.httt || CT.acts[p.id]) return Modal.confirm('Bỏ đánh dấu đã thu của ghế ' + esc(p.ghe) + '?', { ok: 'Bỏ đã thu' }).then(ok => ok && CT.act(p, { tt: 'giu' })); return toast('Vé đã thu tại quầy', ''); }
       const m = Modal.open({ title: 'Thu tiền ghế ' + esc(p.ghe) + ' · ' + esc(p.ten || ''), width: 380, body: `<div style="text-align:center;font-size:30px;font-weight:800;margin:4px 0 14px">${F.money(CT.due(p, st))} đ</div><div class="ct-pay"><button class="ct-b pay" data-h="tm">${ic('money')} Tiền mặt</button><button class="ct-b pay" data-h="ck">${ic('wallet')} Chuyển khoản</button></div>`, foot: '<button class="btn" data-no>Đóng</button>' });

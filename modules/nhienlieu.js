@@ -65,6 +65,7 @@ function nlForm(r, kind0) {
     foot: `${!isNew && Auth.can('nhienlieu', 'del') ? `<button class="btn danger left" data-del>${ic('trash')} Xóa</button>` : ''}<button class="btn" data-no>Hủy</button><button class="btn" data-sv>${ic('check')} Lưu</button><button class="btn pri" data-svp>${ic('printer')} Lưu & in phiếu 80mm</button>`
   });
   const el = m.el, f = n => el.querySelector(`[name="${n}"]`), fld = n => f(n) && f(n).closest('.field');
+  if (r && r.anh && r.anh.length && typeof NLD !== 'undefined') { el.querySelector('[data-info]').insertAdjacentHTML('beforebegin', `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><span class="small muted" style="align-self:center">Ảnh chứng từ:</span>${NLD.thumbs(r.anh, 70)}</div>`); NLD.zoom(el); }
   const read = () => {
     const d = readForm(el, F1); d.lit = Math.round((+d.lit || 0) * 100) / 100;
     if (isIn) d.loai = 'nhap'; else { d.loai = 'xuat'; d.giaAuto = d.nguon === 'bon' && !d.gia; d.giaTT = !!d.gia && d.gia === NLMK.price(d.loaiNL); }
@@ -137,7 +138,7 @@ function nlSetForm() {
 function nlMonthRows() { const ym = NL.thang; const led = nlLedger(); return { led, rows: led.list.filter(r => String(r.ngay).startsWith(ym)) }; }
 const vNL = {
   title: 'Nhiên liệu', icon: 'fuel', desc: 'Nhập dầu vào bồn, cấp dầu cho xe, đổ ngoài cây xăng · tồn bồn, giá bình quân, tiêu hao theo xe',
-  tools: () => Auth.can('nhienlieu', 'add') ? `<button class="btn" data-act="nlAdd" data-k="nhap">${ic('download')} Nhập dầu</button><button class="btn" data-act="nlAdd" data-k="ngoai">${ic('drop')} Đổ ngoài</button><button class="btn pri" data-act="nlAdd" data-k="bon">${ic('fuel')} Cấp dầu cho xe</button>` : '',
+  tools: () => Auth.can('nhienlieu', 'add') ? `<button class="btn" data-act="nlAdd" data-k="nhap">${ic('download')} Nhập dầu</button><button class="btn" data-act="nlAnh">${ic('camera')} Tạo phiếu từ ảnh</button><button class="btn" data-act="nlAdd" data-k="ngoai">${ic('drop')} Đổ ngoài</button><button class="btn pri" data-act="nlAdd" data-k="bon">${ic('fuel')} Cấp dầu cho xe</button>` : '',
   render(el) {
     if (!NL.thang) NL.thang = D.ymNow(); NLMK.init();
     const s = nlS(), { led, rows } = nlMonthRows(), ton = led.ton, cc = +s.sucChua || 0, pct = cc ? Math.max(0, Math.min(100, ton / cc * 100)) : 0, low = ton <= (+s.nguong || 0);
@@ -146,7 +147,7 @@ const vNL = {
     const th = X.map(r => led.map[r.id]).filter(x => x.tieuHao), avgTh = sum(th, x => x.kmChay) ? sum(X.filter(r => led.map[r.id].tieuHao), r => r.lit) / sum(th, x => x.kmChay) * 100 : 0;
     const months = [...new Set([D.ymNow(), NL.thang, ...(DB.nhienlieu || []).map(r => String(r.ngay).slice(0, 7))])].filter(Boolean).sort().reverse();
     const xes = [...new Set([...nlXes(), ...X.map(r => r.xe)])].filter(Boolean).sort();
-    el.insertAdjacentHTML('beforeend', `
+    el.insertAdjacentHTML('beforeend', `${typeof NLD !== 'undefined' ? NLD.banner() : ''}
       <div class="nl-kpis">
         <div class="nl-tank ${low ? 'low' : ''}"><div class="nl-gauge"><i style="height:${pct}%"></i><span>${Math.round(pct)}%</span></div>
           <div><small>${esc(s.tenBon)}</small><b>${nlL(ton)} <em>lít</em></b><div class="sm">${cc ? 'Sức chứa ' + F.money(cc) + ' lít · ' : ''}giá BQ ${F.money(led.bq)} đ/lít</div>${low ? `<span class="badge b-red">Sắp hết dầu</span>` : ''}${Auth.can('nhienlieu', 'edit') ? `<button class="btn sm" data-act="nlSet" style="margin-top:6px">${ic('settings')} Cài đặt bồn</button>` : ''}</div></div>

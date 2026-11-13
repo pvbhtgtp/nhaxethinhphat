@@ -36,7 +36,8 @@ const BDK = {
     try { const n = BDK.trips(td).filter(l => XC.of(l).length).length; if (n) W.push(['warn', `${n} chuyến hôm nay chạy chéo tuyến`, 'dieuhanh']); } catch (e) { }
     const pa = (DB.phanAnh || []).filter(r => r.tt !== 'xong' && r.ngay && D.diff(td, r.ngay) > 3).length; if (pa) W.push(['bad', `${pa} phản ánh quá 3 ngày chưa xử lý xong`, 'phananh']);
     try { if (SYS.L.length) W.push(['warn', `${SYS.L.length} lỗi hệ thống cần xem`, '']); } catch (e) { }
-    try { QT.more(W, td, lim); } catch (e) { }   // gom thêm: HĐLĐ, khám sức khỏe, bảo dưỡng, nhiên liệu vượt định mức
+    try { QT.more(W, td, lim); } catch (e) { }
+    try { const n = NLD.wait().length; if (n) W.unshift(['warn', `${n} phiếu đổ dầu lái xe gửi qua app chờ duyệt`, '', 'nlcho']); } catch (e) { }   // gom thêm: HĐLĐ, khám sức khỏe, bảo dưỡng, nhiên liệu vượt định mức
     W.sort((a, b) => (a[0] === 'bad' ? 0 : 1) - (b[0] === 'bad' ? 0 : 1)); BDK._W = W;
     const li = ([c, t, g, q]) => `<li class="${c}"${q ? ` data-qt="${q}" style="cursor:pointer"` : g ? ` data-go="${g}"` : ''}>${esc(t)}</li>`;
     return W.length ? `<ul class="bdk-ul">${W.slice(0, 12).map(li).join('')}${W.length > 12 ? `<li class="muted" data-qt="all" style="cursor:pointer">+ ${W.length - 12} cảnh báo khác · bấm để xem tất cả</li>` : ''}</ul>` : '<div class="bdk-ok">Không có cảnh báo</div>';
@@ -157,7 +158,7 @@ MODL.def('bdk', { title: 'Bảng điều khiển', icon: 'kanban', desc: 'Bảng
 document.addEventListener('click', async e => {
   const b = e.target.closest && e.target.closest('[data-slog],[data-shd],[data-bkv],[data-shdon],[data-shdoff],[data-sysopen],[data-qt]'); if (!b || (typeof BDK !== 'undefined' && BDK.edit)) return;
   e.preventDefault(); e.stopPropagation();
-  if (b.hasAttribute('data-qt')) { const k = b.dataset.qt; return k === 'pl' ? QT.plOpen() : k === 'bd' ? QT.bdOpen() : k === 'all' ? QT.allOpen() : k === 'nl' ? App.go('nhienlieu') : null; }
+  if (b.hasAttribute('data-qt')) { const k = b.dataset.qt; return k === 'pl' ? QT.plOpen() : k === 'bd' ? QT.bdOpen() : k === 'all' ? QT.allOpen() : k === 'nl' ? App.go('nhienlieu') : k === 'nlcho' ? NLD.cho() : null; }
   if (b.hasAttribute('data-slog')) return SLOG.open();
   if (b.hasAttribute('data-sysopen')) return SYS.open();
   if (b.hasAttribute('data-shdoff')) { DB.settings.shdOn = false; Store.changed(); toast('Đã tắt ghi bản ghi song song', 'ok'); try { App.render(); } catch (x) { } return; }

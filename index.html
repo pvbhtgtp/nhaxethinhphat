@@ -13978,7 +13978,7 @@ const PARTS = {
   core: { label: 'Dữ liệu chung', keys: [] },
   nhansu: { label: 'Hồ sơ nhân sự', keys: ['employees'] },
   luong: { label: 'Chấm công & lương', keys: ['cham', 'extra'], match: /^(luong|tamUng|tamung|congNo|congno|thue|bangLuong)/ },
-  vanhanh: { label: 'Vận hành', keys: ['lichchay', 'suachua', 'nhienlieu', 'kmxe', 'guihang', 'hdvc', 'lylich', 'lcBo', 'phanAnh', 'choVe'] }
+  vanhanh: { label: 'Vận hành', keys: ['lichchay', 'suachua', 'nhienlieu', 'kmxe', 'guihang', 'hdvc', 'lylich', 'lcBo', 'phanAnh', 'choVe', 'nlCho'] }
 };
 /* trường nhạy cảm của nhân viên: chỉ nằm ở phần nhansu; danh bạ rút gọn (nvPub) ở core bỏ các trường này */
 const NV_PRIV = /^(luong|hd(AnTrua|Xang|DienThoai|Khac|Tu|Den)$|pc[A-Z]|phuCap|mst$|soNPT|soBHXH|bhxh|cccd|diaChi|stk|nganHang|soHD$|loaiHD$|moTaCV|ketHon|conKetHon|trinhDo|pw$|matKhau|ghiChuRieng|khongLuong|thaiSan|kyLuat|nangLuong)/;
@@ -14471,6 +14471,7 @@ const TX = {
             if (a.xuong != null && !!b.daXuong !== !!a.xuong) { b.daXuong = !!a.xuong; nd.push(a.xuong ? 'đã trả khách' : 'bỏ đánh dấu đã trả'); }
             b.lxAt = +a.at; if (nd.length) { (b.lichSu = b.lichSu || []).push({ tg: dvLog.now(), nguoi: who, nd: who + ' (trên xe): ' + nd.join(', ') }); ch = true; } });
           Object.entries(o.inc || {}).forEach(([id, x]) => { if (TX.inc(id, x, o.emp, who)) ch = true; });
+          Object.entries(o.nl || {}).forEach(([id, x]) => { try { if (NLD.inbox(id, x, o.emp, who)) ch = true; } catch (e) { } });   // phiếu đổ dầu lái xe gửi
         });
         if (ch) { App.changed(false); try { TK.paint(); } catch (e) { } }   // vẽ lại ngay: ghế chuyển xanh, hoạt cảnh chạy
       }, () => { TX._w = false; });
@@ -14481,6 +14482,124 @@ const TX = {
 { const pt1 = TK.paint; TK.paint = function () { const r = pt1.apply(this, arguments); try { if (PERM.admin()) TX.soon(); } catch (e) { } return r; }; }   // chỉ máy Admin gửi bù (tránh mọi máy văn phòng cùng ghi, tốn lượt ghi Firebase)   // vé / chuyến do máy khác vừa thêm (nhận thời gian thực): gửi lại chuyến cho lái xe luôn, không chờ máy bán vé
 setTimeout(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 20000);
 setInterval(() => { try { TX.watch(); if (PERM.admin()) TX.push(); } catch (e) { } }, 30 * 60000);   // sang ngày mới: chuyến ngày mai thành hôm nay
+/* ===== PHIẾU ĐỔ DẦU TỪ ẢNH (13/11) =====
+   Cách 1: nhân viên chọn ảnh lái xe gửi Zalo (trụ bơm, hóa đơn, biển số) → AI đọc → điền sẵn Phiếu đổ dầu ngoài → kiểm tra, Lưu.
+   Cách 2: lái xe bấm "Đổ dầu" trong Chuyến của tôi, chụp ảnh → gửi vào tài liệu riêng tx_<mã NV> (mục nl) → máy văn phòng nhận vào DB.nlCho (chờ duyệt) → người quản lý Duyệt thành phiếu. */
+const NLD = {
+  AI: `Đây là các ảnh lái xe chụp khi đổ dầu cho xe khách ở cây xăng (có thể có: màn hình trụ bơm, hóa đơn bán lẻ, biển số xe, đồng hồ km). Đọc và trả về DUY NHẤT JSON:
+{"bienSo":"biển số xe đọc được, vd 60F-004.39","lit":0,"donGia":0,"thanhTien":0,"cayXang":"tên cửa hàng/trạm xăng trên hóa đơn hoặc biển hiệu","soHD":"số hóa đơn nếu có","ngay":"YYYY-MM-DD nếu thấy trên hóa đơn","gio":"HH:MM nếu thấy","km":0,"loaiNL":"loại nhiên liệu nếu thấy (vd Dầu DO 0,05S)"}
+Màn hình trụ bơm thường có 3 dòng: thành tiền (đồng), số lít, đơn giá (đồng/lít). Số lít có phần thập phân (vd 44.737 nghĩa là 44,737 lít). km là số km trên đồng hồ công-tơ-mét nếu có ảnh đồng hồ, không có thì 0. Không đoán: không đọc được thì để trống hoặc 0.`,
+  /* tiền, đơn giá: dấu chấm/phẩy là phân cách nghìn (1.200.000 · 26.820); số lít: dấu chấm/phẩy là phần thập phân (44.737 · 44,737) */
+  money: v => typeof v === 'number' ? Math.round(v) : (+String(v || '').split(/[,](?=\d{1,2}$)/)[0].replace(/\D/g, '') || 0),
+  num: v => typeof v === 'number' ? v : (+String(v || '').replace(/[^\d.,]/g, '').replace(',', '.').replace(/\.(?=.*\.)/g, '') || 0),
+  async blobs(files) { const out = []; for (const f of files) { const u = await resizeImage(f, 1600); out.push({ url: u, blob: await (await fetch(u)).blob() }); } return out; },
+  async read(P) {
+    if (!(typeof AIX !== 'undefined' && AIX.ok())) throw new Error('Chưa có khóa AI (Cài đặt → AI) nên chưa đọc được ảnh, nhập tay giúp');
+    const v = await AIX.race(NLD.AI, { images: P.map(p => p.blob) }, x => x && typeof x === 'object' && (x.lit || x.thanhTien || x.bienSo), 40000);
+    let lit = NLD.num(v.lit), gia = NLD.money(v.donGia), tien = NLD.money(v.thanhTien);
+    if (lit > 1000 && tien && gia && Math.abs(lit / 1000 * gia - tien) < Math.abs(lit * gia - tien)) lit = lit / 1000;   // 44737 đọc thiếu dấu → 44,737
+    if (gia > 0 && gia < 1000) gia = Math.round(gia * 1000);   // 26.82 → 26.820 đ
+    if (!gia && lit && tien) gia = Math.round(tien / lit); if (!lit && gia && tien) lit = Math.round(tien / gia * 1000) / 1000;
+    return { bks: String(v.bienSo || ''), lit, gia, tien, cayXang: String(v.cayXang || ''), soHD: String(v.soHD || ''), ngay: /^\d{4}-\d{2}-\d{2}$/.test(v.ngay || '') ? v.ngay : '', gio: /^\d{1,2}:\d{2}$/.test(v.gio || '') ? v.gio.padStart(5, '0') : '', km: NLD.num(v.km), loaiNL: String(v.loaiNL || '') };
+  },
+  /* biển số đọc được → xe trong Phương tiện (khớp cả khi chỉ đọc được 5 số cuối) */
+  xeOf(b) { const n = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), k = n(b); if (k.length < 4) return null; const V = DB.vehicles || []; return V.find(x => n(x.bks) === k) || V.find(x => n(x.bks).endsWith(k.slice(-5))) || V.find(x => k.endsWith(n(x.bks).slice(-5))) || null; },
+  laiOf(xe, ngay) { if (!xe) return ''; const L = (DB.lichchay || []).filter(l => l.xeId === xe.id && l.ngay === ngay && l.laiXe); const e = L.length && (DB.employees || []).find(x => x.id === L[0].laiXe); return e ? e.ten : ''; },
+  async up(P) { const out = []; for (const p of P) { try { await IMGX.open(); out.push(IMGX.PRE + await IMGX.upload(p.url)); } catch (e) { } } return out; },
+  thumbs: (A, h = 90) => (A || []).map(a => `<img src="${esc(a)}" style="height:${h}px;border-radius:8px;border:1px solid #e2e8f0;cursor:zoom-in" data-zoom>`).join(' '),
+  zoom(el) { el.querySelectorAll('[data-zoom]').forEach(i => i.onclick = () => { const m = Modal.open({ title: 'Ảnh', width: 760, body: `<img src="${i.src}" style="width:100%">`, foot: '<button class="btn" data-x>Đóng</button>' }); m.el.querySelector('[data-x]').onclick = () => m.close(); }); },
+  /* màn hình kiểm tra trước khi lưu (dùng chung cho Cách 1 và lúc duyệt phiếu lái xe gửi) */
+  form(v, opt) {
+    const xes = nlXes(), drv = [...new Set([...nlDrivers(), ...(v.lai ? [v.lai] : [])])].sort((a, b) => a.localeCompare(b, 'vi'));
+    const m = Modal.open({ title: opt.title, width: 720, body: `${opt.note || ''}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" data-th>${NLD.thumbs(v.anh || (opt.P || []).map(p => p.url))}</div>
+      <div class="form c2">
+        <div class="field"><label>Biển số xe</label><select class="inp" name="xe"><option value="">— Chọn xe —</option>${[...new Set([...xes, ...(v.xe ? [v.xe] : [])])].map(x => `<option ${x === v.xe ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>${v.bks && !v.xe ? `<div class="small" style="color:#b45309">AI đọc biển số "${esc(v.bks)}" nhưng không thấy trong Phương tiện</div>` : ''}</div>
+        <div class="field"><label>Lái xe</label><select class="inp" name="lai"><option value="">— Chọn lái xe —</option>${drv.map(x => `<option ${x === v.lai ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field"><label>Ngày</label><input class="inp" type="date" name="ngay" value="${esc(v.ngay || D.today())}"></div>
+        <div class="field"><label>Giờ</label><input class="inp" type="time" name="gio" value="${esc(v.gio || '')}"></div>
+        <div class="field"><label>Số lít</label><input class="inp" type="number" step="0.001" name="lit" value="${v.lit || ''}"></div>
+        <div class="field"><label>Đơn giá (đ/lít)</label><input class="inp" type="number" name="gia" value="${v.gia || ''}"></div>
+        <div class="field"><label>Thành tiền (đ)</label><input class="inp" type="number" name="tien" value="${v.tien || ''}"><div class="small muted" data-chk></div></div>
+        <div class="field"><label>Km đồng hồ (Odo)</label><input class="inp" type="number" name="km" value="${v.km || ''}" placeholder="Để tính hao dầu"></div>
+        <div class="field"><label>Cây xăng</label><input class="inp" name="cayXang" value="${esc(v.cayXang || '')}"></div>
+        <div class="field"><label>Số hóa đơn</label><input class="inp" name="soHD" value="${esc(v.soHD || '')}"></div>
+        <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><input class="inp" name="ghiChu" value="${esc(v.ghiChu || '')}"></div>
+      </div>`, foot: `${opt.del ? '<button class="btn danger left" data-del>Bỏ phiếu này</button>' : ''}<button class="btn" data-no>Đóng</button><button class="btn pri" data-ok>${opt.ok || 'Lưu phiếu'}</button>` });
+    const q = n => m.el.querySelector(`[name="${n}"]`), chk = () => { const l = +q('lit').value || 0, g = +q('gia').value || 0, t = +q('tien').value || 0, c = Math.round(l * g); m.el.querySelector('[data-chk]').innerHTML = l && g ? (t && Math.abs(c - t) > 1000 ? `<span style="color:#dc2626">Lít × giá = ${F.money(c)} đ, lệch với thành tiền</span>` : 'Lít × giá = ' + F.money(c) + ' đ') : ''; };
+    ['lit', 'gia', 'tien'].forEach(n => q(n).addEventListener('input', chk)); chk(); NLD.zoom(m.el);
+    q('xe').onchange = () => { if (!q('lai').value) { const xe = (DB.vehicles || []).find(x => x.bks === q('xe').value), n = NLD.laiOf(xe, q('ngay').value); if (n) { if (![...q('lai').options].some(o => o.value === n)) q('lai').add(new Option(n, n)); q('lai').value = n; } } };
+    m.el.querySelector('[data-no]').onclick = () => m.close();
+    const dl = m.el.querySelector('[data-del]'); if (dl) dl.onclick = () => { m.close(); opt.del(); };
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const d = { xe: q('xe').value, lai: q('lai').value, ngay: q('ngay').value, gio: q('gio').value, lit: Math.round((+q('lit').value || 0) * 1000) / 1000, gia: +q('gia').value || 0, tien: +q('tien').value || 0, km: +q('km').value || '', cayXang: q('cayXang').value.trim(), soHD: q('soHD').value.trim(), ghiChu: q('ghiChu').value.trim() };
+      if (!d.gia && d.lit && d.tien) d.gia = Math.round(d.tien / d.lit);
+      if (!d.xe) return toast('Chọn biển số xe', 'err'); if (!d.ngay) return toast('Chọn ngày', 'err'); if (!(d.lit > 0)) return toast('Nhập số lít', 'err'); if (!(d.gia > 0)) return toast('Nhập đơn giá hoặc thành tiền', 'err');
+      const b = m.el.querySelector('[data-ok]'); b.disabled = true; try { if (await opt.save(d) !== false) m.close(); } finally { b.disabled = false; }
+    };
+    return m;
+  },
+  /* ghi Phiếu đổ dầu ngoài vào sổ nhiên liệu */
+  add(d, anh, src) {
+    DB.nhienlieu = DB.nhienlieu || [];
+    const r = { id: uid(), so: nlNext('ngoai'), loai: 'xuat', nguon: 'ngoai', ngay: d.ngay, gio: d.gio, xe: d.xe, lai: d.lai, km: d.km, lit: d.lit, gia: d.gia, giaAuto: false, giaTT: false, cayXang: d.cayXang, soHD: d.soHD, loaiNL: nlS().loaiNL, ghiChu: [d.ghiChu, src ? src.note : 'Tạo từ ảnh'].filter(Boolean).join(' · '), anh: anh || [], nguoiTao: dvLog.who(), tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...(src && src.id ? { tuLX: src.id } : {}) };
+    DB.nhienlieu.push(r); App.changed(); return r;
+  },
+  async fromFiles(fs) {
+    const w = Modal.open({ title: '🤖 Đang đọc ảnh đổ dầu…', width: 420, body: '<div class="muted" style="padding:18px;text-align:center">AI đang đọc trụ bơm, hóa đơn, biển số… (khoảng 10–30 giây)</div>', foot: '' });
+    let P = [], v = {};
+    try { P = await NLD.blobs(fs); } catch (e) { w.close(); toast('Không đọc được ảnh', 'err'); return null; }
+    try { v = await NLD.read(P); } catch (e) { toast(esc(e.message || e), 'err', 6000); }
+    w.close(); const xe = NLD.xeOf(v.bks); v.xe = xe ? xe.bks : ''; v.ngay = v.ngay || D.today(); v.lai = NLD.laiOf(xe, v.ngay); return { P, v };
+  },
+  file(cb, cam) { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; if (cam) inp.setAttribute('capture', 'environment'); inp.onchange = () => { const fs = [...inp.files].slice(0, 6); if (fs.length) cb(fs); }; inp.click(); },
+  /* Cách 1: văn phòng chọn ảnh lái xe gửi Zalo → AI đọc → phiếu */
+  pick() {
+    if (!Auth.can('nhienlieu', 'add')) return toast('Bạn chưa có quyền thêm phiếu nhiên liệu', 'err');
+    NLD.file(async fs => { const r = await NLD.fromFiles(fs); if (!r) return;
+      NLD.form(r.v, { P: r.P, title: '⛽ Phiếu đổ dầu ngoài từ ảnh', note: '<p class="small muted" style="margin-top:0">AI đã điền sẵn từ ảnh. Kiểm tra lại số lít, tiền, biển số rồi bấm Lưu. Ảnh được lưu kèm phiếu làm chứng từ.</p>',
+        save: async d => { toast('Đang lưu ảnh chứng từ…', '', 3000); const anh = await NLD.up(r.P); const x = NLD.add(d, anh); toast(`Đã lưu ${x.so}: ${nlL(x.lit)} lít · xe ${esc(x.xe)}`, 'ok', 5000); try { App.render(); } catch (e) { } } }); });
+  },
+  /* Cách 2: lái xe gửi từ Chuyến của tôi */
+  drv(t) {
+    const me = CT.me(), who = ((DB.employees || []).find(e => String(e.id) === me) || {}).ten || dvLog.who();
+    const m0 = Modal.open({ title: '⛽ Báo đổ dầu', width: 420, body: `<p style="margin-top:0">Chụp <b>trụ bơm</b> (tiền, lít, giá), <b>hóa đơn</b>, <b>biển số xe</b> và <b>đồng hồ km</b> (nếu được), giống ảnh gửi nhóm Zalo.</p><button class="ct-b" data-cam style="width:100%;margin-bottom:8px">${ic('camera')} Chụp ảnh</button><button class="ct-b" data-gal style="width:100%">${ic('file')} Chọn ảnh có sẵn</button>`, foot: '<button class="btn" data-no>Đóng</button>' });
+    m0.el.querySelector('[data-no]').onclick = () => m0.close();
+    const go = async fs => { m0.close(); const r = await NLD.fromFiles(fs); if (!r) return;
+      if (!r.v.xe && t && t.xe && t.xe.bks) r.v.xe = t.xe.bks; r.v.lai = who;
+      NLD.form(r.v, { P: r.P, title: '⛽ Báo đổ dầu', ok: 'Gửi điều hành duyệt', note: '<p class="small muted" style="margin-top:0">Kiểm tra số lít, số tiền, biển số. Gửi xong điều hành duyệt là thành phiếu dầu.</p>',
+        save: async d => {
+          toast('Đang gửi ảnh…', '', 4000); const anh = await NLD.up(r.P); if (!anh.length) { toast('Chưa tải được ảnh (mạng yếu), thử gửi lại', 'err', 6000); return false; }
+          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6), x = { ...d, lai: who, anh, at: Date.now(), chuyen: (t && t.id) || '' };
+          if (CT.live()) { if (NLD.inbox(id, x, me, who)) App.changed(); }
+          else await FB.col().doc('tx_' + me).set({ nl: { [id]: x } }, { merge: true }).catch(() => { toast('Chưa gửi được, kiểm tra mạng rồi gửi lại', 'err'); throw new Error('net'); });
+          toast(ic('check') + ' Đã gửi phiếu đổ dầu cho điều hành duyệt', 'ok', 4000);
+        } });
+    };
+    m0.el.querySelector('[data-cam]').onclick = () => NLD.file(go, true); m0.el.querySelector('[data-gal]').onclick = () => NLD.file(go, false);
+  },
+  /* máy văn phòng nhận phiếu lái xe gửi → hàng chờ duyệt (không trùng; đã duyệt/bỏ thì giữ dấu để không nhận lại) */
+  inbox(id, x, emp, who) {
+    if (!id || !x) return false; const L = (DB.nlCho = DB.nlCho || []); if (L.some(r => r.id === id) || (DB.nhienlieu || []).some(r => r.tuLX === id)) return false;
+    L.push({ id, ...x, emp: String(emp || ''), who: who || '', nhan: dvLog.now() }); try { NOTI && NOTI.bell && NOTI.bell(); } catch (e) { } return true;
+  },
+  wait: () => (DB.nlCho || []).filter(r => !r.st),
+  done(r, st) { r.st = st; r.xl = dvLog.who(); r.xlAt = dvLog.now(); try { FB.col().doc('tx_' + r.emp).update({ ['nl.' + r.id]: firebase.firestore.FieldValue.delete() }).catch(() => { }); } catch (e) { }
+    const P = (DB.nlCho || []).filter(x => x.st); if (P.length > 300) { const drop = new Set(P.slice(0, P.length - 300)); DB.nlCho = DB.nlCho.filter(x => !drop.has(x)); } App.changed(); },
+  cho() {
+    const draw = () => { const L = NLD.wait(); m.el.querySelector('[data-b]').innerHTML = L.length ? L.map(r => `<div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="display:flex;gap:4px">${NLD.thumbs(r.anh, 64)}</div><div class="grow" style="min-width:180px"><b>${esc(r.xe || '?')}</b> · ${nlL(r.lit)} lít · ${F.money(Math.round(r.lit * r.gia))} đ<div class="small muted">${esc(r.who)} gửi ${F.date(r.ngay)} ${esc(r.gio || '')}${r.cayXang ? ' · ' + esc(r.cayXang) : ''}${r.km ? ' · ' + F.money(r.km) + ' km' : ''}</div></div><button class="btn sm pri" data-ok="${esc(r.id)}">Xem, duyệt</button></div>`).join('') : '<div class="empty">Không còn phiếu chờ duyệt</div>'; NLD.zoom(m.el);
+      m.el.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => { const r = NLD.wait().find(x => x.id === b.dataset.ok); if (!r) return;
+        NLD.form({ ...r }, { title: '⛽ Duyệt phiếu đổ dầu · ' + esc(r.who), ok: 'Duyệt, tạo phiếu', note: `<p class="small muted" style="margin-top:0">Lái xe <b>${esc(r.who)}</b> gửi qua app. Sửa nếu cần rồi bấm Duyệt.</p>`,
+          del: async () => { if (!await Modal.confirm('Bỏ phiếu đổ dầu này (không tạo phiếu)?', { danger: true, ok: 'Bỏ' })) return; NLD.done(r, 'bo'); draw(); try { App.render(); } catch (e) { } },
+          save: d => { const x = NLD.add(d, r.anh, { id: r.id, note: 'Lái xe ' + r.who + ' gửi qua app' }); NLD.done(r, 'ok'); toast(`Đã duyệt ${x.so}: ${nlL(x.lit)} lít · xe ${esc(x.xe)}`, 'ok', 5000); draw(); try { App.render(); } catch (e) { } } }); });
+    };
+    const m = Modal.open({ title: 'Phiếu đổ dầu lái xe gửi, chờ duyệt', width: 720, body: '<div data-b></div>', foot: '<button class="btn" data-x>Đóng</button>' });
+    m.el.querySelector('[data-x]').onclick = () => m.close(); draw();
+  },
+  banner() { const n = NLD.wait().length; return n && Auth.can('nhienlieu', 'add') ? `<div class="banner warn" style="margin-bottom:10px;cursor:pointer" data-act="nlCho">${ic('fuel')}<div class="grow"><b>${n} phiếu đổ dầu lái xe gửi qua app đang chờ duyệt</b></div><button class="btn sm pri">Xem, duyệt</button></div>` : ''; }
+};
+Object.assign(ACT, { nlAnh: () => NLD.pick(), nlCho: () => NLD.cho() });
+Auth.ACT_PERM.nlAnh = ['nhienlieu', 'add']; Auth.ACT_PERM.nlCho = ['nhienlieu', 'add'];
+
 MODL.reg('baocaove', { title: 'Báo cáo bán vé', icon: 'chart', group: 'Vận hành', after: 'baocaovt', mod: 'lichchay', parts: ['core', 'vanhanh'], desc: 'Doanh thu, số vé, lấp đầy ghế, đã thu/còn thu theo ngày, tuyến, giờ chạy, người bán; so với kỳ trước' });
 { const cv = Auth.canView; Auth.canView = id => id === 'baocaove' ? (!DRV.on() && cv(id)) : cv(id); }   // lái xe, phụ xe không xem báo cáo bán vé
 MODL.reg('chuyentoi', { title: 'Chuyến của tôi', icon: 'bus', group: 'Cá nhân', after: 'cuatoi', mod: 'cuatoi', parts: ['core'], desc: 'Chuyến hôm nay, ngày mai: khách theo điểm đón, gọi khách, đánh dấu lên xe, thu tiền' });
@@ -14579,7 +14698,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T00:30';
+const APP_BUILD = '2026-11-14T01:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
