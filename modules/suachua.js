@@ -74,19 +74,32 @@ function scForm(p) {
     if (!items.length) return toast('Nhập ít nhất một nội dung sửa chữa', 'err');
     if (items.some(i => i.sl <= 0)) return toast('Số lượng phải lớn hơn 0', 'err');
     const d = { so: P.so, ngay, xe, lai: q('#scLai').value.trim().toUpperCase(), ghiChu: q('#scGc').value.trim(), km: +q('#scKm').value || '', donVi: q('#scDv').value.trim(), hoaDon: att.slice(), items };
-    if (isNew) DB.suachua.push({ id: uid(), nguoiTao: dvLog.who(), tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d });
+    if (isNew) DB.suachua.push({ id: uid(), nguoiTao: dvLog.who(), nguoiTaoId: (scMe() || {}).id || '', tg: D.today() + ' ' + new Date().toTimeString().slice(0, 5), ...d });
     else { (p.lichSu = p.lichSu || []).push({ tg: dvLog.now(), nguoi: dvLog.who(), nd: 'Sửa phiếu' }); Object.assign(p, d); }
     App.changed(); m.close(); toast('Đã lưu phiếu ' + d.so, 'ok');
   };
   lpAttach(m, () => { const items = [...rows.querySelectorAll('.sc-r')].map(r => ({ nd: r.querySelector('[data-nd]').value.trim().toUpperCase(), dvt: r.querySelector('[data-dvt]').value.trim().toUpperCase(), sl: +r.querySelector('[data-sl]').value || 0, gia: +r.querySelector('[data-gia]').value || 0 })).filter(i => i.nd);
     return lpCapture(() => scPrint({ ...P, ngay: q('#scNgay').value, xe: q('#scXe').value, lai: q('#scLai').value.trim().toUpperCase(), ghiChu: q('#scGc').value.trim(), km: +q('#scKm').value || '', donVi: q('#scDv').value.trim(), hoaDon: att.slice(), items })); }, { caption: 'Xem trước phiếu sửa chữa' });
 }
+/* nhân viên đang đăng nhập (khớp SĐT tài khoản) */
+function scMe() { const u = Auth.user; if (!u) return null; return DB.employees.find(x => x.sdt && normUser(x.sdt) === normUser(u.user)) || null; }
+/* người lập phiếu: theo id lưu lúc tạo, phiếu cũ thì dò theo tên; phiếu chưa lưu là người đang đăng nhập */
+function scCreator(p) {
+  const nm = x => String(x || '').trim().toLowerCase();
+  return (p.nguoiTaoId && empById(p.nguoiTaoId)) || (p.nguoiTao && DB.employees.find(e => nm(e.ten) === nm(p.nguoiTao))) || (!p.id ? scMe() : null);
+}
+function scSigns(p) {
+  let h = Print.signs(['Người lập phiếu', 'Lái xe', 'Giám đốc']); const e = scCreator(p), ten = (e && e.ten) || (p.id ? p.nguoiTao : dvLog.who()) || '';
+  const img = e && e.chuKy && /^(data:|https?:)/.test(e.chuKy) ? `<img class="sig-img" src="${esc(e.chuKy)}" alt="" style="display:block;max-height:64px;max-width:160px;object-fit:contain;margin:4px auto 0">` : '';
+  if (img || ten) h = h.replace('<div class="sp"></div>', `${img || '<div class="sp" style="height:56px"></div>'}${ten ? `<div style="margin-top:4px;font-weight:700">${esc(ten)}</div>` : ''}`);
+  return h;
+}
 function scPrint(p) {
   const co = S().company || {}, t = scTong(p);
   Print.run(`<div class="pr">${Print.head()}<h2>PHIẾU SỬA CHỮA PHƯƠNG TIỆN</h2><div class="pr-sub">Số phiếu: <b>${esc(p.so)}</b> · Ngày: <b>${F.date(p.ngay)}</b></div>
     <div style="margin:10px 0;font-size:14px">Số xe: <b>${esc(p.xe)}</b> &nbsp;·&nbsp; Lái xe: <b>${esc(p.lai || '..............')}</b></div>
     <table style="width:100%;border-collapse:collapse;font-size:13.5px"><tr>${['STT', 'Nội dung sửa chữa', 'ĐVT', 'SL', 'Đơn giá', 'Thành tiền'].map((h, i) => `<th style="border:1px solid #333;padding:6px;${i > 2 ? 'text-align:right' : 'text-align:left'}">${h}</th>`).join('')}</tr>${p.items.map((i, k) => `<tr><td style="border:1px solid #333;padding:6px;width:36px">${k + 1}</td><td style="border:1px solid #333;padding:6px">${esc(i.nd)}</td><td style="border:1px solid #333;padding:6px">${esc(i.dvt)}</td><td style="border:1px solid #333;padding:6px;text-align:right">${i.sl}</td><td style="border:1px solid #333;padding:6px;text-align:right">${F.money(i.gia)}</td><td style="border:1px solid #333;padding:6px;text-align:right">${F.money((+i.sl || 0) * (+i.gia || 0))}</td></tr>`).join('')}<tr><td colspan="5" style="border:1px solid #333;padding:6px;text-align:right"><b>Tổng cộng</b></td><td style="border:1px solid #333;padding:6px;text-align:right"><b>${F.money(t)}</b></td></tr></table>
-    <div class="pr-note">Bằng chữ: <b>${docSo(t)}</b>.${p.ghiChu ? ' Ghi chú: ' + esc(p.ghiChu) : ''}</div>${Print.signs(['Người lập phiếu', 'Lái xe', 'Giám đốc'])}</div>`, { title: 'Phieu sua chua ' + p.so });
+    <div class="pr-note">Bằng chữ: <b>${docSo(t)}</b>.${p.ghiChu ? ' Ghi chú: ' + esc(p.ghiChu) : ''}</div>${scSigns(p)}</div>`, { title: 'Phieu sua chua ' + p.so });
 }
 const scFlat = L => L.flatMap(p => p.items.map(i => ({ so: p.so, ngay: p.ngay, xe: p.xe, lai: p.lai, nd: i.nd, dvt: i.dvt, sl: i.sl, gia: i.gia, tt: (+i.sl || 0) * (+i.gia || 0), nguoi: p.nguoiTao || '', tg: p.tg || '' })));
 const scCols = [{ key: 'so', label: 'Số phiếu' }, { key: 'ngay', label: 'Ngày', fmt: 'date' }, { key: 'xe', label: 'Số xe' }, { key: 'lai', label: 'Tên lái xe' }, { key: 'nd', label: 'Nội dung sửa chữa' }, { key: 'dvt', label: 'ĐVT' }, { key: 'sl', label: 'Số lượng', align: 'r' }, { key: 'gia', label: 'Đơn giá', fmt: 'money' }, { key: 'tt', label: 'Thành tiền', fmt: 'money', sum: true }];
