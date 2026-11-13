@@ -8114,6 +8114,32 @@ addCSS(`.acc-l{display:flex;flex-direction:column;gap:6px;max-height:300px;overf
 const GH = {
   DVT: ['Kiện', 'Thùng', 'Bao', 'Hộp', 'Túi', 'Cái', 'Chiếc', 'Phong bì', 'Kg', 'Xe máy'],
   THU: { gui: 'Người gửi trả', nhan: 'Người nhận trả' },
+  thuTxt: k => GH.THU[k] || k || '',
+  paid: x => !x.nguoiThu || x.nguoiThu === 'gui',
+  thuX: () => (DB.settings.ghThu = Array.isArray(DB.settings.ghThu) ? DB.settings.ghThu : []),
+  /* gợi ý SĐT: từ các phiếu gửi hàng cũ + khách đặt vé, gõ 3 số cuối là ra */
+  phIdx() {
+    const M = {}, add = (p, ten, noi) => { p = dvPhone(p); if (!p) return; const o = M[p] = M[p] || { sdt: p, ten: '', noi: '', n: 0 }; o.n++; if (ten && !o.ten) o.ten = ten; if (noi) o.noi = noi; };
+    (DB.guihang || []).forEach(h => { add(h.sdtGui, h.tenGui, h.noiGui); add(h.sdtNhan, h.tenNhan, h.noiNhan); });
+    try { Object.values(KH.index()).forEach(k => { const o = M[k.sdt]; if (o) { if (!o.ten) o.ten = k.ten; } else M[k.sdt] = { sdt: k.sdt, ten: k.ten || '', noi: '', n: k.trips.size }; }); } catch (e) { }
+    return Object.values(M);
+  },
+  phBind(inp, all) {
+    const f = inp.closest('.field'), box = document.createElement('div'); box.className = 'gh-ac'; f.style.position = 'relative'; f.appendChild(box);
+    inp.setAttribute('autocomplete', 'off'); inp.setAttribute('inputmode', 'tel');
+    let sug = [];
+    const close = () => { sug = []; box.innerHTML = ''; };
+    const show = () => { const d = inp.value.replace(/\D/g, ''); if (d.length < 3 || dvPhone(inp.value)) return close();
+      const end = all.filter(k => k.sdt.endsWith(d)), mid = all.filter(k => !k.sdt.endsWith(d) && k.sdt.includes(d));
+      sug = [...end, ...mid].sort((a, b) => b.n - a.n).slice(0, 6);
+      box.innerHTML = sug.map((k, i) => `<button type="button" class="kh-o${i ? '' : ' on'}" data-ph="${k.sdt}"><b>${esc(KH.fmtP(k.sdt))}</b><span>${esc(k.ten || '—')}</span><em>${esc(k.noi || '')}</em></button>`).join(''); };
+    const pick = p => { inp.value = KH.fmtP(p); close(); inp.dispatchEvent(new Event('input', { bubbles: true })); };
+    inp.addEventListener('input', show); inp.addEventListener('blur', () => { setTimeout(close, 150); const p = dvPhone(inp.value); if (p) inp.value = KH.fmtP(p); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' && sug.length) { e.preventDefault(); e.stopPropagation(); pick(sug[0].sdt); } else if (e.key === 'Escape' && sug.length) { e.stopPropagation(); close(); } });
+    box.addEventListener('pointerdown', e => { const o = e.target.closest('[data-ph]'); if (!o) return; e.preventDefault(); pick(o.dataset.ph); });
+    box.addEventListener('mousedown', e => e.preventDefault());
+    if (dvPhone(inp.value)) inp.value = KH.fmtP(dvPhone(inp.value));
+  },
   list: id => (DB.guihang || []).filter(x => x.chuyen === id).sort((a, b) => String(a.so).localeCompare(String(b.so), 'vi', { numeric: true })),
   // thông tin chuyến: ngày, giờ, xe, lái xe + SĐT lái xe
   trip(t) { const xe = lcXe(t) || {}, lx = DB.employees.find(e => e.id === t.laiXe) || {}; return { ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, bks: xe.bks || '', laiXe: lx.ten || '', sdtLai: lx.sdt || '' }; },
@@ -8133,9 +8159,9 @@ const GH = {
     const info = `<div class="gh-info"><span>Ngày <b>${F.date(T.ngay)}</b></span><span>Giờ <b>${esc(T.gio)}</b></span><span>Xe <b>${esc(T.bks || 'Chưa gán xe')}</b></span><span>Lái xe <b>${esc(T.laiXe || 'Chưa gán')}</b>${T.sdtLai ? ` · <a class="tel" href="tel:${esc(String(T.sdtLai).replace(/[^0-9+]/g, ''))}">${esc(T.sdtLai)}</a>` : ''}</span></div>`;
     const bar = `<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap">${cA ? `<button class="btn pri" data-act="ghAdd" data-id="${cur.id}">${ic('plus')} Thêm phiếu gửi hàng</button>` : ''}${L.length ? `<button class="btn" data-act="ghPrintAll" data-id="${cur.id}">${ic('printer')} In tất cả phiếu (K80)</button><button class="btn" data-act="ghList" data-id="${cur.id}">${ic('printer')} In bảng kê giao lái xe</button>` : ''}${!can ? '<span class="muted small">Chuyến đã khóa: chỉ xem và in</span>' : ''}</div>`;
     if (!L.length) return info + bar + '<div class="muted" style="padding:12px 0">Chuyến này chưa có hàng gửi.</div>';
-    const tot = sum(L, x => GH.tien(x)), tg = sum(L.filter(x => x.nguoiThu !== 'nhan'), x => GH.tien(x));
+    const tot = sum(L, x => GH.tien(x)), tg = sum(L.filter(x => GH.paid(x)), x => GH.tien(x));
     return info + bar + `<div class="tbl-wrap free"><table class="dv-tbl gh-t"><tr><th>Số phiếu</th><th>SĐT người gửi</th><th>SĐT người nhận</th><th>Tên hàng</th><th>ĐVT</th><th class="r">SL</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th><th>Người thu</th><th>Nơi gửi</th><th>Nơi nhận</th><th></th></tr>
-      ${L.map(x => `<tr><td><b>${esc(x.so)}</b>${x.chuKy ? ' <span class="badge b-green" title="Đã ký">Đã ký</span>' : ''}${x.doiChuyen ? ` <span class="badge b-amber" title="${esc(x.doiChuyen.lyDo || '')}">Dời từ chuyến khác</span>` : ''}</td><td>${esc(x.sdtGui || '')}</td><td>${esc(x.sdtNhan || '')}</td><td class="gh-hn">${GH.items(x).map(it => esc(it.tenHang || '')).join('<br>')}</td><td>${GH.items(x).map(it => esc(it.dvt || '')).join('<br>')}</td><td class="r">${GH.items(x).map(it => +it.sl || 0).join('<br>')}</td><td class="r">${GH.items(x).map(it => F.money(+it.donGia || 0)).join('<br>')}</td><td class="r"><b>${F.money(GH.tien(x))}</b></td><td>${esc(GH.THU[x.nguoiThu] || '')}</td><td>${esc(x.noiGui || '')}</td><td>${esc(x.noiNhan || '')}</td>
+      ${L.map(x => `<tr><td><b>${esc(x.so)}</b>${x.chuKy ? ' <span class="badge b-green" title="Đã ký">Đã ký</span>' : ''}${x.doiChuyen ? ` <span class="badge b-amber" title="${esc(x.doiChuyen.lyDo || '')}">Dời từ chuyến khác</span>` : ''}</td><td>${esc(x.sdtGui || '')}</td><td>${esc(x.sdtNhan || '')}</td><td class="gh-hn">${GH.items(x).map(it => esc(it.tenHang || '')).join('<br>')}</td><td>${GH.items(x).map(it => esc(it.dvt || '')).join('<br>')}</td><td class="r">${GH.items(x).map(it => +it.sl || 0).join('<br>')}</td><td class="r">${GH.items(x).map(it => F.money(+it.donGia || 0)).join('<br>')}</td><td class="r"><b>${F.money(GH.tien(x))}</b></td><td>${esc(GH.thuTxt(x.nguoiThu))}</td><td>${esc(x.noiGui || '')}</td><td>${esc(x.noiNhan || '')}</td>
         <td class="gh-a"><button class="ibtn" data-act="ghPrint" data-id="${x.id}" data-tip="In phiếu K80">${ic('printer')}</button>${cE ? `<button class="ibtn" data-act="ghEdit" data-id="${x.id}" data-tip="Sửa">${ic('edit')}</button><button class="ibtn" data-act="ghMove" data-id="${x.id}" data-tip="Dời sang chuyến khác">${ic('arrow')}</button>` : ''}${cD ? `<button class="ibtn" data-act="ghDel" data-id="${x.id}" data-tip="Xóa">${ic('trash')}</button>` : ''}</td></tr>`).join('')}
       <tr><th colspan="7">Tổng ${L.length} phiếu · ${sum(L, x => GH.slTong(x))} kiện/món</th><th class="r">${F.money(tot)}</th><th colspan="4" style="text-align:left;font-weight:600">Người gửi đã trả ${F.money(tg)} · Thu người nhận ${F.money(tot - tg)}</th></tr></table></div>`;
   },
@@ -8156,7 +8182,7 @@ const GH = {
 
   form(t, g) {
     const isNew = !g, T = GH.trip(t), me = GH.meEmp(), stops = LT.get(t.tuyen).map(p => p.ten);
-    const v = g ? { ...g, items: GH.items(g).map(it => ({ ...it })) } : { so: GH.nextSo(t.ngay), sdtGui: '', sdtNhan: '', items: [{ tenHang: '', dvt: 'Kiện', sl: 1, donGia: 0 }], nguoiThu: 'gui', noiGui: stops[0] || '', noiNhan: stops[stops.length - 1] || '', nhanVien: dvLog.who(), chuKy: '' };
+    const v = g ? { ...g, items: GH.items(g).map(it => ({ ...it })) } : { so: GH.nextSo(t.ngay), sdtGui: '', sdtNhan: '', items: [{ tenHang: '', dvt: 'Kiện', sl: 1, donGia: 0 }], nguoiThu: 'nhan', noiGui: stops[0] || '', noiNhan: stops[stops.length - 1] || '', nhanVien: dvLog.who(), chuKy: '' };
     const sig0 = v.chuKy || (isNew && me && me.chuKy) || '';
     const inp = (k, l, a = '') => `<div class="field"><label>${l}</label><input class="inp" data-f="${k}" value="${esc(v[k] ?? '')}" ${a}></div>`;
     const lineH = (it = {}) => `<tr class="gh-ln"><td><input class="inp" data-i="tenHang" value="${esc(it.tenHang || '')}" placeholder="Tên hàng"></td><td><input class="inp" data-i="dvt" list="ghDvt" value="${esc(it.dvt || 'Kiện')}"></td><td><input class="inp r" data-i="sl" type="number" min="0" step="any" inputmode="decimal" value="${esc(it.sl ?? 1)}"></td><td><input class="inp r" data-i="donGia" type="number" min="0" step="1000" inputmode="numeric" value="${esc(it.donGia ?? 0)}"></td><td class="r gh-lt" data-lt>0</td><td><button type="button" class="ibtn" data-rm title="Xóa dòng">${ic('trash')}</button></td></tr>`;
@@ -8175,15 +8201,24 @@ const GH = {
         <div class="field full"><label>Hàng gửi <i class="req">*</i></label>
           <div class="gh-lw"><table class="gh-lines"><thead><tr><th>Tên hàng</th><th style="width:112px">ĐVT</th><th style="width:64px">SL</th><th style="width:104px">Đơn giá</th><th style="width:100px" class="r">Thành tiền</th><th style="width:34px"></th></tr></thead><tbody>${v.items.map(lineH).join('')}</tbody>
           <tfoot><tr><td colspan="2"><button type="button" class="btn sm" data-addln>${ic('plus')} Thêm dòng hàng</button></td><td class="r" data-sl></td><td class="r">Tổng</td><td class="r"><b data-tt></b></td><td></td></tr></tfoot></table></div></div>
-        <div class="field"><label>Người thu (ai trả tiền cước)</label><select class="inp" data-f="nguoiThu">${Object.entries(GH.THU).map(([k, s]) => `<option value="${k}" ${v.nguoiThu === k ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Người thu (ai trả tiền cước)</label><div class="gh-thu"><select class="inp" data-f="nguoiThu">${[...Object.entries(GH.THU), ...[...new Set([...GH.thuX(), ...(v.nguoiThu && !GH.THU[v.nguoiThu] ? [v.nguoiThu] : [])])].map(x => [x, x])].map(([k, s]) => `<option value="${esc(k)}" ${v.nguoiThu === k ? 'selected' : ''}>${esc(s)}</option>`).join('')}<option value="__new">＋ Thêm người thu mới…</option></select><span class="gh-thun" hidden><input class="inp" data-thun placeholder="VD: Lái xe thu, VP Vũng Tàu thu"><button type="button" class="btn sm pri" data-thuok>Thêm</button></span></div></div>
         <div></div>
-        <div class="field full"><label>Chữ ký nhân viên nhận hàng</label><div class="gh-sig"><canvas></canvas><button type="button" class="btn sm" data-clr>Ký lại</button></div><small class="muted">${me && me.chuKy ? 'Đã điền sẵn chữ ký trong hồ sơ của bạn. Bấm "Ký lại" nếu muốn ký tay.' : 'Ký bằng chuột hoặc ngón tay. Có thể để trống và ký tay trên phiếu in.'}</small></div>
+        <div class="field full"><label>Chữ ký nhân viên nhận hàng</label><div class="gh-sig lk"><canvas></canvas><button type="button" class="btn sm" data-clr disabled>Ký lại</button><button type="button" class="btn sm gh-lk" data-lk title="Mở khóa để ký lại">${ic('lock')} Đã khóa</button></div><small class="muted">${me && me.chuKy ? 'Đã điền sẵn chữ ký trong hồ sơ của bạn. Bấm "Ký lại" nếu muốn ký tay.' : 'Ký bằng chuột hoặc ngón tay. Có thể để trống và ký tay trên phiếu in.'}</small></div>
       </div></div>
       <div class="gh-pv"><div class="gh-pvh">Xem trước phiếu K80</div><div class="gh-pvb"><div class="gh-pvp" data-pv></div></div></div></div>`,
       foot: `<button class="btn" data-no>Hủy</button><button class="btn" data-okp>${ic('printer')} Lưu & in K80</button><button class="btn pri" data-ok>${ic('check')} Lưu</button>`
     });
-    const q = s => m.el.querySelector(s), val = k => q(`[data-f="${k}"]`).value.trim(), tb = q('.gh-lines tbody');
+    const q = s => m.el.querySelector(s), val0 = k => q(`[data-f="${k}"]`).value.trim(), val = k => { const x = val0(k); if (k === 'sdtGui' || k === 'sdtNhan') return dvPhone(x) || x.replace(/\s+/g, ''); if (k === 'nguoiThu' && x === '__new') return GH._thuPrev ? GH._thuPrev() : 'nhan'; return x; }, tb = q('.gh-lines tbody');
     const sig = GH.pad(q('.gh-sig'), sig0);
+    { const sb = q('.gh-sig'), lb = q('[data-lk]'), cb = q('[data-clr]');
+      lb.onclick = () => { sb.classList.toggle("lk"); cb.disabled = sb.classList.contains('lk'); lb.innerHTML = sb.classList.contains('lk') ? ic('lock') + ' Đã khóa' : ic('unlock') + ' Đang mở'; lb.title = sb.classList.contains('lk') ? 'Mở khóa để ký lại' : 'Khóa chữ ký'; }; }
+    { const phs = GH.phIdx(); GH.phBind(q('[data-f="sdtGui"]'), phs); GH.phBind(q('[data-f="sdtNhan"]'), phs); }
+    { const sel = q('[data-f="nguoiThu"]'), nb = q('.gh-thun'), ni = q('[data-thun]'); let prev = sel.value;
+      sel.addEventListener('change', () => { if (sel.value === '__new') { nb.hidden = false; ni.focus(); } else { prev = sel.value; nb.hidden = true; } });
+      const addT = () => { const t = ni.value.trim(); if (!t) return toast('Nhập tên người thu', 'err'); if (GH.THU[t] || Object.values(GH.THU).includes(t)) { sel.value = Object.keys(GH.THU).find(k => GH.THU[k] === t) || t; } else { const X = GH.thuX(); if (!X.includes(t)) X.push(t); if (![...sel.options].some(o => o.value === t)) sel.querySelector('[value="__new"]').insertAdjacentHTML('beforebegin', `<option value="${esc(t)}">${esc(t)}</option>`); sel.value = t; }
+        prev = sel.value; ni.value = ''; nb.hidden = true; sel.dispatchEvent(new Event('change', { bubbles: true })); };
+      q('[data-thuok]').onclick = addT; ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addT(); } else if (e.key === 'Escape') { e.stopPropagation(); nb.hidden = true; sel.value = prev; } });
+      GH._thuPrev = () => sel.value === '__new' ? prev : sel.value; }
     const lines = () => [...tb.rows].map(r => { const g2 = k => r.querySelector(`[data-i="${k}"]`).value.trim(); return { tenHang: g2('tenHang'), dvt: g2('dvt'), sl: +g2('sl') || 0, donGia: +g2('donGia') || 0 }; });
     const draft = () => ({ ...(g || {}), so: v.so, chuyen: t.id, ngay: t.ngay, gio: t.gio, tuyen: t.tuyen, tg: (g && g.tg) || dvLog.now(), nguoiLap: (g && g.nguoiLap) || dvLog.who(), sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), nguoiThu: val('nguoiThu'), items: lines().filter(it => it.tenHang || it.donGia), chuKy: sig.val() });
     let pt = 0;
@@ -8206,6 +8241,7 @@ const GH = {
       const items = all.filter(it => it.tenHang || it.donGia);
       const d = { sdtGui: val('sdtGui'), sdtNhan: val('sdtNhan'), items, nguoiThu: val('nguoiThu'), noiGui: val('noiGui'), noiNhan: val('noiNhan'), nhanVien: val('nhanVien'), chuKy: sig.val() };
       if (!d.sdtGui || !d.sdtNhan) return toast('Nhập SĐT người gửi và người nhận', 'err');
+      if (!dvPhone(d.sdtGui) || !dvPhone(d.sdtNhan)) return toast('Số điện thoại ' + (!dvPhone(d.sdtGui) ? 'người gửi' : 'người nhận') + ' không hợp lệ (VD: 0937 745 254)', 'err');
       if (!items.length) return toast('Nhập ít nhất 1 dòng hàng', 'err');
       if (items.some(it => !it.tenHang)) return toast('Có dòng hàng chưa nhập tên hàng', 'err');
       if (bad >= 0) return toast('Dòng hàng ' + (bad + 1) + ': số lượng phải lớn hơn 0', 'err');
@@ -8226,7 +8262,7 @@ const GH = {
     const co = S().company || {}, t = DB.lichchay.find(l => l.id === x.chuyen) || x, T = t.id ? GH.trip(t) : { ngay: x.ngay, gio: x.gio, tuyen: x.tuyen, bks: x.bks, laiXe: x.laiXe, sdtLai: x.sdtLai };
     T.bks = T.bks || x.bks || ''; T.laiXe = T.laiXe || x.laiXe || ''; T.sdtLai = T.sdtLai || x.sdtLai || '';
     const dow = D.dowName ? D.dowName[D.parse(T.ngay).getDay()] : '', ln = '<div class="t8-ln"></div>', row = (k, v) => v ? `<div class="t8-r"><span>${k}</span><b>${v}</b></div>` : '';
-    const tt = GH.tien(x), paid = x.nguoiThu !== 'nhan';
+    const tt = GH.tien(x), paid = GH.paid(x);
     return `<div class="t8">
   <div class="t8-hd gh8-hd"><div class="gh8-top">${co.logo ? `<img src="${co.logo}" alt="">` : ''}<div class="gh8-tx"><div class="t8-co">${esc(String(co.ten || 'NHÀ XE').toUpperCase())}</div></div></div>${co.diaChi ? `<div class="t8-s">Địa chỉ: ${esc(co.diaChi)}</div>` : ''}${co.sdt || co.mst ? `<div class="t8-s">${co.sdt ? 'Hotline: <b>' + esc(co.sdt) + '</b>' : ''}${co.sdt && co.mst ? ' · ' : ''}${co.mst ? 'MST: ' + esc(co.mst) : ''}</div>` : ''}</div>
   <div class="t8-tt">PHIẾU GỬI HÀNG${n > 1 ? ` <small>(${i + 1}/${n})</small>` : ''}</div>
@@ -8241,7 +8277,7 @@ const GH = {
   ${ln}
   ${GH.items(x).map((it, j, A) => `<div class="gh8-it"><b>${A.length > 1 ? (j + 1) + '. ' : ''}${esc(it.tenHang || '...............')}</b><div class="t8-r"><span>${esc(String(+it.sl || 0))} ${esc(it.dvt || '')} × ${F.money(+it.donGia || 0)}</span><b>${F.money(GH.lineTien(it))} đ</b></div></div>`).join('')}
   <div class="t8-r t8-sum"><span>THÀNH TIỀN</span><b>${F.money(tt)} đ</b></div>
-  <div class="t8-pay${paid ? ' ok' : ''}">${paid ? 'NGƯỜI GỬI ĐÃ TRẢ CƯỚC' : `THU NGƯỜI NHẬN ${F.money(tt)} đ`}</div>
+  <div class="t8-pay${paid ? ' ok' : ''}">${paid ? 'NGƯỜI GỬI ĐÃ TRẢ CƯỚC' : x.nguoiThu === 'nhan' ? `THU NGƯỜI NHẬN ${F.money(tt)} đ` : `${esc(String(x.nguoiThu).toUpperCase())} · ${F.money(tt)} đ`}</div>
   ${ln}
   <div class="gh8-sg"><div><small>NGƯỜI GỬI</small><div class="gh8-sp"></div></div><div><small>NV NHẬN HÀNG</small>${x.chuKy ? `<img class="sig-img" src="${x.chuKy}" alt="">` : '<div class="gh8-sp"></div>'}<b${x.chuKy ? ' class="sig-nm"' : ''}>${esc(x.nhanVien || '')}</b></div></div>
   <div class="t8-by">Lập: ${esc(x.nguoiLap || x.nhanVien || '—')} · ${dvLog.fmt(x.tg)}<br>In: ${esc(dvLog.who() || '—')} · ${dvLog.fmt(dvLog.now())}</div>
@@ -8255,7 +8291,7 @@ const GH = {
     const L = GH.list(t.id), T = GH.trip(t); if (!L.length) return;
     Print.report({ title: 'Bảng kê hàng gửi theo xe', sub: `Chuyến ${T.gio} ngày ${F.date(T.ngay)} · ${T.tuyen} · Xe ${T.bks || '—'} · Lái xe ${T.laiXe || '—'}${T.sdtLai ? ' (' + T.sdtLai + ')' : ''}`,
       cols: [{ key: 'so', label: 'Số phiếu' }, { key: 'sdtGui', label: 'SĐT gửi' }, { key: 'sdtNhan', label: 'SĐT nhận' }, { key: 'tenHang', label: 'Tên hàng' }, { key: 'dvt', label: 'ĐVT' }, { key: 'sl', label: 'SL', align: 'r' }, { key: 'tt', label: 'Thành tiền', align: 'r' }, { key: 'thu', label: 'Người thu' }, { key: 'noiNhan', label: 'Nơi nhận' }],
-      rows: L.map(x => ({ ...x, tenHang: GH.items(x).map(it => it.tenHang).join('; '), dvt: GH.dvtTong(x), sl: GH.slTong(x), tt: F.money(GH.tien(x)), thu: GH.THU[x.nguoiThu] || '' })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
+      rows: L.map(x => ({ ...x, tenHang: GH.items(x).map(it => it.tenHang).join('; '), dvt: GH.dvtTong(x), sl: GH.slTong(x), tt: F.money(GH.tien(x)), thu: GH.thuTxt(x.nguoiThu) })), signs: ['Nhân viên giao', 'Lái xe nhận hàng'] });
   }
 };
 addCSS(`@media(max-width:760px){.dv-tabs{flex-wrap:wrap;overflow:visible;row-gap:0;column-gap:14px}.dv-tabs button{padding:9px 0}}
@@ -8264,6 +8300,9 @@ addCSS(`@media(max-width:760px){.dv-tabs{flex-wrap:wrap;overflow:visible;row-gap
 .gh-lw{overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px}.gh-lines{width:100%;border-collapse:collapse;font-size:13px}.gh-lines th{background:#f0f9ff;color:#0c4a6e;font-weight:600;text-align:left;padding:6px 6px;font-size:12px}.gh-lines td{padding:4px 4px;border-top:1px solid #eef2f7}.gh-lines .inp{height:34px;width:100%;min-width:0}.gh-lines .inp.r,.gh-lines .r{text-align:right}.gh-lines tfoot td{background:#f8fafc;padding:6px}.gh-lt{font-weight:700;color:#0369a1;white-space:nowrap}.gh-hn{white-space:normal!important;min-width:160px}
 @media(max-width:900px){.gh-fw{grid-template-columns:1fr}.gh-pv{position:static}}
 .gh-f{grid-template-columns:1fr 1fr}.gh-f .full{grid-column:1/-1}.gh-tt{display:flex;align-items:center;font-weight:800;color:#0369a1;background:#f8fafc}
+.gh-sig.lk canvas{pointer-events:none;opacity:.85}.gh-lk{position:absolute;left:8px;top:8px}.gh-sig:not(.lk) .gh-lk{color:#b45309;border-color:#f59e0b}
+.gh-ac{position:absolute;left:0;right:0;top:100%;z-index:30;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(16,24,40,.16);background:#fff}.gh-ac:empty{display:none}.gh-ac .kh-o{grid-template-columns:120px 1fr auto}
+.gh-thu{display:flex;flex-direction:column;gap:6px}.gh-thun{display:flex;gap:6px}.gh-thun[hidden]{display:none}
 .gh-sig{position:relative;border:1.5px dashed #94a3b8;border-radius:10px;background:#fff;height:130px;touch-action:none}.gh-sig canvas{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}.gh-sig [data-clr]{position:absolute;right:6px;top:6px}
 .gh-t td,.gh-t th{white-space:nowrap}.gh-a{display:flex;gap:2px}@media(max-width:700px){.gh-f{grid-template-columns:1fr}}`);
 {
@@ -14294,7 +14333,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T11:00';
+const APP_BUILD = '2026-11-13T11:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
