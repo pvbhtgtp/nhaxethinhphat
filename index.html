@@ -14570,7 +14570,12 @@ Màn hình trụ bơm thường có 3 dòng: thành tiền (đồng), số lít,
   /* Cách 2: lái xe gửi từ Chuyến của tôi */
   drv(t, fs0) {
     const me = CT.me(), who = ((DB.employees || []).find(e => String(e.id) === me) || {}).ten || dvLog.who();
-    const m0 = Modal.open({ title: '⛽ Báo đổ dầu', width: 420, body: `<p style="margin-top:0">Chụp <b>trụ bơm</b> (tiền, lít, giá), <b>hóa đơn</b>, <b>biển số xe</b> và <b>đồng hồ km</b> (nếu được), giống ảnh gửi nhóm Zalo.</p><button class="ct-b" data-cam style="width:100%;margin-bottom:8px">${ic('camera')} Chụp ảnh</button><button class="ct-b" data-gal style="width:100%">${ic('file')} Chọn ảnh có sẵn</button>`, foot: '<button class="btn" data-no>Đóng</button>' });
+    const m0 = Modal.open({ title: '⛽ Báo đổ dầu', width: 420, body: `<p style="margin-top:0">Chụp <b>trụ bơm</b> (tiền, lít, giá), <b>hóa đơn</b>, <b>biển số xe</b> và <b>đồng hồ km</b> (nếu được), giống ảnh gửi nhóm Zalo. Chụp lần lượt từng ảnh, đủ rồi bấm <b>Đọc ảnh & gửi</b>.</p><div data-th style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div><button class="ct-b" data-cam style="width:100%;margin-bottom:8px">${ic('camera')} <span data-camt>Chụp ảnh</span></button><button class="ct-b" data-gal style="width:100%">${ic('file')} Chọn ảnh có sẵn</button>`, foot: '<button class="btn" data-no>Đóng</button><button class="btn pri" data-go disabled>Đọc ảnh & gửi</button>' });
+    const FS = [], th = m0.el.querySelector('[data-th]'), gb = m0.el.querySelector('[data-go]');
+    const drawTh = () => { th.querySelectorAll('img').forEach(i => URL.revokeObjectURL(i.src)); th.innerHTML = FS.map((f, i) => `<div style="position:relative"><img src="${URL.createObjectURL(f)}" style="width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0"><button type="button" data-rm="${i}" style="position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:0;background:#ef4444;color:#fff;font-weight:700;line-height:24px;padding:0">×</button></div>`).join('');
+      th.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { FS.splice(+b.dataset.rm, 1); drawTh(); });
+      gb.disabled = !FS.length; gb.textContent = FS.length ? `Đọc ảnh & gửi (${FS.length} ảnh)` : 'Đọc ảnh & gửi'; m0.el.querySelector('[data-camt]').textContent = FS.length ? 'Chụp thêm ảnh' : 'Chụp ảnh'; };
+    const addF = fs => { fs.forEach(f => { if (FS.length < 6) FS.push(f); }); if (FS.length >= 6) toast('Tối đa 6 ảnh mỗi lần đổ dầu', '', 3000); drawTh(); };
     m0.el.querySelector('[data-no]').onclick = () => m0.close();
     const go = async fs => { m0.close(); const r = await NLD.fromFiles(fs); if (!r) return;
       if (!r.v.xe && t && t.xe && t.xe.bks) r.v.xe = t.xe.bks; r.v.lai = who;
@@ -14583,7 +14588,8 @@ Màn hình trụ bơm thường có 3 dòng: thành tiền (đồng), số lít,
           toast(ic('check') + ' Đã gửi phiếu đổ dầu cho điều hành duyệt', 'ok', 4000);
         } });
     };
-    m0.el.querySelector('[data-cam]').onclick = () => NLD.file(go, true); m0.el.querySelector('[data-gal]').onclick = () => NLD.file(go, false);
+    m0.el.querySelector('[data-cam]').onclick = () => NLD.file(addF, true); m0.el.querySelector('[data-gal]').onclick = () => NLD.file(addF, false);
+    gb.onclick = () => { if (FS.length) go(FS.slice()); };
     if (fs0 && fs0.length) go(fs0);
   },
   /* ảnh được chia sẻ từ Zalo vào app (Chia sẻ → Thịnh Phát): văn phòng → tạo phiếu; lái xe → báo đổ dầu */
@@ -14718,7 +14724,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T02:00';
+const APP_BUILD = '2026-11-14T02:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
