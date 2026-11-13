@@ -357,8 +357,25 @@ Object.assign(SCN, {
     if (typeof TTT !== 'undefined') { const k = TTT.key(cl), m = R.find(r => TTT.key(r) === k); if (m) return TTT.ends(m).map(x => x.toUpperCase()).join(' - '); }
     return cl.toUpperCase();
   },
+  /* tuyến của lệnh: ưu tiên mã tuyến, rồi 2 bến xe (vd BX Hố Nai, BX Vũng Tàu) khớp tuyến trong app; dòng "Tuyến" in trên lệnh thường là tên tỉnh (Đồng Nai - Bà Rịa Vũng Tàu) nên chỉ dùng sau cùng */
+  routeOfL(L) {
+    L = L || {}; const nm = x => (typeof TTT !== 'undefined' ? TTT.nm(x) : String(x || '').toUpperCase()), dig = x => String(x || '').replace(/\D/g, '');
+    const R = [...new Set([...(DB.giochay || []).map(g => g.tuyen), ...(DB.lichchay || []).slice(-3000).map(l => l.tuyen)].filter(Boolean))], seen = new Set(), C = [];
+    R.forEach(r => { const k = typeof TTT !== 'undefined' ? TTT.key(r) : r; if (seen.has(k)) return; seen.add(k); let v = {}; try { v = TTT.get(r) || {}; } catch (e) { } C.push({ r, v, e: (typeof TTT !== 'undefined' ? TTT.ends(r) : [r]).map(nm) }); });
+    const out = r => (typeof TTT !== 'undefined' ? TTT.ends(r) : [r]).map(x => x.toUpperCase()).join(' - ');
+    if (dig(L.maTuyen).length >= 4) { const m = C.filter(c => dig(c.v.maTuyen) === dig(L.maTuyen)); if (m.length === 1) return out(m[0].r); }
+    const B0 = [L.di && L.di.ben, L.ve && L.ve.ben].filter(Boolean), B = B0.map(nm);
+    if (B.length) {
+      const has = (c, b) => c.e.some(x => x && b.includes(x)) || [c.v.benA, c.v.benB].some(x => x && nm(x) === b);
+      const m = C.filter(c => c.e.length >= 2 && B.every(b => has(c, b)) && c.e.every(x => B.some(b => b.includes(x))));
+      if (m.length === 1) return out(m[0].r);
+      const m2 = C.filter(c => B.every(b => has(c, b))); if (m2.length === 1) return out(m2[0].r);
+      if (B0.length >= 2) return SCN.routeOf(B0.join(' - '));
+    }
+    return SCN.routeOf(L.tuyen);
+  },
   docPath(v) { const L = v.lenh || {}, d = [L.tuNgay, L.di && L.di.ngayXuat, v.ngay].find(x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')) || D.today(), y = d.slice(0, 4), mm = d.slice(5, 7);
-    if (/lệnh/i.test(v.loai || '')) return [y, '08. Điều hành xe', 'Lệnh vận chuyển', SCN.routeOf(L.tuyen || [L.di && L.di.ben, L.ve && L.ve.ben].filter(Boolean).join(' - ')), 'Tháng ' + mm + '-' + y];
+    if (/lệnh/i.test(v.loai || '')) return [y, '08. Điều hành xe', 'Lệnh vận chuyển', SCN.routeOfL(L), 'Tháng ' + mm + '-' + y];
     return /hợp đồng/i.test(v.loai || '') ? [y, '08. Điều hành xe', 'Hợp đồng vận chuyển', 'Tháng ' + mm + '-' + y] : null; },
   tripOf(v) {
     const L = v.lenh || {}, nb = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), b = nb(L.bienSo); if (!b) return { xe: null, T: [] };
