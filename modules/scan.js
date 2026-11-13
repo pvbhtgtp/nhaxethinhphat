@@ -313,7 +313,7 @@ Object.assign(SCN, {
       const sm = SCN.fit(pg.src, 1024), blob = await SCN.blob(sm, 'image/jpeg', .85), W = pg.src.width, H = pg.src.height;
       const toQ = v => ['tl', 'tr', 'br', 'bl'].map(k => { const o = v && v[k]; return o ? [Math.max(0, Math.min(W, +o.x / 1000 * W)), Math.max(0, Math.min(H, +o.y / 1000 * H))] : null; });
       const v = await AIX.race(SCN.AIQ, { images: [blob] }, x => SCN.quadOk(toQ(x), W, H), force ? 20000 : 15000);
-      if (pg.touched && !force) return false; pg.q = toQ(v); pg.ai = AIX.lastBy || 'AI'; pg.thumb = null; return true;
+      if (pg.touched && !force) return false; pg.q = SCN.refine(pg.src, toQ(v)); pg.ai = AIX.lastBy || 'AI'; pg.thumb = null; return true;
     } catch (e) { if (force) toast('AI chưa dò được khung: ' + esc(e.message || e), 'err', 5000); return false; }
   },
   AIR: `Đọc tài liệu trong ảnh (tiếng Việt, có chữ viết tay). Trả về JSON:
@@ -353,6 +353,52 @@ Object.assign(SCN, {
       if (b.dataset.r === 'copy') { const t = [...m.body.querySelectorAll('.scr-t tr')].map(tr => [...tr.cells].map(c => c.textContent).join(': ')).join('\n'); try { await navigator.clipboard.writeText((v.loai || '') + '\n' + t); toast('Đã sao chép', 'ok'); } catch (x) { toast('Không sao chép được', 'err'); } } };
   }
 });
+
+/* ===== Tinh chỉnh khung theo mép giấy thật: từ khung thô (AI hoặc tự nhận), dò dọc từng cạnh chỗ đổi từ giấy sáng sang nền tối,
+   khớp đường thẳng (bỏ điểm nhiễu) rồi lấy giao điểm làm 4 góc. Cạnh nằm ngoài ảnh (giấy bị cắt) thì giữ nguyên. */
+SCN.refine = function (src, Q) {
+  try {
+    const s = SCN.fit(src, 900), w = s.width, h = s.height, k = src.width / w, d = s.getContext('2d').getImageData(0, 0, w, h).data, g = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    const at = (x, y) => { x = Math.round(x); y = Math.round(y); return x < 0 || y < 0 || x >= w || y >= h ? NaN : g[y * w + x]; };
+    const P = Q.map(([x, y]) => [x / k, y / k]), cx = P.reduce((a, p) => a + p[0], 0) / 4, cy = P.reduce((a, p) => a + p[1], 0) / 4, R = Math.round(Math.min(w, h) * 0.09), WIN = Math.max(4, Math.round(Math.min(w, h) * 0.012));
+    const lines = [];
+    for (let e = 0; e < 4; e++) {
+      const A = P[e], B = P[(e + 1) % 4], dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1; let nx = -dy / L, ny = dx / L;
+      const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2; if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }   // pháp tuyến hướng ra ngoài
+      const pts = [];
+      for (let t = 0.06; t <= 0.94; t += 0.02) {
+        const px = A[0] + dx * t, py = A[1] + dy * t; let best = 0, bd = null;
+        for (let o = -R; o <= R; o++) {
+          let si = 0, so = 0, ni = 0, no = 0;
+          for (let j = 1; j <= WIN; j++) { const vi = at(px + nx * (o - j - 1), py + ny * (o - j - 1)), vo = at(px + nx * (o + j + 1), py + ny * (o + j + 1)); if (!isNaN(vi)) { si += vi; ni++; } if (!isNaN(vo)) { so += vo; no++; } }
+          if (ni < WIN * 0.8 || no < WIN * 0.8) continue;
+          const sc = si / ni - so / no; if (sc > best) { best = sc; bd = o; }
+        }
+        if (bd !== null && best > 14) pts.push([px + nx * bd, py + ny * bd]);
+      }
+      if (pts.length < 10) { lines.push(null); continue; }
+      let use = pts, ln = null;
+      for (let it = 0; it < 3; it++) {   // khớp đường thẳng (tổng bình phương nhỏ nhất theo hướng chính), bỏ điểm lệch
+        const n = use.length, ax = use.reduce((a, p) => a + p[0], 0) / n, ay = use.reduce((a, p) => a + p[1], 0) / n; let sxx = 0, sxy = 0, syy = 0;
+        use.forEach(([x, y]) => { sxx += (x - ax) ** 2; sxy += (x - ax) * (y - ay); syy += (y - ay) ** 2; });
+        const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(th), uy = Math.sin(th); ln = { ax, ay, ux, uy };
+        const res = use.map(([x, y]) => Math.abs(-(x - ax) * uy + (y - ay) * ux)), med = res.slice().sort((a, b) => a - b)[res.length >> 1] || 0;
+        const nu = use.filter((p, i) => res[i] <= Math.max(1.5, med * 2.5)); if (nu.length < 8 || nu.length === use.length) break; use = nu;
+      }
+      lines.push(use.length >= pts.length * 0.45 ? ln : null);
+    }
+    const lineOf = e => lines[e] || (() => { const A = P[e], B = P[(e + 1) % 4], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1; return { ax: A[0], ay: A[1], ux: (B[0] - A[0]) / L, uy: (B[1] - A[1]) / L }; })();
+    const X = (a, b) => { const den = a.ux * b.uy - a.uy * b.ux; if (Math.abs(den) < 1e-6) return null; const t = ((b.ax - a.ax) * b.uy - (b.ay - a.ay) * b.ux) / den; return [a.ax + a.ux * t, a.ay + a.uy * t]; };
+    // góc i là giao của cạnh (i-1) và cạnh i
+    const N = [0, 1, 2, 3].map(i => X(lineOf((i + 3) % 4), lineOf(i)));
+    if (N.some(p => !p)) return Q;
+    const out = N.map(([x, y]) => [Math.max(-w * 0.02, Math.min(w * 1.02, x)) * k, Math.max(-h * 0.02, Math.min(h * 1.02, y)) * k]).map(([x, y]) => [Math.max(0, Math.min(src.width, x)), Math.max(0, Math.min(src.height, y))]);
+    const moved = Math.max(...out.map((p, i) => Math.hypot(p[0] - Q[i][0], p[1] - Q[i][1])));
+    return SCN.quadOk(out, src.width, src.height) && moved < Math.max(src.width, src.height) * 0.2 ? out : Q;
+  } catch (e) { return Q; }
+};
+{ const dt0 = SCN.detect; SCN.detect = function (src) { const q = dt0.apply(this, arguments); return src && src.width > 500 ? SCN.refine(src, q) : q; }; }
 {
   const rq0 = SCN.runQ;   // sau khi tự nhận khung trên máy, AI dò lại 4 góc cho chuẩn (chạy nền, người dùng đã kéo góc thì giữ nguyên)
   SCN.runQ = function () { const pg = SCN.qBusy ? null : SCN.Q[0]; const r = rq0.apply(this, arguments); if (pg && typeof AIX !== 'undefined' && AIX.ok()) SCN.aiQuad(pg).then(ok => { if (ok) { SCN.persist(); if (App.cur === 'scan' && !SCN.cam) { if (SCN.P[SCN.cur] === pg) SCN.paint(); else { const i = SCN.P.indexOf(pg), t = document.querySelector(`.scn-pg[data-i="${i}"] img`); if (t) t.src = SCN.thumb(pg); } } } }); return r; };
