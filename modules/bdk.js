@@ -71,7 +71,8 @@ const BDK = {
     try { const on = TK.lcUse(); L += `<li class="${on ? (TK.off.has('c') ? 'bad' : 'ok') : ''}">Lịch chạy gửi tức thì theo từng chuyến: <b>${on ? (TK.off.has('c') ? 'đã bật nhưng Firebase chưa cho phép (cập nhật Rules)' : 'đang bật') : 'đang tắt'}</b> <button class="btn sm" data-lcdoc style="margin-left:6px">${on ? 'Tắt' : 'Bật'}</button></li>`; } catch (e) { }
     try { const n = LCR.dups().length + LCR.merges().length; L += `<li class="${n ? 'bad' : 'ok'}"${n ? ' data-dup style="cursor:pointer"' : ''}>${n ? n + ' chuyến trùng giờ (Điều hành và Đặt vé có thể đang sửa 2 bản khác nhau) · bấm để gộp' : 'Không có chuyến trùng giờ'}</li>`; } catch (e) { }
     try { const R = REFX.scan(), n = R.reduce((a, x) => a + x.n, 0); L += `<li class="${n ? 'bad' : 'ok'}" data-rx style="cursor:pointer">${n ? n + ' liên kết dữ liệu giữa các mod bị lệch · bấm để xem, sửa' : 'Kết dính dữ liệu giữa các mod: khớp'}</li>`; } catch (e) { }
-    return `<ul class="bdk-ul">${L}</ul><button class="btn sm" style="margin-top:8px" data-lcr>Khôi phục chuyến bị thiếu</button>`;
+    try { const v = typeof BKV !== 'undefined' && BKV.st(); if (v) L += `<li class="${v.ok ? 'ok' : 'bad'}">Kiểm tra sao lưu Drive (${esc(dvLog.fmt(new Date(v.t).toISOString().slice(0, 10)))}): ${esc(v.msg)}</li>`; } catch (e) { }
+    return `<ul class="bdk-ul">${L}</ul><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn sm" data-lcr>Khôi phục chuyến bị thiếu</button><button class="btn sm" data-slog>Nhật ký lưu dữ liệu</button>${typeof BK !== 'undefined' && BK.admin() ? '<button class="btn sm" data-bkv>Kiểm tra sao lưu ngay</button>' : ''}</div>`;
   },
   /* ---------- tùy biến ---------- */
   bar() {
@@ -122,6 +123,8 @@ const BDK = {
     el.querySelectorAll('[data-go]').forEach(x => x.onclick = e => { if (BDK.edit || e.target.closest('button')) return; App.go(x.dataset.go); });
     el.querySelectorAll('[data-lcr]').forEach(x => x.onclick = () => { if (!BDK.edit) LCR.open(); });
     el.querySelectorAll('[data-dup]').forEach(x => x.onclick = async () => { if (BDK.edit) return; if (LCR.dups().length) await LCR.clean(); if (LCR.merges().length) await LCR.merge(); });
+    el.querySelectorAll('[data-slog]').forEach(x => x.onclick = () => SLOG.open());
+    el.querySelectorAll('[data-bkv]').forEach(x => x.onclick = async () => { x.disabled = true; x.textContent = 'Đang kiểm tra…'; const r = await BKV.run(true); toast(r ? r.msg : 'Chưa cài sao lưu Drive trên máy này', r && r.ok ? 'ok' : 'err', 6000); App.render(); });
     el.querySelectorAll('[data-lcdoc]').forEach(x => x.onclick = async () => {   // bật/tắt kênh gửi tức thì từng chuyến (khối Vận hành luôn giữ đủ chuyến nên tắt lúc nào cũng an toàn)
       if (BDK.edit) return; const st = S();
       if (TK.lcUse()) { st.lcDocs = false; App.changed(); return toast('Đã tắt. Lịch chạy vẫn đồng bộ như cũ qua khối dữ liệu Vận hành', 'ok', 5000); }

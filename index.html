@@ -9708,13 +9708,15 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
       if (!ch.length) return { ok: true, ver: cur };
       /* CHỐT AN TOÀN: so với bản đang có trên máy chủ, bản sắp lưu mà làm mất hàng loạt bản ghi / làm trống giấy tờ, ảnh → không lưu, hỏi lại */
       if (!(PS.okUntil > Date.now())) { const bad = []; for (const p of ch) { let old = null; try { old = PS.sig[p] ? JSON.parse(PS.sig[p]) : (await PS.get(p)).data; } catch (e) { } if (old) bad.push(...PS.guard(old, sp[p])); }
-        if (bad.length) { PS.block(bad); const er = new Error('Đã chặn lưu vì có thể làm mất dữ liệu: ' + bad[0]); er.guard = true; throw er; } }
+        if (bad.length) { try { SLOG.put({ blocked: bad.slice(0, 5), parts: ch }, body.who); } catch (x) { } PS.block(bad); const er = new Error('Đã chặn lưu vì có thể làm mất dữ liệu: ' + bad[0]); er.guard = true; throw er; } }
+      const lgD = {}; try { ch.forEach(p => { let o = null; try { o = PS.sig[p] ? JSON.parse(PS.sig[p]) : null; } catch (x) { } Object.assign(lgD, SLOG.diff(o, sp[p])); }); } catch (x) { }
       for (const p of ch) {
         const base = body.force || PS.pv[p] == null ? await partVer(p) : PS.pv[p];
         try { const r = await PS.put(p, sp[p], base, body.who); PS.pv[p] = r.ver; PS.sig[p] = JSON.stringify(sp[p]); }
         catch (e) { if (e.conflict) throw conflictErr(cur); throw e; }
       }
       const r = await bump(meta, cur, !!body.force, body.who);
+      try { SLOG.put({ parts: ch, d: lgD, force: !!body.force, ver: r && r.ver }, body.who); } catch (x) { }
       if (ch.some(p => p !== 'core')) { try { ME.soon(); } catch (e) { } }
       return r;
     } catch (e) { if (e.conflict) throw e; throw FB.err(e); }
@@ -9727,6 +9729,117 @@ addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-fl
     } catch (e) { }
   }, 15000);
 }
+
+
+/* ===== GĐ1 an toàn dữ liệu =====
+   SLOG: nhật ký mỗi lần lưu lên Firebase (ai, máy nào, khối nào, thêm/xóa/sửa bao nhiêu bản ghi; cả lần bị chặn) → doc lg_<thời gian>, giữ 60 ngày.
+   AIX proxy: khóa Gemini nằm trong Apps Script Kho hồ sơ, app gọi qua đó → khóa không còn trong dữ liệu chung.
+   BKV: mỗi tuần máy Admin tự mở thử bản sao lưu Drive mới nhất, so với dữ liệu đang dùng, báo nếu hỏng/thiếu. */
+const SLOG = {
+  dev() { try { let d = localStorage.getItem('nx.dev'); if (!d) { d = Math.random().toString(36).slice(2, 8); localStorage.setItem('nx.dev', d); } const u = navigator.userAgent, os = /Android/i.test(u) ? 'Android' : /iPhone|iPad/i.test(u) ? 'iPhone' : /Windows/i.test(u) ? 'Windows' : /Mac/i.test(u) ? 'Mac' : 'Máy khác'; return os + ' ' + d; } catch (e) { return '?'; } },
+  diff(o, n) {   // { key: [thêm, xóa, sửa] } cho mọi danh sách có id
+    const out = {}; if (!n || typeof n !== 'object') return out;
+    Object.keys(n).forEach(k => { const b = n[k], a = o && o[k];
+      if (Array.isArray(b)) { const A = new Map((Array.isArray(a) ? a : []).filter(x => x && x.id).map(x => [x.id, x])), B = new Map(b.filter(x => x && x.id).map(x => [x.id, x])); let add = 0, del = 0, mod = 0;
+        B.forEach((x, id) => { const y = A.get(id); if (!y) add++; else if (JSON.stringify(x) !== JSON.stringify(y)) mod++; }); A.forEach((x, id) => { if (!B.has(id)) del++; });
+        if (!A.size && !B.size && JSON.stringify(a || []) !== JSON.stringify(b)) mod = 1; if (add || del || mod) out[k] = [add, del, mod]; }
+      else if (JSON.stringify(a) !== JSON.stringify(b)) out[k] = [0, 0, 1]; });
+    return out;
+  },
+  put(o, who) {
+    if (typeof FB === 'undefined' || !FB.db) return; const t = new Date(), id = 'lg_' + t.toISOString().replace(/[-:TZ.]/g, '').slice(0, 17) + '_' + Math.random().toString(36).slice(2, 6);
+    const doc = { k: 'lg', at: t.toISOString(), who: who || (typeof dvLog !== 'undefined' ? dvLog.who() : '') || '', dev: SLOG.dev(), app: typeof APP_BUILD !== 'undefined' ? APP_BUILD : '', parts: o.parts || [], d: o.d || {}, ...(o.blocked ? { blocked: o.blocked } : {}), ...(o.force ? { force: true } : {}) };
+    FB.col().doc(id).set(doc).catch(() => { });
+    SLOG.clean();
+  },
+  clean() {   // Admin: mỗi ngày dọn nhật ký cũ hơn 60 ngày
+    try { if (!(Auth.user && Auth.user.role === 'admin')) return; const k = 'nx.lgclean'; if (localStorage.getItem(k) === D.today()) return; localStorage.setItem(k, D.today());
+      const cut = 'lg_' + D.add(D.today(), -60).replace(/-/g, ''), FP = firebase.firestore.FieldPath.documentId();
+      FB.col().where(FP, '>=', 'lg_').where(FP, '<', cut).limit(400).get().then(sn => { if (sn.empty) return; const b = FB.db.batch(); sn.docs.forEach(d => b.delete(d.ref)); return b.commit(); }).catch(() => { });
+    } catch (e) { }
+  },
+  async load(days) { const FP = firebase.firestore.FieldPath.documentId(), from = 'lg_' + D.add(D.today(), -(days - 1)).replace(/-/g, ''); const sn = await FB.col().where(FP, '>=', from).where(FP, '<', 'lg_~').limit(1500).get(); return sn.docs.map(d => d.data()).sort((a, b) => String(b.at).localeCompare(String(a.at))); },
+  KN: () => (typeof LCR !== 'undefined' && LCR.KN) || {},
+  txt(d) { const K = SLOG.KN(); return Object.entries(d || {}).map(([k, [a, x, m]]) => `${K[k] || k}${a ? ' <b class="lg-a">+' + a + '</b>' : ''}${x ? ' <b class="lg-x">−' + x + '</b>' : ''}${m ? ' <span class="muted">sửa ' + m + '</span>' : ''}`).join(' · '); },
+  async open() {
+    if (!(typeof FB !== 'undefined' && FB.db)) return toast('Chưa kết nối Firebase', 'err');
+    let days = 3, q = '';
+    const m = Modal.open({ title: 'Nhật ký lưu dữ liệu', width: 980, body: `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><select class="inp" data-dd style="width:auto">${[1, 3, 7, 30, 60].map(n => `<option value="${n}"${n === days ? ' selected' : ''}>${n === 1 ? 'Hôm nay' : n + ' ngày gần đây'}</option>`).join('')}</select><input class="inp" data-q placeholder="Lọc theo người, máy, mục dữ liệu…" style="flex:1;min-width:200px"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-x> Chỉ lần xóa nhiều / bị chặn</label></div><div data-l class="muted">Đang tải…</div>`, foot: '<button class="btn" data-cancel>Đóng</button>' });
+    m.el.querySelector('[data-cancel]').onclick = () => m.close(); let L = [];
+    const draw = () => { const k = q.trim().toLowerCase(), xo = m.el.querySelector('[data-x]').checked;
+      const V = L.filter(r => (!xo || r.blocked || Object.values(r.d || {}).some(v => v[1] >= 5)) && (!k || [r.who, r.dev, r.app, SLOG.txt(r.d).replace(/<[^>]+>/g, ''), (r.blocked || []).join(' ')].join(' ').toLowerCase().includes(k)));
+      m.el.querySelector('[data-l]').innerHTML = V.length ? `<div class="tbl-wrap free" style="max-height:60vh"><table class="tbl compact lg-t"><thead><tr><th>Thời gian</th><th>Người lưu</th><th>Máy</th><th>Thay đổi</th></tr></thead><tbody>${V.map(r => { const big = r.blocked || Object.values(r.d || {}).some(v => v[1] >= 5);
+        return `<tr class="${big ? 'lg-big' : ''}"><td class="nw">${esc(dvLog.fmt(D.iso(new Date(r.at)) + ' ' + new Date(r.at).toTimeString().slice(0, 8)))}</td><td>${esc(r.who || '—')}</td><td class="nw small">${esc(r.dev || '')}<br><span class="muted">bản ${esc(r.app || '')}</span></td><td class="wrap">${r.blocked ? `<b class="lg-x">⛔ Bị chặn:</b> ${esc(r.blocked.join('; '))}` : SLOG.txt(r.d) || '<span class="muted">(cài đặt)</span>'}${r.force ? ' <span class="badge b-amber">ghi đè</span>' : ''}</td></tr>`; }).join('')}</tbody></table></div><div class="small muted" style="margin-top:6px">${V.length} lần lưu · dòng đỏ: xóa từ 5 bản ghi trở lên hoặc bị chặn</div>` : '<div class="muted" style="padding:14px">Không có lần lưu nào</div>'; };
+    const load = async () => { m.el.querySelector('[data-l]').innerHTML = '<span class="muted">Đang tải…</span>'; try { L = await SLOG.load(days); draw(); } catch (e) { m.el.querySelector('[data-l]').innerHTML = `<span style="color:#b91c1c">Chưa đọc được nhật ký: ${esc(e.message || e)}</span>`; } };
+    m.el.querySelector('[data-dd]').onchange = e => { days = +e.target.value; load(); };
+    m.el.querySelector('[data-q]').oninput = e => { q = e.target.value; draw(); }; m.el.querySelector('[data-x]').onchange = draw;
+    load();
+  }
+};
+addCSS(`.lg-a{color:#15803d}.lg-x{color:#b91c1c}.lg-t tr.lg-big td{background:#fef2f2}`);
+/* ---- AI qua Apps Script (giấu khóa) ---- */
+{
+  const PX = '__px', cfg0 = AIX.cfg;
+  AIX.cfg = function () { const c = cfg0.apply(this, arguments); return c.proxy && !c.key ? { ...c, key: PX } : c; };
+  const call0 = AIX.call;
+  AIX.call = async function (model, body, key, signal) {
+    if (key !== PX) return call0.apply(this, arguments);
+    if (signal && signal.aborted) throw AIX.err('cancelled');
+    let j; try { j = await HS.dcall({ action: 'ai', path: 'models/' + model + ':generateContent', body }, 60000); } catch (e) { throw AIX.err('network', 'Không gọi được AI qua Apps Script: ' + (e.message || e)); }
+    if (signal && signal.aborted) throw AIX.err('cancelled');
+    const st = +j.status || 0; let o = null; try { o = JSON.parse(j.text || '{}'); } catch (e) { }
+    if (st >= 200 && st < 300) return o || {};
+    const msg = (o && o.error && o.error.message) || '';
+    if (st === 400 && body.generationConfig && body.generationConfig.thinkingConfig) { const b2 = JSON.parse(JSON.stringify(body)); delete b2.generationConfig.thinkingConfig; return AIX.call(model, b2, key, signal); }
+    if (st === 404) throw AIX.err('no_model', msg); if (st === 429) throw AIX.err('rate_limited', msg);
+    if (st === 401 || st === 403 || (st === 400 && /api key|API_KEY/i.test(msg))) throw AIX.err('bad_key', msg);
+    throw AIX.err('http_' + st, msg);
+  };
+  const disc0 = AIX.discover;
+  AIX.discover = async function (key, force) {
+    if (key !== PX) return disc0.apply(this, arguments);
+    try { const o = JSON.parse(localStorage.getItem('aix.models') || 'null'); if (!force && o && Date.now() - o.t < 864e5 && o.l.length) return o.l; } catch (e) { }
+    let j; try { j = JSON.parse((await HS.dcall({ action: 'ai', path: 'models?pageSize=200' }, 30000)).text || '{}'); } catch (e) { return []; }
+    const ver = n => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const l = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => String(m.name || '').replace(/^models\//, '')).filter(n => /^gemini-[\d.]+-flash/.test(n) && !/image|tts|audio|live|thinking|exp/i.test(n))
+      .sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) - /lite/.test(b)) || (/preview/.test(a) - /preview/.test(b)) || a.length - b.length).slice(0, 6);
+    try { localStorage.setItem('aix.models', JSON.stringify({ t: Date.now(), l })); } catch (e) { } return l;
+  };
+  /* màn hình cài AI: thêm mục "Giấu khóa AI qua Apps Script" */
+  const set0 = AIX.setup;
+  AIX.setup = function () {
+    set0.apply(this, arguments); const m = [...document.querySelectorAll('.modal-wrap')].pop(); if (!m) return; const c = cfg0(), body = m.querySelector('.modal-b'); if (c.proxy && !c.key) { const k = m.querySelector('#aiK'); if (k) { k.value = ''; k.placeholder = 'Đang giấu khóa trong Apps Script'; } }
+    const box = document.createElement('div'); box.className = 'aipx';
+    box.innerHTML = `<b>🔒 Giấu khóa AI (gọi AI qua Apps Script Kho hồ sơ)</b>${c.proxy ? `<div class="aipx-on">Đang bật: khóa Gemini nằm trong Apps Script, không còn trong dữ liệu chung.</div>` : ''}
+      <ol class="small" style="margin:6px 0;padding-left:18px;line-height:1.6"><li>Vào Management → Kho hồ sơ → <b>Xem mã Apps Script</b>, chép toàn bộ (bản mới có thêm mục AI).</li><li>Mở dự án Apps Script Kho hồ sơ, dán đè mã mới (giữ nguyên MA_KET_NOI, THU_MUC_GOC), dán khóa Gemini vào <code>var KHOA_AI = '…'</code>, bấm Lưu.</li><li>Triển khai → Quản lý bản triển khai → ✏ Chỉnh sửa → Phiên bản: <b>Phiên bản mới</b> → Triển khai (địa chỉ /exec giữ nguyên).</li><li>Bấm <b>Thử qua Apps Script</b>, được thì bấm <b>Bật & xóa khóa khỏi dữ liệu chung</b>.</li></ol>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="btn sm" data-pxt>Thử qua Apps Script</button><button type="button" class="btn sm pri" data-pxon>Bật & xóa khóa khỏi dữ liệu chung</button>${c.proxy ? '<button type="button" class="btn sm" data-pxoff>Tắt (dùng lại khóa trong app)</button>' : ''}</div><div class="small" data-pxr style="margin-top:6px"></div>`;
+    body.appendChild(box); const r = box.querySelector('[data-pxr]');
+    const test = async () => { r.innerHTML = 'Đang thử…'; const keep = DB.settings.ai; DB.settings.ai = { proxy: true, model: (keep && keep.model) || '' };
+      try { const v = await AIX.json('Trả về JSON {"ok":true}'); r.innerHTML = v && v.ok ? `<span style="color:#15803d">✔ Gọi AI qua Apps Script được (model ${esc(AIX._good || '')})</span>` : 'Kết nối được nhưng kết quả lạ'; return !!(v && v.ok); }
+      catch (e) { r.innerHTML = `<span style="color:#b91c1c">Chưa được: ${esc(e.message || AIX.msg(e))}</span>`; return false; } finally { DB.settings.ai = keep; } };
+    box.querySelector('[data-pxt]').onclick = test;
+    box.querySelector('[data-pxon]').onclick = async () => { if (!(await test())) return; const o = cfg0(); DB.settings.ai = { proxy: true, model: o.model || '', ...(o.oa ? { oa: o.oa } : {}), ...(o.an ? { an: o.an } : {}), cross: o.cross }; App.changed(); m.querySelector('[data-x]').click(); toast('Đã giấu khóa Gemini: AI gọi qua Apps Script', 'ok', 5000); };
+    const off = box.querySelector('[data-pxoff]'); if (off) off.onclick = () => { const o = cfg0(); delete o.proxy; DB.settings.ai = { ...o }; App.changed(); m.querySelector('[data-x]').click(); toast('Đã tắt. Dán lại khóa Gemini trong mục AI đọc ảnh', 'ok', 5000); };
+  };
+}
+addCSS(`.aipx{margin-top:12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:10px 12px;font-size:13px}.aipx-on{color:#15803d;font-weight:600;margin-top:4px}`);
+/* ---- BKV: kiểm tra bản sao lưu Drive hằng tuần ---- */
+const BKV = {
+  st: () => { try { return BK.st().vf || null; } catch (e) { return null; } },
+  async run(force) {
+    try {
+      if (!BK.admin() || !BK.ok(BK.cfg())) return null; const o = BKV.st(); if (!force && o && Date.now() - o.t < 7 * 864e5) return o;
+      const j = await BK.call({ action: 'list' }), fs = (j.files || []).sort((a, b) => String(b.at || b.name).localeCompare(String(a.at || a.name)));
+      let r; if (!fs.length) r = { ok: false, msg: 'Không thấy bản sao lưu nào trên Drive' };
+      else { const g = await BK.call({ action: 'getbk', name: fs[0].name }), d = g && g.data, bad = [];
+        if (!d || !d.settings) bad.push('bản sao lưu không đọc được');
+        else ['employees', 'vehicles', 'lichchay', 'datve', 'lylich'].forEach(k => { const a = (DB[k] || []).length, b = (d[k] || []).length; if (a >= 5 && b < a * 0.8) bad.push(`${(SLOG.KN()[k] || k)}: bản sao lưu ${b}, đang dùng ${a}`); });
+        r = { ok: !bad.length, msg: bad.length ? bad.join('; ') : 'Bản sao lưu ' + (fs[0].at ? dvLog.fmt(String(fs[0].at).slice(0, 16).replace('T', ' ')) : fs[0].name) + ' đọc được, đủ dữ liệu', name: fs[0].name }; }
+      r.t = Date.now(); BK.setSt({ vf: r }); if (!r.ok) { try { SYS.add('Sao lưu Drive', r.msg); } catch (e) { } } return r;
+    } catch (e) { const r = { ok: false, msg: 'Không kiểm tra được bản sao lưu: ' + (e.message || e), t: Date.now() }; try { BK.setSt({ vf: r }); } catch (x) { } return r; }
+  }
+};
+setTimeout(() => { setInterval(() => { try { if (Auth.user && !Store.dirty) BKV.run(false); } catch (e) { } }, 6 * 36e5); try { if (Auth.user) BKV.run(false); } catch (e) { } }, 90000);
 
 /* ===== MÁY CHỦ DỰ PHÒNG CLOUDFLARE (Workers + R2) =====
    - Dữ liệu được NÉN (gzip) + MÃ HÓA AES-256-GCM trên máy trước khi gửi; khóa sinh từ "mã kết nối Cloudflare" (PBKDF2-SHA256, 210.000 vòng).
@@ -11987,11 +12100,22 @@ function doPost(e) {
     else if (b.action === 'hs_put') out = put_(b);
     else if (b.action === 'hs_get') out = get_(b);
     else if (b.action === 'hs_del') out = del_(b);
+    else if (b.action === 'ai') out = ai_(b);
     else throw new Error('Lệnh không hợp lệ: ' + b.action);
   } catch (err) { out = { ok: false, description: String(err.message || err) }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 function doGet() { return ContentService.createTextOutput('Kho ho so Nha Xe: dang hoat dong'); }
+// AI đọc ảnh qua Apps Script: dán khóa Gemini vào giữa 2 dấu nháy (khóa chỉ nằm ở đây, không còn lưu trong dữ liệu chung của app)
+var KHOA_AI = '';
+function ai_(b) {
+  var k = KHOA_AI || PropertiesService.getScriptProperties().getProperty('KHOA_AI'); if (!k) throw new Error('Chưa dán khóa AI vào Apps Script (biến KHOA_AI)');
+  var path = String(b.path || ''); if (!/^models(\?pageSize=\d+|\/[\w.\-]+:generateContent)$/.test(path)) throw new Error('Đường dẫn AI không hợp lệ');
+  var o = { method: b.body ? 'post' : 'get', headers: { 'x-goog-api-key': k }, muteHttpExceptions: true };
+  if (b.body) { o.contentType = 'application/json'; o.payload = JSON.stringify(b.body); }
+  var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/' + path, o);
+  return { ok: true, status: r.getResponseCode(), text: r.getContentText() };
+}
 function goc_() { var it = DriveApp.getFoldersByName(THU_MUC_GOC); return it.hasNext() ? it.next() : DriveApp.createFolder(THU_MUC_GOC); }
 function con_(cha, ten) { ten = String(ten).replace(/[\\\/]/g, '-').trim() || '_'; var it = cha.getFoldersByName(ten); return it.hasNext() ? it.next() : cha.createFolder(ten); }
 function ping_() { var g = goc_(); return { ok: true, used: DriveApp.getStorageUsed(), limit: DriveApp.getStorageLimit(), folder: g.getUrl(), name: g.getName() }; }
@@ -14348,7 +14472,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T16:00';
+const APP_BUILD = '2026-11-13T16:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
