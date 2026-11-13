@@ -251,7 +251,6 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
 .pr-head{display:flex;gap:14px;align-items:center;border-bottom:2px solid var(--p);padding-bottom:10px;margin-bottom:12px}
 .pr-head img{max-height:58px;max-width:120px}
 .nosig .sig-img{visibility:hidden}
-.sig-nm{display:none!important}.nosig .sig-nm{display:revert!important}
 @media(max-width:900px){
 .grid>*,.cols-2>*{min-width:0}
 .bac{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -3068,7 +3067,7 @@ function tvDonHTML(e, q) {
     <li>Bàn giao đầy đủ công việc, tài sản, hồ sơ, tài liệu và công cụ làm việc cho ${nhan}${x.bg ? ' trước ngày <b>' + F.date(x.bg) + '</b>' : ''}${x.items.length ? ', gồm:<ul style="margin:2px 0;padding-left:20px">' + x.items.map(i => `<li>${esc(i)}</li>`).join('') + '</ul>' : '.'}</li>
     <li>Thanh toán dứt điểm các khoản tạm ứng, công nợ (nếu có) với Công ty.</li></ol>
     <p style="margin:8px 0;text-align:justify">Kính mong Ban Giám đốc và Trưởng bộ phận xem xét, chấp thuận. Tôi xin chân thành cảm ơn!</p>
-    <table style="width:100%;border:0;page-break-inside:avoid"><tr><td style="width:50%;border:0"></td><td style="text-align:center;vertical-align:top;border:0;color:#000"><b>NGƯỜI LÀM ĐƠN</b><br><i>(Ký và ghi rõ họ tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:6px auto 0;height:64px;max-width:70%;object-fit:contain">` : '<div style="height:70px"></div>'}</td></tr></table>
+    <table style="width:100%;border:0;page-break-inside:avoid"><tr><td style="width:50%;border:0"></td><td style="text-align:center;vertical-align:top;border:0;color:#000"><b>NGƯỜI LÀM ĐƠN</b>${e.chuKy ? '' : '<br><i>(Ký và ghi rõ họ tên)</i>'}${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:6px auto 0;height:64px;max-width:70%;object-fit:contain">` : '<div style="height:70px"></div>'}</td></tr></table>
     <table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr><td style="width:50%;text-align:center;vertical-align:top;border:0;color:#000"><b>Ý KIẾN CỦA TRƯỞNG BỘ PHẬN</b><br><i>(Ký và ghi rõ họ tên)</i><div style="height:78px"></div></td>
     <td style="text-align:center;vertical-align:top;border:0;color:#000"><b>PHÊ DUYỆT CỦA BAN GIÁM ĐỐC</b><br><i>(Ký, ghi rõ họ tên)</i><div style="height:78px"></div></td></tr></table></div>`;
 }
@@ -11607,7 +11606,7 @@ const LVC = {
     const d = String(o.ngay || '').split('-'), co = String(c.ten || '').toUpperCase(), k = co.indexOf(' MTV '), co1 = k > 0 ? co.slice(0, k + 4) : co, co2 = k > 0 ? co.slice(k + 5) : '';
     const L = 'border:1px solid #000;padding:6px 8px;vertical-align:middle', C = L + ';text-align:center', H = 'height:24mm';
     const r = (lb, v) => `<div style="padding:3px 0;text-align:left;white-space:nowrap">${lb}${v}</div>`;
-    const sg = (t2, e) => `<td style="${C};width:33.3%;height:40mm;vertical-align:top"><b>${t2}</b><br><i style="font-size:12px">(Ký và ghi rõ họ tên)</i><div style="height:22mm;display:flex;align-items:center;justify-content:center">${e ? img(e.chuKy, 60) : ''}</div></td>`;
+    const sg = (t2, e) => `<td style="${C};width:33.3%;height:40mm;vertical-align:top"><b>${t2}</b>${e && e.chuKy ? '' : '<br><i style="font-size:12px">(Ký và ghi rõ họ tên)</i>'}<div style="height:22mm;display:flex;align-items:center;justify-content:center">${e ? img(e.chuKy, 60) : ''}</div></td>`;
     const leg = (nm, a, b, gA, gB) => `<tr><td rowspan="2" style="${C}"><b>${nm}</b></td><td style="${C};${H}">Bến xe đi:<br><b>${esc(a)}</b></td><td style="${C};white-space:nowrap"><b>Xuất bến:</b><div style="margin-top:6px">${gA}</div></td><td style="${C}"></td><td style="${L}"></td></tr>
         <tr><td style="${C};${H}">Bến xe đến:<br><b>${esc(b)}</b></td><td style="${C};white-space:nowrap"><b>đến bến:</b><div style="margin-top:6px">${gB}</div></td><td style="${C}"></td><td style="${L}"></td></tr>`;
     return `<div class="hd lvc-a4" style="font-family:'Times New Roman',Times,serif;font-size:14px;line-height:1.35;color:#000">
@@ -14335,7 +14334,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T12:20';
+const APP_BUILD = '2026-11-13T12:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
