@@ -2,7 +2,7 @@
 /* Module Scan tài liệu · tải khi mở màn hình Scan hoặc khi cần nắn ảnh thẻ (Nhân viên). */
 /* ===================== SCAN TÀI LIỆU (kiểu CamScanner) =====================
    Chụp / chọn nhiều ảnh → tự nhận khung giấy (kéo 4 góc để chỉnh) → nắn phẳng phối cảnh → làm rõ chữ (Tăng nét, Xám, Đen trắng)
-   → xuất PDF nhiều trang, JPG, PNG, WEBP hoặc lưu thẳng vào Lưu trữ hồ sơ (Google Drive). Xử lý hoàn toàn trên máy, không dùng thư viện ngoài.
+   → xuất PDF nhiều trang, JPG, PNG, WEBP hoặc lưu thẳng vào Lưu trữ hồ sơ (Google Drive). Xử lý ảnh trên máy; nếu có khóa AI thì AI dò 4 góc giấy và đọc nội dung.
    Ảnh chỉ nằm trong bộ nhớ trình duyệt khi đang scan, không ghi vào Firebase. */
 const SCN = {
   P: [], cur: -1, busy: false, MAX: 2400, FILTERS: [['magic', 'Tăng nét (khuyên dùng)'], ['color', 'Màu gốc'], ['gray', 'Xám'], ['bw', 'Đen trắng']],
@@ -61,17 +61,28 @@ const SCN = {
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const x1 = Math.max(0, x - R), y1 = Math.max(0, y - R), x2 = Math.min(w, x + R + 1), y2 = Math.min(h, y + R + 1); out[(y * w + x) * 3 + ch] = (I[y2 * (w + 1) + x2] - I[y1 * (w + 1) + x2] - I[y2 * (w + 1) + x1] + I[y1 * (w + 1) + x1]) / ((x2 - x1) * (y2 - y1)); } }
     return { w, h, v: out };
   },
+  /* làm rõ kiểu CamScanner: chia cho nền (khử bóng) → đẩy giấy về trắng, mực đậm lên (levels + gamma) → giữ màu mực xanh / dấu đỏ → làm nét */
   filter(c, mode) {
     if (mode === 'color') return c;
     const W = c.width, H = c.height, ctx = c.getContext('2d'), id = ctx.getImageData(0, 0, W, H), p = id.data, B = SCN.bg(c), sx = B.w / W, sy = B.h / H;
+    const LO = 55, HI = 228, lv = v => { let t = (v - LO) / (HI - LO); t = t <= 0 ? 0 : t >= 1 ? 1 : t; return 255 * Math.pow(t, 1.35); };
     for (let y = 0; y < H; y++) { const by = Math.min(B.h - 1, (y * sy) | 0); for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4, bi = (by * B.w + Math.min(B.w - 1, (x * sx) | 0)) * 3, r = p[i], g = p[i + 1], bb = p[i + 2];
-      if (mode === 'gray' || mode === 'bw') { const l = r * 0.299 + g * 0.587 + bb * 0.114, lb = B.v[bi] * 0.299 + B.v[bi + 1] * 0.587 + B.v[bi + 2] * 0.114 || 1, n = Math.min(255, l / lb * 245);
-        const val = mode === 'bw' ? (n < 200 ? 0 : 255) : Math.max(0, Math.min(255, (n - 30) * 1.25)); p[i] = p[i + 1] = p[i + 2] = val; }
-      else { let R = Math.min(255, r / (B.v[bi] || 1) * 245), G = Math.min(255, g / (B.v[bi + 1] || 1) * 245), Bl = Math.min(255, bb / (B.v[bi + 2] || 1) * 245); const m = (R + G + Bl) / 3;
-        R = m + (R - m) * 1.25; G = m + (G - m) * 1.25; Bl = m + (Bl - m) * 1.25; const k = v => Math.max(0, Math.min(255, (v - 25) * 1.15)); p[i] = k(R); p[i + 1] = k(G); p[i + 2] = k(Bl); }
+      const nr = Math.min(255, r / (B.v[bi] || 1) * 250), ng = Math.min(255, g / (B.v[bi + 1] || 1) * 250), nb = Math.min(255, bb / (B.v[bi + 2] || 1) * 250), l = nr * 0.299 + ng * 0.587 + nb * 0.114;
+      if (mode === 'gray') { p[i] = p[i + 1] = p[i + 2] = lv(l); continue; }
+      if (mode === 'bw') { p[i] = p[i + 1] = p[i + 2] = l < 175 ? 0 : 255; continue; }
+      const L2 = lv(l), k = l > 1 ? L2 / l : 0, sat = 1.45;   // giữ sắc mực: tỷ lệ độ sáng mới, tăng bão hòa
+      let R = l + (nr - l) * sat, G = l + (ng - l) * sat, Bl = l + (nb - l) * sat; R *= k; G *= k; Bl *= k;
+      if (L2 > 246) R = G = Bl = 255;
+      p[i] = R < 0 ? 0 : R > 255 ? 255 : R; p[i + 1] = G < 0 ? 0 : G > 255 ? 255 : G; p[i + 2] = Bl < 0 ? 0 : Bl > 255 ? 255 : Bl;
     } }
+    if (mode !== 'bw') SCN.sharp(p, W, H, mode === 'gray' ? 0.55 : 0.7);
     ctx.putImageData(id, 0, 0); return c;
+  },
+  sharp(p, W, H, a) {   // làm nét (unsharp 3x3), bỏ qua vùng giấy trắng
+    const src = new Uint8ClampedArray(p);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = (y * W + x) * 4; if (src[i] > 250 && src[i + 1] > 250 && src[i + 2] > 250) continue;
+      for (let ch = 0; ch < 3; ch++) { const c0 = src[i + ch], m = (src[i - 4 + ch] + src[i + 4 + ch] + src[i - W * 4 + ch] + src[i + W * 4 + ch]) / 4; p[i + ch] = c0 + (c0 - m) * a * 2; } }
   },
   out(pg, max) { return SCN.filter(SCN.warp(pg.src, pg.q, max), pg.f); },
   rot(pg) { const s = pg.src, c = SCN.cv(s.height, s.width), x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(s, 0, 0); pg.src = c; pg.q = pg.q.map(([a, b]) => [s.height - b, a]); pg.q = [pg.q[3], pg.q[0], pg.q[1], pg.q[2]]; pg.thumb = null; },
@@ -287,4 +298,79 @@ addCSS(`.scn-sw{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-to
 .scc-bot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 24px 22px}.scc-side{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;justify-self:center;color:#fff}.scc-side svg{width:26px;height:26px;stroke:#fff}.scc-side small{font-size:12px}
 .scc-shut{width:76px;height:76px;border-radius:50%;border:5px solid #14b8a6!important;background:#fff!important;box-shadow:0 0 0 4px #000 inset}.scc-shut:active{transform:scale(.94)}
 .scc-th{position:relative;width:46px;height:46px;border-radius:8px;overflow:hidden;border:2px solid #fff;display:block}.scc-th img{width:100%;height:100%;object-fit:cover}.scc-th b{position:absolute;right:2px;bottom:2px;background:#14b8a6;color:#fff;border-radius:9px;font-size:11px;padding:0 5px}`);
+
+/* ===== AI cho máy quét: dò 4 góc tờ giấy (khi có khóa AI) + đọc nội dung tài liệu ===== */
+Object.assign(SCN, {
+  AIQ: 'Ảnh chụp một tờ giấy/tài liệu đặt trên mặt bàn hoặc nền khác. Hãy tìm 4 GÓC MÉP NGOÀI của tờ giấy (mép giấy thật, không lấy khung kẻ bên trong, không lấy mép bàn). Tọa độ theo thang 0-1000: x tính theo chiều ngang ảnh (0 = trái, 1000 = phải), y theo chiều dọc (0 = trên, 1000 = dưới). Góc nằm ngoài ảnh thì lấy điểm trên mép ảnh gần nhất. Chỉ trả về JSON: {"tl":{"x":0,"y":0},"tr":{"x":0,"y":0},"br":{"x":0,"y":0},"bl":{"x":0,"y":0}}',
+  quadOk(Q, w, h) {
+    if (!Q || Q.length !== 4 || Q.some(p => !p || !isFinite(p[0]) || !isFinite(p[1]))) return false;
+    let a = 0, sg = 0; for (let i = 0; i < 4; i++) { const [x1, y1] = Q[i], [x2, y2] = Q[(i + 1) % 4], [x3, y3] = Q[(i + 2) % 4], cr = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2); if (!sg) sg = Math.sign(cr); else if (Math.sign(cr) !== sg) return false; a += x1 * y2 - x2 * y1; }
+    return Math.abs(a) / 2 > w * h * 0.12;
+  },
+  async aiQuad(pg, force) {
+    if (!(typeof AIX !== 'undefined' && AIX.ok())) { if (force) toast('Chưa có khóa AI (Cài đặt → AI) nên dùng cách tự nhận khung trên máy', 'err', 5000); return false; }
+    try {
+      const sm = SCN.fit(pg.src, 1024), blob = await SCN.blob(sm, 'image/jpeg', .85), W = pg.src.width, H = pg.src.height;
+      const toQ = v => ['tl', 'tr', 'br', 'bl'].map(k => { const o = v && v[k]; return o ? [Math.max(0, Math.min(W, +o.x / 1000 * W)), Math.max(0, Math.min(H, +o.y / 1000 * H))] : null; });
+      const v = await AIX.race(SCN.AIQ, { images: [blob] }, x => SCN.quadOk(toQ(x), W, H), force ? 20000 : 15000);
+      if (pg.touched && !force) return false; pg.q = toQ(v); pg.ai = AIX.lastBy || 'AI'; pg.thumb = null; return true;
+    } catch (e) { if (force) toast('AI chưa dò được khung: ' + esc(e.message || e), 'err', 5000); return false; }
+  },
+  AIR: `Đọc tài liệu trong ảnh (tiếng Việt, có chữ viết tay). Trả về JSON:
+{"loai":"Lệnh vận chuyển | Hợp đồng vận chuyển | Hóa đơn | Phiếu thu/chi | Giấy tờ xe | Giấy tờ cá nhân | Khác","tieuDe":"","soVanBan":"","ngay":"YYYY-MM-DD","tomTat":"1-2 câu",
+"truong":[{"ten":"tên mục","giaTri":"giá trị đọc được"}],
+"lenh":{"so":"","tuNgay":"YYYY-MM-DD","denNgay":"YYYY-MM-DD","laiXe1":"","hangGPLX1":"","laiXe2":"","bienSo":"","soGhe":"","tuyen":"","maTuyen":"","cuLy":"","di":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""},"ve":{"ben":"","gioXuat":"HH:MM","ngayXuat":"YYYY-MM-DD","gioDen":"HH:MM","ngayDen":"YYYY-MM-DD","soKhach":""}}}
+"lenh" chỉ điền khi là Lệnh vận chuyển. Năm viết tắt (vd 26) là 2026. Không đoán: chỗ không đọc được để trống. "truong" liệt kê đủ các thông tin quan trọng đọc được.`,
+  async aiRead() {
+    const pg = SCN.P[SCN.cur]; if (!pg) return;
+    if (!(typeof AIX !== 'undefined' && AIX.ok())) return toast('Chưa có khóa AI (Cài đặt → AI) nên chưa đọc được nội dung', 'err', 5000);
+    const m = Modal.open({ title: '🤖 AI đọc nội dung tài liệu', width: 720, body: '<div class="muted" style="padding:20px;text-align:center">⏳ AI đang đọc trang ' + (SCN.cur + 1) + '…</div>', foot: '<button class="btn" data-cancel>Đóng</button>' });
+    m.el.querySelector('[data-cancel]').onclick = () => m.close();
+    let v; try { const c = SCN.out(pg, 1800), blob = await SCN.blob(c, 'image/jpeg', .9); v = await AIX.race(SCN.AIR, { images: [blob] }, x => x && typeof x === 'object' && (x.loai || (x.truong || []).length), 30000); }
+    catch (e) { m.body.innerHTML = `<div style="padding:16px;color:#b91c1c">AI chưa đọc được: ${esc(e.message || e)}</div>`; return; }
+    pg.doc = v; SCN.showDoc(m, v);
+  },
+  docName(v) { const L = v.lenh || {}, d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
+  docPath(v) { const d = (v.lenh && v.lenh.tuNgay) || v.ngay || D.today(), y = d.slice(0, 4), mm = d.slice(5, 7), loai = /lệnh/i.test(v.loai || '') ? 'Lệnh vận chuyển' : /hợp đồng/i.test(v.loai || '') ? 'Hợp đồng vận chuyển' : ''; return loai ? [y, '08. Điều hành xe', loai, 'Tháng ' + mm + '-' + y] : null; },
+  tripOf(v) {
+    const L = v.lenh || {}, nb = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), b = nb(L.bienSo); if (!b) return { xe: null, T: [] };
+    const xe = (DB.vehicles || []).find(x => nb(x.bks) && (nb(x.bks) === b || nb(x.bks).endsWith(b.slice(-5)))) || null; if (!xe) return { xe: null, T: [] };
+    const days = [L.di && L.di.ngayXuat, L.ve && L.ve.ngayXuat, L.tuNgay].filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x || ''));
+    return { xe, T: (DB.lichchay || []).filter(l => l.xeId === xe.id && days.includes(l.ngay)).sort((a, c) => (a.ngay + a.gio).localeCompare(c.ngay + c.gio)) };
+  },
+  showDoc(m, v) {
+    const L = v.lenh || null, r = (k, x) => x ? `<tr><td>${esc(k)}</td><td><b>${esc(x)}</b></td></tr>` : '', dt = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? F.date(x) : (x || '');
+    const leg = (t, o) => o && (o.gioXuat || o.gioDen) ? r(t, `${o.ben || ''}${o.gioXuat ? ' · xuất ' + o.gioXuat + ' ' + dt(o.ngayXuat) : ''}${o.gioDen ? ' · đến ' + o.gioDen + ' ' + dt(o.ngayDen) : ''}${o.soKhach ? ' · ' + o.soKhach + ' khách' : ''}`) : '';
+    const M = L ? SCN.tripOf(v) : { xe: null, T: [] }, path = SCN.docPath(v);
+    m.body.innerHTML = `<div class="scr"><div class="scr-h"><span class="badge b-blue">${esc(v.loai || 'Tài liệu')}</span><b>${esc(v.tieuDe || '')}</b><span class="muted small">đọc bởi ${esc(AIX.lastBy || 'AI')}</span></div>${v.tomTat ? `<div class="scr-s">${esc(v.tomTat)}</div>` : ''}
+      <table class="scr-t">${L ? r('Số lệnh', L.so) + r('Hiệu lực', [dt(L.tuNgay), dt(L.denNgay)].filter(Boolean).join(' → ')) + r('Lái xe 1', [L.laiXe1, L.hangGPLX1 && 'GPLX hạng ' + L.hangGPLX1].filter(Boolean).join(' · ')) + r('Lái xe 2', L.laiXe2) + r('Biển số', L.bienSo) + r('Số ghế', L.soGhe) + r('Tuyến', [L.tuyen, L.maTuyen && 'mã ' + L.maTuyen, L.cuLy && L.cuLy].filter(Boolean).join(' · ')) + leg('Lượt đi', L.di) + leg('Lượt về', L.ve) : r('Số', v.soVanBan) + r('Ngày', dt(v.ngay))}
+      ${(v.truong || []).filter(x => x && x.ten && x.giaTri).map(x => r(x.ten, x.giaTri)).join('')}</table>
+      ${L ? `<div class="scr-m">${M.xe ? `Xe <b>${esc(M.xe.bks)}</b>: ${M.T.length ? M.T.map(t => `<span class="badge b-gray">${esc(t.gio)} ${F.date(t.ngay)} · ${esc(t.tuyen)}</span>`).join(' ') : 'chưa có chuyến trong Lịch chạy những ngày này'}` : 'Không tìm thấy xe có biển số này trong Phương tiện'}</div>` : ''}
+      <div class="scr-b"><button type="button" class="btn sm pri" data-r="name">Đặt tên tài liệu: “${esc(SCN.docName(v))}”</button>${path && Auth.can('hoso', 'add') ? `<button type="button" class="btn sm" data-r="fd">Chọn thư mục: ${esc(path.slice(1).join(' / '))}</button>` : ''}<button type="button" class="btn sm" data-r="copy">Sao chép nội dung</button></div></div>`;
+    m.body.onclick = async e => { const b = e.target.closest('[data-r]'); if (!b) return;
+      if (b.dataset.r === 'name') { SCN.name = SCN.docName(v); const n = $('#scnName'); if (n) n.value = SCN.name; toast('Đã đặt tên tài liệu', 'ok'); }
+      if (b.dataset.r === 'fd') { SCN.fd = HS.ensure(path); Store.changed(); SCN.paint(); toast('Đã chọn thư mục ' + esc(HS.ptxt(SCN.fd)), 'ok'); }
+      if (b.dataset.r === 'copy') { const t = [...m.body.querySelectorAll('.scr-t tr')].map(tr => [...tr.cells].map(c => c.textContent).join(': ')).join('\n'); try { await navigator.clipboard.writeText((v.loai || '') + '\n' + t); toast('Đã sao chép', 'ok'); } catch (x) { toast('Không sao chép được', 'err'); } } };
+  }
+});
+{
+  const rq0 = SCN.runQ;   // sau khi tự nhận khung trên máy, AI dò lại 4 góc cho chuẩn (chạy nền, người dùng đã kéo góc thì giữ nguyên)
+  SCN.runQ = function () { const pg = SCN.qBusy ? null : SCN.Q[0]; const r = rq0.apply(this, arguments); if (pg && typeof AIX !== 'undefined' && AIX.ok()) SCN.aiQuad(pg).then(ok => { if (ok) { SCN.persist(); if (App.cur === 'scan' && !SCN.cam) { if (SCN.P[SCN.cur] === pg) SCN.paint(); else { const i = SCN.P.indexOf(pg), t = document.querySelector(`.scn-pg[data-i="${i}"] img`); if (t) t.src = SCN.thumb(pg); } } } }); return r; };
+  const h1 = SCN.html;
+  SCN.html = function () { let s = h1.apply(this, arguments); const pg = SCN.P[SCN.cur]; if (!pg) return s;
+    s = s.replace(`<button class="btn sm" data-sc="auto">`, `<button class="btn sm pri" data-sc="aiq" title="Dùng AI tìm đúng 4 góc tờ giấy">🤖 AI dò khung</button><button class="btn sm" data-sc="auto">`);
+    s = s.replace('<small>kéo 4 góc tròn cho khớp mép giấy</small>', `<small>kéo 4 góc tròn cho khớp mép giấy${pg.ai ? ' · <b style="color:#0f766e">AI đã dò khung</b>' : ''}</small>`);
+    s = s.replace('<div class="scn-res">', `<div class="scn-res">`).replace(/(data-sc="flt" data-f="bw">[^<]*<\/button>)/, `$1<button class="btn sm scn-air" data-sc="air">🤖 AI đọc nội dung</button>`);
+    return s; };
+  const a1 = SCN.act;
+  SCN.act = async function (a, b) {
+    if (a === 'aiq') { const pg = SCN.P[SCN.cur]; if (!pg) return; b.disabled = true; b.textContent = '⏳ AI đang dò…'; const ok = await SCN.aiQuad(pg, true); if (ok) { pg.touched = false; SCN.persist(); toast('AI đã dò khung giấy', 'ok', 2000); } SCN.paint(); return; }
+    if (a === 'air') return SCN.aiRead();
+    if (a === 'auto' || a === 'full') { const pg = SCN.P[SCN.cur]; if (pg) pg.ai = ''; }
+    return a1.apply(this, arguments);
+  };
+  const bd1 = SCN.bindEd; SCN.bindEd = function () { const r = bd1.apply(this, arguments); const pg = SCN.P[SCN.cur], svg = $('#scnSvg'); if (svg && pg) { const d0 = svg.onpointerdown; svg.onpointerdown = e => { if (e.target.closest('[data-h]')) { pg.touched = true; pg.ai = ''; } d0 && d0(e); }; } return r; };
+}
+addCSS(`.scn-air{background:#0f766e!important;border-color:#0f766e!important;color:#fff!important}.scr{display:flex;flex-direction:column;gap:10px}.scr-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.scr-h .muted{margin-left:auto}.scr-s{color:#344054;font-size:13.5px}
+.scr-t{width:100%;border-collapse:collapse;font-size:13px}.scr-t td{border-top:1px solid #eef0f5;padding:6px 8px;vertical-align:top}.scr-t td:first-child{color:#667085;width:34%;white-space:nowrap}.scr-m{background:#f8fafc;border:1px solid #e4e7ec;border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.8}.scr-b{display:flex;gap:6px;flex-wrap:wrap}`);
 MODL.def('scan', vSCN);
