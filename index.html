@@ -1390,12 +1390,13 @@ const Store = {
     doc.querySelector('#app-data').textContent = JSON.stringify(DB).replace(/</g, '\\u003c');
     return '<!DOCTYPE html>\n' + doc.outerHTML;
   },
-  kb() { const n = Date.now(); if (!Store._kb || n - Store._kb.t > 60000) { let v = 0; try { v = JSON.stringify(DB).length / 1024; } catch (e) { } Store._kb = { t: n, v }; } return Store._kb.v; },
+  json(x) { try { return IMGX.json(x); } catch (e) { return JSON.stringify(x); } },   // ảnh đã lên Drive chỉ ghi mã tham chiếu
+  kb() { const n = Date.now(); if (!Store._kb || n - Store._kb.t > 60000) { let v = 0; try { v = Store.json(DB).length / 1024; } catch (e) { } Store._kb = { t: n, v }; } return Store._kb.v; },
   changed() {
     Store.dirty = true; Store.status();
     clearTimeout(Store.timer);
     if (Date.now() - (Store._lsFail || 0) < 30 * 60000) return;   // lần trước không vừa bộ nhớ trình duyệt: không dựng lại chuỗi dữ liệu mỗi lần sửa
-    Store.timer = setTimeout(() => { try { localStorage.setItem(Store.key(), JSON.stringify({ at: new Date().toISOString(), data: DB })); Store._lsFail = 0; } catch (e) { if (e && /quota/i.test(e.name + ' ' + e.message)) Store._lsFail = Date.now(); } }, 600);
+    Store.timer = setTimeout(() => { try { localStorage.setItem(Store.key(), Store.json({ at: new Date().toISOString(), data: DB })); Store._lsFail = 0; } catch (e) { if (e && /quota/i.test(e.name + ' ' + e.message)) Store._lsFail = Date.now(); } }, 600);
   },
   status() {
     const el = $('#saveState'); if (!el) return;
@@ -1502,7 +1503,7 @@ Object.assign(ACT, {
   navOpen: () => document.body.classList.add('nav-open'),
   navClose: () => document.body.classList.remove('nav-open'),
   bannerClose: (d, b) => b.closest('.banner').remove(),
-  draftUse: () => { const d = Store.draft(); if (d) { DB = d.data; App.cfg.migrate && App.cfg.migrate(DB); Store.dirty = true; Store.status(); $('#draftBox').innerHTML = ''; App.render(); toast('Đã khôi phục. Bấm "Lưu vào file" để ghi hẳn vào file.', 'ok'); } },
+  draftUse: () => { const d = Store.draft(); if (d) { DB = d.data; App.cfg.migrate && App.cfg.migrate(DB); try { IMGX._need = true; IMGX.open().then(() => { IMGX.fill(DB); IMGX.paint(); }); } catch (e) { } Store.dirty = true; Store.status(); $('#draftBox').innerHTML = ''; App.render(); toast('Đã khôi phục. Bấm "Lưu vào file" để ghi hẳn vào file.', 'ok'); } },
   draftDrop: () => { try { localStorage.removeItem(Store.key()); } catch (e) { } $('#draftBox').innerHTML = ''; }
 });
 
@@ -10418,7 +10419,7 @@ const TK = {
   },
   hash() {                       // băm phần dữ liệu CÒN LẠI (không gồm vé, dấu in) để biết có cần đẩy khối chung không
     const c = Object.assign({}, DB); delete c.datve; delete c.phoiIn; TK.EX.forEach(k => delete c[k]); c._meta = undefined; TK.blob(c);
-    const s = JSON.stringify(c); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    const s = Store.json(c); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return h + ':' + s.length;
   },
   /* ---------- khởi động ---------- */
@@ -12902,6 +12903,9 @@ const IMGX = {
     return IMGX.ready;
   },
   remember(id, s) { if (!id || typeof s !== 'string') return; IMGX.img.set(id, s); IMGX.map.set(s, id); },
+  /* tăng tốc bước 2: khi dựng chuỗi dữ liệu (băm, lưu nháp, đo dung lượng) ảnh đã có trên Drive chỉ ghi bằng mã tham chiếu ngắn, không chép cả ảnh */
+  rep(k, v) { return (typeof v === 'string' && v.length >= IMGX.MIN && IMGX.map.has(v)) ? IMGX.PRE + IMGX.map.get(v) : v; },
+  json(x) { return IMGX.map.size ? JSON.stringify(x, IMGX.rep) : JSON.stringify(x); },
   save(id, s) { IMGX.remember(id, s); try { if (IMGX.idb) IMGX.idb.transaction('img', 'readwrite').objectStore('img').put(s, id); } catch (e) { } },
   walk(o, fn) { const st = [o]; while (st.length) { const x = st.pop(); if (!x || typeof x !== 'object') continue; for (const k of Object.keys(x)) { const v = x[k]; if (typeof v === 'string') fn(v, x, k); else if (v && typeof v === 'object') st.push(v); } } },
   async pool(items, n, f) { let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const it = items[i++]; try { await f(it); } catch (e) { console.warn('IMGX', e); } } })); },
@@ -12914,7 +12918,7 @@ const IMGX = {
   },
   strip(data) {                     // trước khi ghi lên Firebase: ảnh đã có trên Drive thì thay bằng mã tham chiếu (không chờ tải lên)
     if (!data || !IMGX.map.size) return data;
-    return JSON.parse(JSON.stringify(data, (k, v) => (typeof v === 'string' && v.length >= IMGX.MIN && IMGX.map.has(v)) ? IMGX.PRE + IMGX.map.get(v) : v));
+    return JSON.parse(JSON.stringify(data, IMGX.rep));
   },
   fill(data) {                      // sau khi tải từ Firebase: đổi mã tham chiếu thành ảnh từ bộ nhớ đệm, thiếu thì tải nền từ Drive
     const miss = new Set();
@@ -14553,7 +14557,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T20:30';
+const APP_BUILD = '2026-11-13T21:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
