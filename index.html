@@ -14155,7 +14155,7 @@ Object.assign(PS, {
    hiện ở chuông, đọc to (app đang mở), hiện thông báo điện thoại (app chạy nền). Nhắc trước giờ chạy 30 phút do máy lái xe tự tính. */
 ICONS.bell = ICONS.bell || '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>';
 const NOTI = {
-  EV: [['dat', 'Khách đặt vé mới'], ['huy', 'Khách hủy vé'], ['doi', 'Đổi ghế / điểm đón'], ['chuyen', 'Khách chuyển chuyến'], ['hang', 'Gửi hàng lên chuyến'], ['dh', 'Điều hành đổi xe, giờ, phân công'], ['nhac', 'Nhắc trước giờ chạy 30 phút'], ['nl', 'Lái xe báo đổ dầu chờ duyệt']],
+  EV: [['dat', 'Khách đặt vé mới'], ['huy', 'Khách hủy vé'], ['doi', 'Đổi ghế / điểm đón'], ['chuyen', 'Khách chuyển chuyến'], ['hang', 'Gửi hàng lên chuyến'], ['dh', 'Điều hành đổi xe, giờ, phân công'], ['nhac', 'Nhắc trước giờ chạy 30 phút'], ['nl', 'Lái xe báo đổ dầu chờ duyệt'], ['hs', 'Lưu lệnh vận chuyển vào hồ sơ']],
   cfg() { const v = (THM.get().vo) || {}; return { on: v.on !== false, g: v.g || 'nu', rate: +v.rate || 1, vol: v.vol == null ? 1 : +v.vol, ev: Object.assign(Object.fromEntries(NOTI.EV.map(x => [x[0], true])), v.ev || {}), qs: v.qs || '', qe: v.qe || '' }; },
   me() { try { const e = DRV.me(); return e && e.id ? String(e.id) : ''; } catch (x) { return ''; } },
   /* ---------- phía máy thao tác: so sánh trước–sau ---------- */
@@ -14192,6 +14192,9 @@ const NOTI = {
     });
     return out;
   },
+  /* mã nhân viên của các tài khoản Admin (để gửi thông báo vào chuông của Admin) */
+  adminIds(skipMe) { const me = skipMe ? NOTI.me() : ''; return [...new Set((DB.users || []).filter(u => u.role === 'admin' && u.active !== false).map(u => { try { const e = PQ.emp(u); return e && e.id ? String(e.id) : ''; } catch (e) { return ''; } }).filter(x => x && x !== me))]; },
+  toAdmins(ev, skipMe) { try { if (!(typeof FB !== 'undefined' && FB.db)) return; const A = NOTI.adminIds(skipMe); if (A.length) NOTI.send(A.map(emp => ({ emp, ev }))); } catch (e) { console.warn('NOTI.toAdmins', e); } },
   async send(list) {
     const by = {}; list.forEach(x => { (by[x.emp] = by[x.emp] || {})[x.ev.id.replace(/[.~*/\[\]`]/g, '_')] = x.ev; });
     for (const [emp, ev] of Object.entries(by)) { try { await FB.col().doc('nt_' + emp).set({ t: 'nt', emp, ev }, { merge: true }); } catch (e) { console.warn('NOTI.send', e); try { TX.denied(e); } catch (x) { } } }
@@ -14287,7 +14290,8 @@ const NOTI = {
       const L2 = NOTI.list(), x = L2.find(q => q.id === it.dataset.ntid); if (!x) return;
       if (e.target.closest('[data-ntplay]')) return NOTI.speak(x.txt, true);
       x.rd = 1; NOTI.save(L2); it.classList.remove('new');
-      if (x.t === 'nl' && typeof NLD !== 'undefined' && Auth.can('nhienlieu', 'add')) { p.remove(); NLD.cho(); }   // bấm thông báo đổ dầu → mở danh sách chờ duyệt
+      if (x.t === 'nl' && typeof NLD !== 'undefined' && Auth.can('nhienlieu', 'add')) { p.remove(); NLD.cho(); }
+      if (x.t === 'hs' && x.fd && typeof HS !== 'undefined' && Auth.can('hoso', 'view')) { p.remove(); HS.sel = x.fd; App.go('hoso'); }   // bấm thông báo lệnh → mở đúng thư mục   // bấm thông báo đổ dầu → mở danh sách chờ duyệt
     });
     setTimeout(() => document.addEventListener('click', function off(e) { if (!e.target.closest('#ntPanel')) { const q = $('#ntPanel'); q && q.remove(); document.removeEventListener('click', off); } }), 0);
   }
@@ -14612,8 +14616,7 @@ Màn hình trụ bơm thường có 3 dòng: thành tiền (đồng), số lít,
   notify(id, x, who) {
     try {
       if (!(typeof FB !== 'undefined' && FB.db)) return;
-      const A = [...new Set((DB.users || []).filter(u => u.role === 'admin' && u.active !== false).map(u => { try { const e = PQ.emp(u); return e && e.id ? String(e.id) : ''; } catch (e) { return ''; } }).filter(Boolean))];
-      if (!A.length) return; const tien = +x.tien || Math.round((+x.lit || 0) * (+x.gia || 0)) || 0;
+      const A = NOTI.adminIds(); if (!A.length) return; const tien = +x.tien || Math.round((+x.lit || 0) * (+x.gia || 0)) || 0;
       const ev = { id: 'nl:' + id, t: 'nl', ngay: x.ngay || D.today(), gio: x.gio || '', tuyen: '', at: Date.now(), txt: `${who || 'Lái xe'} báo đổ dầu xe ${x.xe || ''}: ${nlL(+x.lit || 0)} lít${tien ? ', ' + F.money(tien) + ' đồng' : ''}. Đang chờ duyệt.` };
       NOTI.send(A.map(emp => ({ emp, ev })));
     } catch (e) { console.warn('NLD.notify', e); }
@@ -14735,7 +14738,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T03:30';
+const APP_BUILD = '2026-11-14T04:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

@@ -171,6 +171,7 @@ const SCN = {
           const F2b = F3;
           for (const f of F2b) { const by = new Uint8Array(await f.blob.arrayBuffer()); await HS.store(HS.b64bytes(by), { folder: SCN.fd || '', ten: SCN.tenHS(f.name), tenFile: f.name, mime: f.mime, size: by.length, ghiChu: 'Scan tài liệu · ' + SCN.P.length + ' trang · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() }); }
           Store.changed(); toast(`Đã lưu ${F2b.length} tệp vào “${esc(SCN.fd ? HS.ptxt(SCN.fd) : 'Gốc')}”`, 'ok', 5000);
+          try { const pt = SCN.fd ? HS.ptxt(SCN.fd) : ''; if (/lệnh vận chuyển/i.test(pt) && typeof NOTI !== 'undefined' && NOTI.toAdmins) { const nm = SCN.name || SCN.tenHS(F2b[0].name), seg = pt.split(' / '); NOTI.toAdmins({ id: 'hs:' + SCN.fd + ':' + nm, t: 'hs', fd: SCN.fd, ngay: D.today(), gio: new Date().toTimeString().slice(0, 5), tuyen: '', at: Date.now(), txt: `${dvLog.who()} đã lưu lệnh vận chuyển ${nm}${seg.length >= 2 ? ' · ' + seg.slice(-2).join(' · ') : ''}.` }, true); } } catch (x) { }   // báo Admin
           SCN.P = []; SCN.cur = -1; SCN.name = ''; SCN.fd = ''; try { SCN.paint(); } catch (x) { }   // lưu xong: máy quét về mặc định (giữ định dạng, chất lượng đã chọn)
         }
       } catch (e) { toast('Chưa lưu được: ' + esc(e.message || e), 'err', 6000); }
