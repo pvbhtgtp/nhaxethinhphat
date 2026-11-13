@@ -65,7 +65,7 @@ const SCN = {
   filter(c, mode) {
     if (mode === 'color') return c;
     const W = c.width, H = c.height, ctx = c.getContext('2d'), id = ctx.getImageData(0, 0, W, H), p = id.data, B = SCN.bg(c), sx = B.w / W, sy = B.h / H;
-    const LO = 55, HI = 228, lv = v => { let t = (v - LO) / (HI - LO); t = t <= 0 ? 0 : t >= 1 ? 1 : t; return 255 * Math.pow(t, 1.35); };
+    const LO = 55, HI = 228, lv = v => { let t = (v - LO) / (HI - LO); t = t <= 0 ? 0 : t >= 1 ? 1 : t; return 255 * Math.pow(t, 1.5); };
     for (let y = 0; y < H; y++) { const by = Math.min(B.h - 1, (y * sy) | 0); for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4, bi = (by * B.w + Math.min(B.w - 1, (x * sx) | 0)) * 3, r = p[i], g = p[i + 1], bb = p[i + 2];
       const nr = Math.min(255, r / (B.v[bi] || 1) * 250), ng = Math.min(255, g / (B.v[bi + 1] || 1) * 250), nb = Math.min(255, bb / (B.v[bi + 2] || 1) * 250), l = nr * 0.299 + ng * 0.587 + nb * 0.114;
@@ -76,7 +76,7 @@ const SCN = {
       if (L2 > 246) R = G = Bl = 255;
       p[i] = R < 0 ? 0 : R > 255 ? 255 : R; p[i + 1] = G < 0 ? 0 : G > 255 ? 255 : G; p[i + 2] = Bl < 0 ? 0 : Bl > 255 ? 255 : Bl;
     } }
-    if (mode !== 'bw') SCN.sharp(p, W, H, mode === 'gray' ? 0.55 : 0.7);
+    if (mode !== 'bw') SCN.sharp(p, W, H, mode === 'gray' ? 0.8 : 1.0);
     ctx.putImageData(id, 0, 0); return c;
   },
   sharp(p, W, H, a) {   // làm nét (unsharp 3x3), bỏ qua vùng giấy trắng
