@@ -11043,6 +11043,7 @@ const HS = {
     }).join('');
   },
   render(el) {
+    try { if (Auth.can('hoso', 'edit') || HS.adm()) { const n = HS.dedup(); if (n) { App.changed(); toast('Đã gộp ' + n + ' thư mục trùng tên (hồ sơ bên trong giữ nguyên)', 'ok', 6000); } } } catch (e) { console.warn('HS.dedup', e); }
     if (!Auth.can('hoso', 'view')) { el.innerHTML = '<div class="card"><div class="empty">Bạn chưa được cấp quyền xem lưu trữ hồ sơ. Liên hệ quản lý để được cấp.</div></div>'; return; }
     if (HS.sel && !HS.by(HS.sel)) HS.sel = '';
     if (HS.sel) { const p0 = HS.path(HS.sel)[0]; if (p0) HS.yr = HS.isYear(p0) ? p0.id : '__o'; }
@@ -11082,6 +11083,26 @@ const HS = {
     ${HS.sel && ['hop dong lao dong', 'nhan su'].includes(HS.norm((HS.by(HS.sel) || {}).ten)) ? `<button class="btn" data-hs="bulk">${ic('file')} Tạo PDF hợp đồng cho mọi nhân viên</button>` : ''}`,
   /* ---------- thao tác ---------- */
   commit() { const y = window.scrollY; App.changed(); window.scrollTo(0, y); },
+  /* gộp thư mục trùng tên cùng cấp (vd 2 thư mục "2026" do máy tạo lúc danh mục chưa tải xong): chuyển hết thư mục con + hồ sơ về thư mục cũ hơn, xóa thư mục trùng đã trống */
+  dedup() {
+    if (typeof TK !== 'undefined' && TK.migrated && !TK.live) return 0;
+    const key = f => String(f.ten || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase(); let n = 0, again = true, guard = 0;
+    while (again && guard++ < 50) {
+      again = false; const G = new Map();
+      HS.F().forEach(f => { const k = (f.cha || '') + '|' + key(f); if (!key(f)) return; const a = G.get(k); a ? a.push(f) : G.set(k, [f]); });
+      for (const L of G.values()) {
+        if (L.length < 2) continue;
+        L.sort((a, b) => String(a.tg || '').localeCompare(String(b.tg || '')) || String(a.id).localeCompare(String(b.id)));
+        const keep = L[0];
+        L.slice(1).forEach(d => {
+          HS.F().forEach(f => { if (f.cha === d.id) f.cha = keep.id; }); HS.H().forEach(h => { if (h.folder === d.id) h.folder = keep.id; });
+          const i = HS.F().indexOf(d); if (i >= 0) HS.F().splice(i, 1); if (HS.sel === d.id) HS.sel = keep.id; if (HS.yr === d.id) HS.yr = keep.id; n++;
+        });
+        again = true;
+      }
+    }
+    return n;
+  },
   folderOpts(skip) { const ban = skip ? HS.desc(skip) : new Set(); return [{ value: '', label: '(Gốc)' }, ...HS.F().filter(f => !ban.has(f.id)).map(f => ({ value: f.id, label: HS.ptxt(f.id) })).sort((a, b) => a.label.localeCompare(b.label, 'vi', { numeric: true }))]; },
   newYear() {
     const c = new Date().getFullYear();
@@ -14557,7 +14578,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T21:30';
+const APP_BUILD = '2026-11-13T22:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
