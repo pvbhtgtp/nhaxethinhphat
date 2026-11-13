@@ -169,7 +169,7 @@ const SCN = {
             try { const v = await SCN.aiDoc(SCN.P[0]); if (SCN.applyRule(v)) { F3 = await SCN.files(); try { SCN.paint(); } catch (x) { } } } catch (x) { }
           } else if (!SCN.fd && SCN.P[0] && SCN.P[0].doc && SCN.applyRule(SCN.P[0].doc)) { F3 = await SCN.files(); try { SCN.paint(); } catch (x) { } }
           const F2b = F3;
-          for (const f of F2b) { const by = new Uint8Array(await f.blob.arrayBuffer()); await HS.store(HS.b64bytes(by), { folder: SCN.fd || '', ten: f.name.replace(/\.[^.]+$/, ''), tenFile: f.name, mime: f.mime, size: by.length, ghiChu: 'Scan tài liệu · ' + SCN.P.length + ' trang · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() }); }
+          for (const f of F2b) { const by = new Uint8Array(await f.blob.arrayBuffer()); await HS.store(HS.b64bytes(by), { folder: SCN.fd || '', ten: SCN.tenHS(f.name), tenFile: f.name, mime: f.mime, size: by.length, ghiChu: 'Scan tài liệu · ' + SCN.P.length + ' trang · ' + dvLog.fmt(dvLog.now()) + ' · ' + HS.who() }); }
           Store.changed(); toast(`Đã lưu ${F2b.length} tệp vào “${esc(SCN.fd ? HS.ptxt(SCN.fd) : 'Gốc')}”`, 'ok', 5000);
           SCN.P = []; SCN.cur = -1; SCN.name = ''; SCN.fd = ''; try { SCN.paint(); } catch (x) { }   // lưu xong: máy quét về mặc định (giữ định dạng, chất lượng đã chọn)
         }
@@ -350,7 +350,9 @@ Object.assign(SCN, {
   /* quy tắc lưu: Lệnh vận chuyển → Năm / 08. Điều hành xe / Lệnh vận chuyển / Tuyến / Tháng MM-YYYY, tên = số lệnh */
   /* tên tệp lệnh thống nhất = phần số của số lệnh (vd "Số: 26040714/LVC-CT" → "26040714"); không có dãy số thì giữ chữ đọc được */
   soLenh(so) { const t = String(so || '').trim(), m = t.match(/\d{4,}/); return m ? m[0] : t.replace(/^s[ốo]\s*[:.]?\s*/i, '').replace(/[\\/:*?"<>|]+/g, '-').trim(); },
-  docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return SCN.soLenh(L.so); const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
+  /* tên hồ sơ giữ dấu "/" như số lệnh in (26070706/LVC-TGTP); tên tệp trên Drive thay "/" bằng "-" */
+  tenHS(fn) { const t = fn.replace(/\.[^.]+$/, ''), n = String(SCN.name || '').trim(), safe = n.replace(/[\\/:*?"<>|]+/g, '-').trim(); return n && n !== safe && t.startsWith(safe) ? n + t.slice(safe.length) : t; },
+  docName(v) { const L = v.lenh || {}; if (/lệnh/i.test(v.loai || '') && L.so) return SCN.soLenh(L.so) + '/LVC-' + (((S().company || {}).kyHieuHD) || 'TGTP'); /* vd 26070706/LVC-TGTP */ const d = (L.tuNgay || v.ngay || '').split('-').reverse().join('-'); return [v.loai || 'Tài liệu', L.so || v.soVanBan, L.bienSo, d].filter(Boolean).join(' ').replace(/[\\/:*?"<>|]+/g, '-'); },
   routeOf(t) {   // tên thư mục tuyến: khớp tuyến trong app (không phân chiều), không khớp thì lấy chữ đọc được, bỏ "BX"
     const cl = String(t || '').replace(/\b(BX|B\.X|Bến xe)\.?\s*/gi, '').replace(/\s*(?:⇄|<>|->|→|–|-)\s*/g, ' - ').replace(/\s+/g, ' ').trim(); if (!cl) return 'Chưa rõ tuyến';
     const R = [...new Set([...(DB.giochay || []).map(g => g.tuyen), ...(DB.lichchay || []).slice(-3000).map(l => l.tuyen)].filter(Boolean))];
