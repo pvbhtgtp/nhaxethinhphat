@@ -251,6 +251,7 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
 .pr-head{display:flex;gap:14px;align-items:center;border-bottom:2px solid var(--p);padding-bottom:10px;margin-bottom:12px}
 .pr-head img{max-height:58px;max-width:120px}
 .nosig .sig-img{visibility:hidden}
+.sig-nm{display:none!important}.nosig .sig-nm{display:revert!important}
 @media(max-width:900px){
 .grid>*,.cols-2>*{min-width:0}
 .bac{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -2805,7 +2806,7 @@ function hdHTML(e) {
   const ten = esc(String(e.ten || '').toUpperCase()), ba = e.gioiTinh === 'Nữ' ? 'Bà' : 'Ông';
   const cv = String(e.moTaCV || '').split('\n').map(x => x.trim()).filter(Boolean);
   const pc = (v, dk) => +v > 0 ? `${F.money(v)} đồng/tháng` : 'Không áp dụng';
-  const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.on() ? SIGN.gd(92) : '<div style="height:92px"></div>'}<b>${esc(c.daiDien || '')}</b></td></tr></table>`;
+  const sig = `<table class="hd-sig" style="page-break-inside:avoid"><tr><td style="width:50%"><b>NGƯỜI LAO ĐỘNG</b><br><i>(Ký tên)</i>${e.chuKy ? `<img class="sig-img" src="${e.chuKy}" style="display:block;margin:8px auto 0;height:72px;max-width:85%;object-fit:contain"><div class="sig-nm" style="margin-top:4px"><b>${ten}</b></div>` : ''}</td><td><b>NGƯỜI SỬ DỤNG LAO ĐỘNG</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.on() ? SIGN.gd(92) : '<div style="height:92px"></div>'}${SIGN.on() ? SIGN.nm(c.daiDien) : `<b>${esc(c.daiDien || '')}</b>`}</td></tr></table>`;
   return `<div class="hd" data-hdid="${esc(e.id || '')}">
   <table class="hd-top"><tr><td style="width:40%"><b>${coHead(c.ten)}</b><br><b><i>Số: ${R.SOHD}</i></b></td><td><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>-----***-----</td></tr></table>
   <div style="margin-top:8px">${HD_CANCU.map(x => `<p>- ${x}</p>`).join('')}</div>
@@ -3730,13 +3731,15 @@ const SIGN = {
   useSig() { const c = S().company || {}; return c.chenKy !== false && c.inChuKy !== false && !!c.chuKyGD; },
   useDau() { const c = S().company || {}; return c.chenKy !== false && c.inDau !== false && !!c.conDau; },
   on() { return SIGN.useSig() || SIGN.useDau(); },
+  /* họ tên dưới chữ ký: đã chèn chữ ký thì ẩn tên (bỏ tick In chữ ký thì tên hiện lại) */
+  nm(n, it) { n = esc(n || ''); if (it) n = '<i>' + n + '</i>'; return `<b${SIGN.useSig() ? ' class="sig-nm"' : ''}>${n}</b>`; },
   gd(h = 96) {
     if (!SIGN.on()) return ''; const c = S().company || {};
     const sg = SIGN.useSig(), dd = SIGN.useDau();
     return `<div class="sig-gd" style="position:relative;height:${h}px;margin:4px auto 0;width:100%">${sg ? `<img class="sig-img" src="${c.chuKyGD}" style="position:absolute;left:calc(50% + ${Math.round(h * .22)}px);top:${Math.round(h * .14)}px;transform:translateX(-50%);height:${Math.round(h * .74)}px;max-width:60%;object-fit:contain;mix-blend-mode:multiply;z-index:1">` : ''}${dd ? `<img class="sig-img" src="${c.conDau}" style="position:absolute;left:calc(50% - ${Math.round(h * .22)}px);top:0;transform:translateX(-50%);height:${Math.round(h * .96)}px;max-width:50%;object-fit:contain;opacity:.88;mix-blend-mode:multiply;z-index:2">` : ''}</div>`;
   }
 };
-const vcSign = () => { const co = S().company || {}; return SIGN.on() ? SIGN.gd() + `<b>${esc(co.daiDien || '')}</b>` : ''; };
+const vcSign = () => { const co = S().company || {}; return SIGN.on() ? SIGN.gd() + SIGN.nm(co.daiDien) : ''; };
 const vcCheck = (v, who) => v === who ? '☒' : '☐';
 const vcPax = c => String(c.dsKhach || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => l.split(/\s*[|\t]\s*/));
 function vcHead(c, co, soText) {
@@ -8240,7 +8243,7 @@ const GH = {
   <div class="t8-r t8-sum"><span>THÀNH TIỀN</span><b>${F.money(tt)} đ</b></div>
   <div class="t8-pay${paid ? ' ok' : ''}">${paid ? 'NGƯỜI GỬI ĐÃ TRẢ CƯỚC' : `THU NGƯỜI NHẬN ${F.money(tt)} đ`}</div>
   ${ln}
-  <div class="gh8-sg"><div><small>NGƯỜI GỬI</small><div class="gh8-sp"></div></div><div><small>NV NHẬN HÀNG</small>${x.chuKy ? `<img class="sig-img" src="${x.chuKy}" alt="">` : '<div class="gh8-sp"></div>'}<b>${esc(x.nhanVien || '')}</b></div></div>
+  <div class="gh8-sg"><div><small>NGƯỜI GỬI</small><div class="gh8-sp"></div></div><div><small>NV NHẬN HÀNG</small>${x.chuKy ? `<img class="sig-img" src="${x.chuKy}" alt="">` : '<div class="gh8-sp"></div>'}<b${x.chuKy ? ' class="sig-nm"' : ''}>${esc(x.nhanVien || '')}</b></div></div>
   <div class="t8-by">Lập: ${esc(x.nguoiLap || x.nhanVien || '—')} · ${dvLog.fmt(x.tg)}<br>In: ${esc(dvLog.who() || '—')} · ${dvLog.fmt(dvLog.now())}</div>
   <div class="t8-ft" style="margin-top:4px">Quý khách kiểm tra hàng khi nhận.<br>Giữ phiếu để đối chiếu.</div>
 </div>`;
@@ -11503,7 +11506,7 @@ const V2U = {
   ends(t) { const p = String(t.tuyen || '').split(/\s*[-–→>]\s*/).map(s => s.trim()).filter(Boolean); return { di: p[0] || '', den: p[p.length - 1] || '' }; },
   ngayDai: iso => { const d = D.parse(iso); return `ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}`; },
   head(title, sub) { const c = V2U.co(); return `<table style="width:100%;border:0;border-collapse:collapse"><tr><td style="width:44%;text-align:center;vertical-align:top;border:0"><b>${esc(String(c.ten || '').toUpperCase())}</b><br><span style="font-size:11.5px">${esc(c.diaChi || '')}</span></td><td style="text-align:center;vertical-align:top;border:0"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><div style="width:140px;border-top:1px solid #000;margin:3px auto"></div></td></tr></table><h2 style="text-align:center;margin:14px 0 2px;font-size:19px;letter-spacing:.5px">${title}</h2>${sub ? `<div style="text-align:center;margin-bottom:8px">${sub}</div>` : ''}`; },
-  sig(cols) { return `<table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr>${cols.map(c => { const dd = /đóng dấu/i.test(c[1] || ''); return `<td style="text-align:center;vertical-align:top;border:0;width:${100 / cols.length}%"><b>${c[0]}</b><br><i>${dd ? c[1] : '(Ký và ghi rõ họ tên)'}</i>${dd ? (SIGN.gd(90) || '<div style="height:70px"></div>') + (c[2] ? `<b>${esc(c[2])}</b>` : '') : '<div style="height:70px"></div>'}</td>`; }).join('')}</tr></table>`; }
+  sig(cols) { return `<table style="width:100%;border:0;margin-top:18px;page-break-inside:avoid"><tr>${cols.map(c => { const dd = /đóng dấu/i.test(c[1] || ''); return `<td style="text-align:center;vertical-align:top;border:0;width:${100 / cols.length}%"><b>${c[0]}</b><br><i>${dd ? c[1] : '(Ký và ghi rõ họ tên)'}</i>${dd ? (SIGN.gd(90) || '<div style="height:70px"></div>') + (c[2] ? SIGN.nm(c[2]) : '') : '<div style="height:70px"></div>'}</td>`; }).join('')}</tr></table>`; }
 };
 
 /* ===================== LỆNH VẬN CHUYỂN ĐIỆN TỬ ===================== */
@@ -11580,7 +11583,7 @@ const LVC = {
           ${r('Biển số đăng ký: ', ln(xe.bks, 140) + ' Số ghế: ' + ln(xe.soCho, 44) + ' Loại xe: khách')}
           <div style="padding:3px 0;text-align:left"><b>Tuyến: ${esc(ti.ten || o.tuyen || '')} - Cự Ly: ${ti.cuLy ? esc(ti.cuLy) + 'km' : '……km'}</b> &nbsp; &nbsp; Mã Số Tuyến: ${ti.maTuyen ? esc(ti.maTuyen) : '…………………'}</div>
           <div style="padding:3px 0;text-align:left">Hành trình chạy xe: ${esc(ti.hanhTrinh || '')} và Ngược Lại</div>
-        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i>${SIGN.gd(120) || '<div style="height:34mm"></div>'}<b><i>${esc(gd)}</i></b></td></tr>
+        </td><td style="${C};vertical-align:top"><b><i>Giám Đốc</i></b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i>${SIGN.gd(120) || '<div style="height:34mm"></div>'}${SIGN.on() ? SIGN.nm(gd, 1) : `<b><i>${esc(gd)}</i></b>`}</td></tr>
         <tr><td style="${C}"><b>Lượt xe thực hiện</b></td><td style="${C}"><b>Bến xe đi, đến</b></td><td style="${C}"><b>Giờ xe chạy</b></td><td style="${C}"><b>Số Khách</b></td><td style="${C}"><b>Bến xe</b><br><i style="font-size:12px">(Ký tên và đóng dấu)</i></td></tr>
         ${leg('Lượt đi', benDi, benDen, gn(o.gio, o.ngay), gn('', ''))}
         ${leg('Lượt về', benDen, benDi, ret ? gn(ret.gio, ret.ngay) : gn('', ''), gn('', ''))}
@@ -11812,7 +11815,7 @@ const ATG = {
       <p style="margin:4px 0"><b>Điều 2.</b> Nhiệm vụ của ${esc(q.ten)}:</p>${nv.map((x, i) => `<p style="margin:2px 0 2px 18px;text-align:justify">${i + 1}. ${esc(x)}</p>`).join('')}
       <p style="margin:4px 0"><b>Điều 3.</b> Quyết định này có hiệu lực kể từ ngày ký. Ban hoạt động theo nhiệm vụ được giao và chịu sự chỉ đạo trực tiếp của Giám đốc.</p>
       <p style="margin:4px 0"><b>Điều 4.</b> Các ông (bà) có tên tại Điều 1, các bộ phận có liên quan chịu trách nhiệm thi hành quyết định này.</p>
-      <table style="width:100%;border:0;margin-top:14px;page-break-inside:avoid"><tr><td style="width:50%;vertical-align:top;border:0;font-size:13px"><b><i>Nơi nhận:</i></b><br>- Như Điều 4;<br>- Lưu: VT.</td><td style="text-align:center;vertical-align:top;border:0"><b>GIÁM ĐỐC</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.gd(90) || '<div style="height:78px"></div>'}<b>${esc(c.daiDien || '')}</b></td></tr></table></div>`;
+      <table style="width:100%;border:0;margin-top:14px;page-break-inside:avoid"><tr><td style="width:50%;vertical-align:top;border:0;font-size:13px"><b><i>Nơi nhận:</i></b><br>- Như Điều 4;<br>- Lưu: VT.</td><td style="text-align:center;vertical-align:top;border:0"><b>GIÁM ĐỐC</b><br><i>(Ký tên, đóng dấu)</i>${SIGN.gd(90) || '<div style="height:78px"></div>'}${SIGN.on() ? SIGN.nm(c.daiDien) : `<b>${esc(c.daiDien || '')}</b>`}</td></tr></table></div>`;
   },
 };
 
@@ -14291,7 +14294,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T10:30';
+const APP_BUILD = '2026-11-13T11:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
