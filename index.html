@@ -5635,9 +5635,23 @@ Object.assign(ACT, {
 const dhNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const dhTime = s => { const m = String(s || '').match(/(\d{1,2})\s*[h:Hg.]\s*(\d{0,2})/); if (!m) return ''; const h = +m[1], mi = +(m[2] || 0); return h > 23 || mi > 59 ? '' : String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0'); };
 const dhFindRoute = (txt, routes) => { const n = dhNorm(txt); if (!n) return ''; let r = routes.find(x => dhNorm(x) === n); if (r) return r; const g = dhGrp(txt); r = routes.find(x => dhGrp(x) === g && dhNorm(x) === dhNorm(g)); if (r) return r; const c = routes.filter(x => dhNorm(x).includes(n) || n.includes(dhNorm(x))); return c.length === 1 ? c[0] : ''; };
-const dhFindVeh = txt => { const n = dhNorm(txt); if (!n) return null; const V = DB.vehicles; let c = V.filter(v => dhNorm(v.bks) === n); if (c.length === 1) return c[0]; const d = n.replace(/[A-Z]/g, ''); if (d.length >= 4) { c = V.filter(v => dhNorm(v.bks).replace(/[A-Z]/g, '').endsWith(d.slice(-5)) || d.endsWith(dhNorm(v.bks).replace(/[A-Z]/g, '').slice(-5))); if (c.length === 1) return c[0]; } return null; };
-const dhFindEmp = txt => { const n = dhNorm(txt); if (!n) return null; const E = DB.employees; let c = E.filter(e => dhNorm(e.ten) === n); if (c.length === 1) return c[0]; const w = String(txt).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().split(/\s+/).filter(Boolean); if (!w.length) return null; c = E.filter(e => { const nm = dhNorm(e.ten); return w.every(x => nm.includes(dhNorm(x))); }); if (c.length === 1) return c[0]; const last = w[w.length - 1]; c = E.filter(e => { const p = String(e.ten || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().trim().split(/\s+/); return p[p.length - 1] === last; }); return c.length === 1 ? c[0] : null; };
-addCSS('.sc-drop{position:relative}.sc-drop>svg{width:30px;height:30px;display:block;margin:0 auto 6px}.sc-cam svg{width:16px;height:16px;vertical-align:-3px}.modal-f [hidden]{display:none!important}.sc-in{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.sc-drop{border:2px dashed #94a3b8;border-radius:10px;padding:18px;text-align:center;color:#475569;cursor:pointer;background:#f8fafc}.sc-drop.on{border-color:#2563eb;background:#eff6ff}.sc-prev{max-width:100%;max-height:220px;border-radius:8px;margin-top:10px;border:1px solid #d0d5dd}.sc-tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}.sc-tb th,.sc-tb td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left}.sc-tb th{background:#f2f4f7}.sc-bad{color:#dc2626}.sc-ok{color:#15803d}');
+/* Khớp xe / lái xe từ chữ đọc được: thử từng mức (đúng hẳn → gần đúng), mỗi mức ưu tiên xe đang chạy / lái xe đang làm trước, rồi mới tới cả danh sách.
+   dhVehC / dhEmpC trả về danh sách ứng viên; dhFindVeh / dhFindEmp chỉ nhận khi còn đúng 1 ứng viên (nhiều người thì không đoán). */
+const dhUp = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toUpperCase();
+const dhVehC = txt => { const n = dhNorm(txt); if (!n) return []; const V = DB.vehicles || [], A = V.filter(v => !v.ngung), d = n.replace(/[A-Z]/g, ''), dd = v => dhNorm(v.bks).replace(/[A-Z]/g, '');
+  const R = [v => dhNorm(v.bks) === n, ...(d.length >= 4 ? [v => { const x = dd(v); return x.length >= 4 && (x.endsWith(d.slice(-5)) || d.endsWith(x.slice(-5))); }] : [])];
+  for (const f of R) for (const P of [A, V]) { const c = P.filter(f); if (c.length) return c; } return []; };
+const dhFindVeh = txt => { const c = dhVehC(txt); return c.length === 1 ? c[0] : null; };
+const dhEmpC = txt => { const n = dhNorm(txt); if (!n) return []; const E = (DB.employees || []).filter(e => e.ten), A = E.filter(e => e.trangThai !== 'Nghỉ việc'), D = A.filter(e => isDriver(e));
+  const lo = t => String(t || '').normalize('NFC').toLowerCase(), wd = (t, f) => f(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  // mỗi mức thử giữ dấu trước (Tuấn ≠ Tuân), không ra mới bỏ dấu: cả họ tên → đủ các chữ đọc được → tên gọi (chữ cuối)
+  const R = [];
+  [lo, dhUp].forEach(f => R.push(e => wd(e.ten, f).join(' ') === wd(txt, f).join(' ')));
+  [lo, dhUp].forEach(f => { const w = wd(txt, f); if (w.length) R.push(e => { const p = wd(e.ten, f); return w.every(x => p.includes(x)); }); });
+  [lo, dhUp].forEach(f => { const w = wd(txt, f); if (w.length) R.push(e => wd(e.ten, f).slice(-1)[0] === w[w.length - 1]); });
+  for (const f of R) for (const L of [D, A, E]) { const c = L.filter(f); if (c.length) return c; } return []; };
+const dhFindEmp = txt => { const c = dhEmpC(txt); return c.length === 1 ? c[0] : null; };
+addCSS('.sc-drop{position:relative}.sc-drop>svg{width:30px;height:30px;display:block;margin:0 auto 6px}.sc-cam svg{width:16px;height:16px;vertical-align:-3px}.modal-f [hidden]{display:none!important}.sc-in{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.sc-drop{border:2px dashed #94a3b8;border-radius:10px;padding:18px;text-align:center;color:#475569;cursor:pointer;background:#f8fafc}.sc-drop.on{border-color:#2563eb;background:#eff6ff}.sc-prev{max-width:100%;max-height:220px;border-radius:8px;margin-top:10px;border:1px solid #d0d5dd}.sc-tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}.sc-tb th,.sc-tb td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left}.sc-tb th{background:#f2f4f7}.sc-bad{color:#dc2626}.sc-ok{color:#15803d}.sc-sel{display:block;min-width:130px;max-width:200px;padding:3px 6px;font-size:12px;margin-top:3px}');
 /* Kiểm tra logic: cùng một giờ, một xe không thể chạy 2 chuyến, một lái xe không thể lái 2 xe */
 const dhClash = (rows, dayOf) => {
   const K = new Map(), add = (k, r) => { if (!K.has(k)) K.set(k, []); K.get(k).push(r); };
@@ -5693,48 +5707,63 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 - Bỏ qua ô trống. Không bịa dữ liệu, chỗ nào không đọc rõ thì để chuỗi rỗng.
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
-Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e => e.ten).filter(Boolean))}`;
-      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(mỗi phần tối đa 35 giây: quá 15 giây tự đổi AI khác)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
+Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'))(DB.employees.filter(e => e.trangThai !== 'Nghỉ việc' && isDriver(e))).map(e => e.ten).filter(Boolean))}`;
+      self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(các AI đọc song song, đa số đọc giống nhau là xong)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
-      // Ảnh dài: đọc từng nhóm 2 đoạn, lần lượt; mỗi phần: AI thứ nhất 15 giây, quá hạn đổi AI khác 20 giây
-      const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [], TO = 40000;
+      // Ảnh dài: cắt thành nhóm 2 đoạn, các nhóm đọc SONG SONG (không chờ nhau); chuyến ở đầu nhóm chưa có tiêu đề tuyến thì lấy tuyến cuối của nhóm trước
+      const parts = self.tiles && self.tiles.length > 1 ? self.tiles : [self.file], G = [];
       for (let i = 0; i < parts.length; i += 2) G.push(parts.slice(i, i + 2));
-      // Nhiều AI (số lẻ) cùng đọc từng phần; mỗi chuyến, mỗi ô xe / lái xe lấy theo đa số. Không đủ đa số thì báo đỏ, không áp dụng
+      // Nhiều AI (số lẻ) cùng đọc từng phần; mỗi chuyến, mỗi ô xe / lái xe lấy theo đa số. Đa số AI đã trả về và đọc GIỐNG HỆT nhau thì dùng ngay, không chờ AI chậm.
+      // Không đủ đa số thì báo đỏ để chọn tay, không tự áp dụng.
       const V = AIX.ok() ? AIX.voters(sample.raw ? [{ lb: 'Claude', run: (pr, o) => sample.raw.json(pr, o) }] : []) : [{ lb: 'AI', run: (pr, o) => sample.json(pr, o) }];
-      const vote = async (imgs, hint, lastRoute) => {
-        const L = await Promise.all(V.map(v => AIX.timed(sg => v.run(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: sg, modelTier: 'default', cache: false }), AIX.T1 + AIX.T2, self.ctl.signal)
-          .then(r => Array.isArray(r) ? r : [], e => { if (self.ctl.signal.aborted) throw AIX.err('cancelled'); return { e }; })));
-        const ok = L.filter(x => Array.isArray(x)), M = ok.length; if (!M) throw (L[0] && L[0].e) || AIX.err('timeout');
-        const S = new Map();
-        ok.forEach((lst, vi) => {
-          let lr = lastRoute; const cnt = {};
-          lst.forEach(x => { if (!x || typeof x !== 'object') return; if (!x.tuyen && lr) x.tuyen = lr; if (x.tuyen) lr = x.tuyen;
-            const t = dhFindRoute(x.tuyen, routes) || dhNorm(x.tuyen), g = dhTime(x.gio); if (!g) return; const b = t + '|' + g; cnt[b] = (cnt[b] || 0) + 1;
-            const k = b + '|' + cnt[b]; if (!S.has(k)) S.set(k, []); S.get(k).push({ vi, x }); });
-        });
-        const maj = (E, f) => { const C = new Map(); E.forEach(({ x }) => { const k = f(x); C.set(k, (C.get(k) || 0) + 1); }); let best, bc = 0; C.forEach((c, k) => { if (c > bc) { best = k; bc = c; } }); return bc * 2 > M ? best : undefined; };
-        const vk = x => { const v = dhFindVeh(x.bks); return v ? 'v:' + v.id : 'r:' + dhNorm(x.bks); }, ek = x => { const e = dhFindEmp(x.laiXe); return e ? 'e:' + e.id : 'r:' + dhNorm(x.laiXe); };
-        const out = [];
-        S.forEach(E => {
-          if (E.length * 2 <= M) return;                                 // đa số AI không thấy chuyến này: bỏ
-          const bv = maj(E, vk), be = maj(E, ek), pick = (k, f) => (E.find(({ x }) => f(x) === k) || E[0]).x, r = { ...E[0].x, _v: E.length + '/' + M, _alt: [] }, bad = [];
-          if (bv === undefined) bad.push('xe'); else r.bks = pick(bv, vk).bks;
-          if (be === undefined) bad.push('lái xe'); else r.laiXe = pick(be, ek).laiXe;
-          if (bad.length) { r._bad = bad; r._alt = E.map(({ x }) => (x.bks || '—') + ' / ' + (x.laiXe || '—')); }
-          out.push(r);
-        });
-        return { out, M, n: V.length };
-      };
+      const need = Math.floor(V.length / 2) + 1;
+      const vk = x => { const v = dhFindVeh(x.bks); return v ? 'v:' + v.id : 'r:' + dhNorm(x.bks); }, ek = x => { const e = dhFindEmp(x.laiXe); return e ? 'e:' + e.id : 'r:' + dhNorm(x.laiXe); };
+      const prep = lst => { const L = []; let lr = ''; lst.forEach(x => { if (x && typeof x === 'object') { if (!x.tuyen && lr) x.tuyen = lr; if (x.tuyen) lr = x.tuyen; } if (!x || typeof x !== 'object') return; const g = dhTime(x.gio); if (!g) return; L.push({ ...x, _t: dhFindRoute(x.tuyen, routes) || dhNorm(x.tuyen), _g: g }); }); return L; };
+      const sig = L => L.map(x => [x._t, x._g, vk(x), ek(x)].join('|')).sort().join('\n');
+      const vote = (imgs, hint) => new Promise((done, fail) => {
+        const lc = new AbortController(), up = () => lc.abort(); self.ctl.signal.addEventListener('abort', up);
+        const R = new Array(V.length); let left = V.length, fin = false;
+        const end = (v, e) => { if (fin) return; fin = true; self.ctl.signal.removeEventListener('abort', up); lc.abort(); e ? fail(e) : done(v); };
+        const tally = () => {
+          const ok = R.filter(x => Array.isArray(x)), M = ok.length;
+          // đa số đã có và đọc giống hệt nhau (cùng tuyến, giờ, xe, lái xe cho mọi chuyến): AI còn lại không thể đổi kết quả → xong ngay
+          const C = new Map(); ok.forEach(L => { const s = sig(L); C.set(s, (C.get(s) || 0) + 1); });
+          for (const [s, c] of C) if (c >= need) { const L = ok.find(x => sig(x) === s); return end({ out: L.map(x => ({ ...x, _v: c + '/' + V.length, _alt: [] })), M: V.length, n: V.length }); }
+          if (left) return;
+          if (!M) return end(null, (R.find(x => x && x.e) || {}).e || AIX.err('timeout'));
+          const S = new Map();
+          ok.forEach((lst, vi) => {
+            const by = new Map(); lst.forEach(x => { const b = x._t + '|' + x._g; if (!by.has(b)) by.set(b, []); by.get(b).push(x); });
+            // cùng tuyến cùng giờ có nhiều xe: xếp theo xe / lái xe rồi mới ghép thứ tự, để các AI ghép đúng cặp với nhau
+            by.forEach((A, b) => { A.sort((p, q) => (vk(p) + '|' + ek(p)).localeCompare(vk(q) + '|' + ek(q))).forEach((x, i) => { const k = b + '|' + i; if (!S.has(k)) S.set(k, []); S.get(k).push({ vi, x }); }); });
+          });
+          const maj = (E, f) => { const C = new Map(); E.forEach(({ x }) => { const k = f(x); C.set(k, (C.get(k) || 0) + 1); }); let best, bc = 0; C.forEach((c, k) => { if (c > bc) { best = k; bc = c; } }); return bc * 2 > M ? best : undefined; };
+          const res = [];
+          S.forEach(E => {
+            if (E.length * 2 <= M) return;                                 // đa số AI không thấy chuyến này: bỏ
+            const bv = maj(E, vk), be = maj(E, ek), pick = (k, f) => (E.find(({ x }) => f(x) === k) || E[0]).x, r = { ...E[0].x, _v: E.length + '/' + M, _alt: [] }, bad = [];
+            if (bv === undefined) bad.push('xe'); else r.bks = pick(bv, vk).bks;
+            if (be === undefined) bad.push('lái xe'); else r.laiXe = pick(be, ek).laiXe;
+            if (bad.length) { r._bad = bad; r._alt = E.map(({ x }) => (x.bks || '—') + ' / ' + (x.laiXe || '—')); r._ab = E.map(({ x }) => x.bks); r._al = E.map(({ x }) => x.laiXe); }
+            res.push(r);
+          });
+          end({ out: res, M, n: V.length });
+        };
+        V.forEach((v, i) => AIX.timed(sg => v.run(prompt + hint, { images: imgs.length > 1 ? imgs : imgs[0], signal: sg, modelTier: 'default', cache: false }), AIX.T1 + AIX.T2, lc.signal)
+          .then(r => { R[i] = prep(Array.isArray(r) ? r : []); }, e => { if (self.ctl.signal.aborted) return end(null, AIX.err('cancelled')); R[i] = { e }; })
+          .then(() => { left--; if (!fin) tally(); }));
+      });
       try {
         res = []; let lastRoute = '', fail = 0, err = null, few = 0;
+        const pg = out.querySelector('[data-pg]'); if (pg) pg.textContent = G.length > 1 ? ` · ${G.length} phần cùng lúc` : '';
+        const RS = await Promise.all(G.map((grp, g) => vote(grp, G.length > 1 ? `\nĐây là phần ${g + 1}/${G.length} của một ảnh chụp màn hình dài, cắt từ trên xuống (các đoạn chồng mép nhau một chút)${grp.length > 1 ? `, gồm ${grp.length} đoạn liên tiếp: gộp lại, không lặp chuyến ở chỗ chồng mép` : ''}. Các chuyến ở đầu phần này nếu chưa thấy tiêu đề tuyến thì để "tuyen" rỗng.` : '')
+          .then(r => r, e => { if (self.ctl.signal.aborted) throw e; return { e }; })));
         const seen = new Set(), key = r => [dhNorm(dhFindRoute(r.tuyen, routes) || r.tuyen), dhTime(r.gio), dhNorm(r.bks), dhNorm(r.laiXe)].join('|');
-        for (let g = 0; g < G.length; g++) {
-          const pg = out.querySelector('[data-pg]'); if (pg) pg.textContent = G.length > 1 ? ` · phần ${g + 1}/${G.length}` : '';
-          const hint = G.length > 1 ? `\nĐây là phần ${g + 1}/${G.length} của một ảnh chụp màn hình dài, cắt từ trên xuống (các đoạn chồng mép nhau một chút)${G[g].length > 1 ? `, gồm ${G[g].length} đoạn liên tiếp: gộp lại, không lặp chuyến ở chỗ chồng mép` : ''}.${lastRoute ? ` Các chuyến ở đầu phần này, trước tiêu đề tuyến mới đầu tiên, thuộc tuyến "${lastRoute}".` : ''}` : '';
-          let r; try { r = await vote(G[g], hint, lastRoute); } catch (e) { if (self.ctl.signal.aborted) throw e; fail++; err = e; continue; }
+        RS.forEach(r => {
+          if (r.e) { fail++; err = r.e; return; }
           if (r.M < r.n) few++;
-          r.out.forEach(x => { if (x.tuyen) lastRoute = x.tuyen; const k = key(x); if (seen.has(k)) return; seen.add(k); res.push(x); });
-        }
+          r.out.forEach(x => { if (!x.tuyen && lastRoute) x.tuyen = lastRoute; if (x.tuyen) lastRoute = x.tuyen; const k = key(x); if (seen.has(k)) return; seen.add(k); res.push(x); });
+        });
         clearInterval(tick);
         if (!res.length && err) throw err;
         toast(`${ic('check')} Đọc xong trong ${Math.round((Date.now() - t0) / 100) / 10} giây` + ` · ${V.length} AI bỏ phiếu` + (few ? ` · ${few} phần có AI không trả lời kịp` : '') + (fail ? ` · ${fail}/${G.length} phần không đọc được, kiểm tra lại các chuyến thiếu` : ''), fail ? 'err' : 'ok', fail ? 7000 : 3000);
@@ -5743,21 +5772,47 @@ Tên nhân viên (lái xe) của công ty: ${JSON.stringify(DB.employees.map(e =
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
       const canAdd = Auth.can('lichchay', 'add');
+      // xe / lái xe chưa chắc chắn (AI đọc khác nhau, không khớp hoặc khớp nhiều người): đưa lựa chọn ngay trong bảng kết quả, chọn xong mới được áp dụng
+      const uniq = L => [...new Set(L.filter(Boolean))];
       self.rows = res.map(r => {
-        const tuyen = dhFindRoute(r.tuyen, routes), gio = dhTime(r.gio), v = dhFindVeh(r.bks), e = dhFindEmp(r.laiXe);
-        const trip = tuyen && gio ? T.find(l => l.tuyen === tuyen && l.gio === gio) : null;
-        let st, ok = false;
-        if (r._bad) st = 'Các AI đọc không thống nhất ' + r._bad.join(', ') + ', nhập tay'; else if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ';
-        else if ((r.bks && !v) || (r.laiXe && !e)) st = 'Có ' + [r.bks && !v && 'xe', r.laiXe && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
-        else if (!v || !e) st = (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');   // một chuyến hợp lệ phải đủ cả 3: giờ chạy + lái xe + xe
-        else if (trip && !lcCan(trip)) st = 'Chuyến đã khóa (đã xuất bến)'; else if (trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; }
-        else if (canAdd) { st = 'Tạo chuyến mới'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
-        return { tuyen, gio, v: r._bad && r._bad.includes('xe') ? null : v, e: r._bad && r._bad.includes('lái xe') ? null : e, trip, rb: r.bks || '', rl: r.laiXe || '', st, ok, vt: r._v || '', alt: r._alt || [], hold: !ok && trip };
+        const badV = !!(r._bad && r._bad.includes('xe')), badE = !!(r._bad && r._bad.includes('lái xe'));
+        const cv = uniq((badV ? r._ab || [] : [r.bks]).flatMap(t => dhVehC(t))), ce = uniq((badE ? r._al || [] : [r.laiXe]).flatMap(t => dhEmpC(t)));
+        return { tuyen: dhFindRoute(r.tuyen, routes), gio: dhTime(r.gio), v: badV ? null : dhFindVeh(r.bks), e: badE ? null : dhFindEmp(r.laiXe), rb: r.bks || '', rl: r.laiXe || '', rt: r.tuyen || '', vt: r._v || '', alt: r._alt || [], badV, badE, cv, ce, trip: null, ok: false, st: '' };
       });
-      dhClash(self.rows, () => day); self.rows.forEach(r => { if (!r.ok && r.trip) r.hold = r.trip; });
+      const R0 = self.rows.map(r => ({ v: r.v, e: r.e }));
+      const judge = () => {
+        const used = new Set(), cand = r => r.tuyen && r.gio ? T.filter(l => l.tuyen === r.tuyen && l.gio === r.gio && !used.has(l)) : [];
+        self.rows.forEach(r => { r.trip = null; r.hold = null; });
+        // cùng tuyến cùng giờ có nhiều chuyến: chuyến nào đang đúng xe / lái xe thì giữ cặp đó, còn lại chia lần lượt, không 2 dòng ghi đè 1 chuyến
+        self.rows.forEach(r => { const c = cand(r).find(l => (r.v && l.xeId === r.v.id) || (r.e && l.laiXe === r.e.id)); if (c) { r.trip = c; used.add(c); } });
+        self.rows.forEach(r => { if (r.trip) return; const c = cand(r)[0]; if (c) { r.trip = c; used.add(c); } });
+        self.rows.forEach(r => {
+          let st, ok = false; const v = r.v, e = r.e;
+          if (!r.tuyen) st = 'Không xác định được tuyến' + (r.rt ? ' "' + r.rt + '"' : '') + ', chọn tuyến'; else if (!r.gio) st = 'Không đọc được giờ';
+          else if (!v || !e) st = (r.badV && !v) || (r.badE && !e) ? 'Các AI đọc không thống nhất ' + [!v && r.badV && 'xe', !e && r.badE && 'lái xe'].filter(Boolean).join(', ') + ', chọn đúng' : (r.rb && !v) || (r.rl && !e) ? 'Có ' + [r.rb && !v && 'xe', r.rl && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, chọn đúng' : (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');   // một chuyến hợp lệ phải đủ cả 3: giờ chạy + lái xe + xe
+          else if (r.trip && !lcCan(r.trip)) st = 'Chuyến đã khóa (đã xuất bến)'; else if (r.trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; }
+          else if (canAdd) { st = 'Tạo chuyến mới'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
+          r.st = st; r.ok = ok;
+        });
+        dhClash(self.rows, () => day); self.rows.forEach(r => { if (!r.ok && r.trip) r.hold = r.trip; });
+      };
+      const VL = DB.vehicles.filter(v => !v.ngung).sort((a, b) => String(a.bks).localeCompare(String(b.bks))), EL = DB.employees.filter(e => e.trangThai !== 'Nghỉ việc' && e.ten).sort((a, b) => (isDriver(b) - isDriver(a)) || String(a.ten).localeCompare(String(b.ten), 'vi'));
+      const sel = (i, kind, L, cur, C, lab) => { const top = C.filter(x => !cur || x.id !== cur.id), rest = L.filter(x => !C.includes(x) && (!cur || x.id !== cur.id)), o = x => `<option value="${esc(x.id)}">${esc(lab(x))}</option>`;
+        return `<select class="inp sc-sel" data-${kind}="${i}"><option value="">${cur ? esc(lab(cur)) : '— chọn —'}</option>${top.length ? `<optgroup label="Gần giống chữ đọc được">${top.map(o).join('')}</optgroup>` : ''}<optgroup label="Tất cả">${rest.map(o).join('')}</optgroup></select>`; };
       const cell = (m, raw) => m ? `<span class="sc-ok">${esc(m)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
-      out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chỉ dòng đủ giờ chạy + lái xe + xe mới được áp dụng; chữ đỏ là chỗ thiếu hoặc không khớp danh sách.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>AI</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${esc(r.tuyen || '?')}</td><td>${esc(r.gio || '?')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td class="small" title="${esc(r.alt.join('\n'))}">${esc(r.vt)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}${r.alt.length ? `<div class="small muted">${r.alt.map(esc).join('<br>')}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-      ap.hidden = !self.rows.some(r => r.ok);
+      const draw = () => {
+        judge();
+        out.innerHTML = `<div style="margin-top:12px"><b>Kết quả quét: ${self.rows.length} chuyến</b> <span class="muted small">— tích chọn các dòng muốn áp dụng; chỉ dòng đủ giờ chạy + lái xe + xe mới được áp dụng; chữ đỏ là chỗ thiếu hoặc không khớp: chọn đúng ở ô bên dưới là dòng đó được áp dụng.</span></div>${Auth.can('lichchay', 'del') ? `<div class="small muted" style="margin-top:6px">Áp dụng xong, các giờ không có tên lái xe (của những tuyến có trong ảnh) tự xóa; chuyến còn vé / hàng hoặc đã xuất bến thì giữ lại.</div>` : ''}<div style="max-height:340px;overflow:auto"><table class="sc-tb"><thead><tr><th></th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>AI</th><th>Xử lý</th></tr></thead><tbody>${self.rows.map((r, i) => { const fix = !(r.trip && !lcCan(r.trip)) && r.gio, ch = R0[i];
+          return `<tr><td><input type="checkbox" data-i="${i}" ${r.ok ? (r.off ? '' : 'checked') : 'disabled'}></td><td>${r.tuyen && !r.pickT ? esc(r.tuyen) : fix ? `${r.rt && !r.tuyen ? `<span class="sc-bad">${esc(r.rt)} ?</span>` : ''}<select class="inp sc-sel" data-st="${i}"><option value="">${r.tuyen ? esc(r.tuyen) : '— chọn tuyến —'}</option>${routes.filter(x => x !== r.tuyen).map(x => `<option>${esc(x)}</option>`).join('')}</select>` : '?'}</td><td>${esc(r.gio || '?')}</td>
+            <td>${ch.v ? cell(r.v.bks) : `${!r.v ? cell(null, r.rb) : ''}${fix ? sel(i, 'sv', VL, r.v, r.cv, x => x.bks) : ''}`}</td><td>${ch.e ? cell(r.e.ten) : `${!r.e ? cell(null, r.rl) : ''}${fix ? sel(i, 'se', EL, r.e, r.ce, x => x.ten + (x.ma ? ' · ' + x.ma : '')) : ''}`}</td>
+            <td class="small" title="${esc(r.alt.join('\n'))}">${esc(r.vt)}</td><td class="${r.ok ? '' : 'sc-bad'}">${esc(r.st)}${r.alt.length ? `<div class="small muted">${r.alt.map(esc).join('<br>')}</div>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
+        ap.hidden = !self.rows.some(r => r.ok);
+        out.querySelectorAll('[data-i]').forEach(cb => cb.onchange = () => { self.rows[+cb.dataset.i].off = !cb.checked; });
+        out.querySelectorAll('[data-sv]').forEach(s => s.onchange = () => { if (!s.value) return; self.rows[+s.dataset.sv].v = DB.vehicles.find(x => x.id === s.value) || null; draw(); });
+        out.querySelectorAll('[data-se]').forEach(s => s.onchange = () => { if (!s.value) return; self.rows[+s.dataset.se].e = DB.employees.find(x => x.id === s.value) || null; draw(); });
+        out.querySelectorAll('[data-st]').forEach(s => s.onchange = () => { if (!s.value) return; const r = self.rows[+s.dataset.st]; r.tuyen = s.value; r.pickT = true; draw(); });
+      };
+      draw();
     };
     ap.onclick = () => {
       let up = 0, nw = 0;
@@ -14738,7 +14793,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T04:00';
+const APP_BUILD = '2026-11-14T07:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
