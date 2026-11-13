@@ -7101,7 +7101,7 @@ service cloud.firestore {
     const nc = () => { const fb = FB.parseCfg(v('fbcfg')); return { mode: 'fb', fb, email: v('email').trim(), key: v('key').trim(), url: fb.projectId ? 'firebase:' + fb.projectId : '', off: false }; };
     const need = c => { if (!c.fb.apiKey || !c.fb.projectId) throw new Error('Dán đoạn firebaseConfig (cần có apiKey và projectId)'); if (!/@/.test(c.email)) throw new Error('Nhập email tài khoản dữ liệu'); if (c.key.length < 6) throw new Error('Mã kết nối phải từ 6 ký tự'); };
     if (a === 'mode') { HUB.gsMode = b.dataset.m; return HUB.setTab('gdata'); }
-    if (a === 'rules') { const t = FB.rules(v('email').trim() || GS.cfg().email); try { await navigator.clipboard.writeText(t); toast('Đã sao chép Rules, dán vào Firestore → Rules → Publish', 'ok'); } catch (e) { const r = HUB.el.querySelector('[data-rules]'); const rg = document.createRange(); rg.selectNodeContents(r); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); toast('Đã bôi đen Rules, bấm Ctrl+C để sao chép', 'ok'); } return; }
+    if (a === 'rules') { const t = FB.rules(v('email').trim() || GS.cfg().email); try { await navigator.clipboard.writeText(t); try { if (t === RULES.txt()) { S().rulesSig = RULES.sig(); App.changed(); } } catch (x) { } toast('Đã sao chép Rules, dán vào Firestore → Rules → Publish', 'ok'); } catch (e) { const r = HUB.el.querySelector('[data-rules]'); const rg = document.createRange(); rg.selectNodeContents(r); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); toast('Đã bôi đen Rules, bấm Ctrl+C để sao chép', 'ok'); } return; }
     if (a === 'fbtest') return busy(async () => { const c = nc(); need(c); const j = await GS.call({ action: 'info' }, c, 30000); toast(`Kết nối được Firebase · ${j.ver ? 'đã có dữ liệu (phiên bản #' + j.ver + (j.savedAt ? ', lưu ' + new Date(j.savedAt).toLocaleString('vi-VN') : '') + ')' : 'chưa có dữ liệu'}`, 'ok', 7000); });
     if (a === 'fbsave') return busy(async () => {
       const c = nc(); need(c);
@@ -13991,11 +13991,13 @@ const PS = {
     if (docs.some(x => !x.exists)) { const er = new Error('Phần ' + part + ' vừa được máy khác cập nhật'); er.code = 'aborted'; throw er; }
     return { ok: true, ver: +m.ver || 0, data: JSON.parse(docs.map(x => x.data().d).join('')) };
   },
+  /* vé, hồ sơ, lệnh, an toàn nằm ở tài liệu riêng (TK): trong phần dữ liệu chung chúng cố ý để trống → không coi là mất */
+  tkKey(k) { try { return typeof TK !== 'undefined' && (TK.live || TK.migrated) && (k === 'datve' || k === 'phoiIn' || TK.EX.includes(k)); } catch (e) { return false; } },
   guard(o, n) {
     const out = [], blank = [], E = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length), F = v => typeof v === 'string' && v.length > 20 && (v.startsWith('data:') || v.startsWith('nxdrv:'));
     const kn = k => (typeof LCR !== 'undefined' && LCR.KN[k]) || k, fl = f => (typeof LCR !== 'undefined' && LCR.FL[f]) || f;
     Object.keys(o || {}).forEach(k => {
-      if (k === 'nvPub' || k[0] === '_') return; const ov = o[k], nv = n ? n[k] : undefined;
+      if (k === 'nvPub' || k[0] === '_') return; if (PS.tkKey(k)) return; const ov = o[k], nv = n ? n[k] : undefined;
       if (Array.isArray(ov) && ov.length >= 3 && E(nv)) { out.push(kn(k) + ': mất toàn bộ ' + ov.length + ' bản ghi'); return; }
       if (!Array.isArray(ov) || !Array.isArray(nv) || !ov.length || !ov.every(x => x && x.id != null)) return;
       const N = new Map(nv.filter(x => x && x.id != null).map(x => [String(x.id), x])); let rm = 0;
@@ -14551,7 +14553,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-13T20:00';
+const APP_BUILD = '2026-11-13T20:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
