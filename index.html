@@ -3962,8 +3962,14 @@ function vcForm(c, pre) {
       if (!d.so) { toast('Vui lòng nhập số hợp đồng', 'err'); return false; }
       if (DB.hdvc.some(x => x.so === d.so && x !== c)) { toast('Số hợp đồng này đã tồn tại', 'err'); return false; }
       delete d.soLenhXem; delete d.soLenh;
-      if (isNew) DB.hdvc.push({ id: uid(), ...d }); else Object.assign(c, d);
-      App.changed(); toast('Đã lưu hợp đồng ' + esc(vcSo(d)), 'ok');
+      const save = () => {
+        if (c && VCK.started(c) && String(c.dsKhach || '') !== String(d.dsKhach || '')) d.lsKhach = [...(c.lsKhach || []), { tg: dvLog.now(), nguoi: dvLog.who(), truoc: VCK.rows(c.dsKhach).length, sau: VCK.rows(d.dsKhach).length }];   // sửa danh sách sau giờ đón: ghi nhật ký
+        if (isNew) DB.hdvc.push({ id: uid(), ...d }); else Object.assign(c, d);
+        App.changed(); toast('Đã lưu hợp đồng ' + esc(vcSo(d)), 'ok');
+      };
+      const W = VCK.warn(d, c);
+      if (W.length) { Modal.confirm(`<b>Kiểm tra trước khi lưu hợp đồng ${esc(vcSo(d))}</b><ul style="margin:8px 0 0;padding-left:18px">${W.map(w => `<li style="margin-bottom:4px">${esc(w)}</li>`).join('')}</ul>`, { ok: 'Vẫn lưu', title: 'Cảnh báo xe hợp đồng' }).then(ok => { if (!ok) return; save(); try { m.close(); } catch (e) { } }); return false; }
+      save();
     },
     onDelete: isNew || !Auth.can('hdvc', 'del') ? null : () => { DB.hdvc = DB.hdvc.filter(x => x !== c); App.changed(); }
   });
@@ -3978,6 +3984,7 @@ function vcForm(c, pre) {
   }
   lpAttach(m, () => `<div class="pr">${vcHTML({ ...(c || {}), ...readForm(m.el, VC_FIELDS()) })}</div>`, { caption: 'Xem trước hợp đồng vận chuyển' });
   try { VCX.btn(m, c); } catch (x) { console.warn('VCX', x); }
+  try { VCK.attach(m, c); } catch (x) { console.warn('VCK', x); }
   if (!canEdit) {
     m.el.querySelectorAll('.modal-b input,.modal-b select,.modal-b textarea').forEach(i => i.disabled = true);
     const s = m.el.querySelector('[data-save]'); if (s) s.remove();
@@ -3985,6 +3992,60 @@ function vcForm(c, pre) {
   }
 }
 const vcById = id => DB.hdvc.find(x => x.id === id);
+/* ===== Xe hợp đồng (NĐ 158/2024 Điều 7, sửa bởi NĐ 218/2026): danh sách khách xem dạng bảng, khóa danh sách sau giờ đón,
+   kiểm tra đủ dữ liệu (chuẩn bị chia sẻ dữ liệu hợp đồng trước chuyến đi từ 01/01/2028), cảnh báo dấu hiệu "hợp đồng trá hình"
+   (xác nhận chỗ cho từng khách, lịch trình cố định cho nhiều người thuê, đón trả tại văn phòng / bến) ===== */
+const VCK = {
+  t0: c => c && c.ngayDon ? new Date(c.ngayDon + 'T' + (c.gioDon || '00:00') + ':00').getTime() : 0,
+  started: c => { const t = VCK.t0(c); return !!t && Date.now() >= t; },
+  nm: s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(),
+  phone: s => { const m = String(s || '').replace(/[.\s-]/g, '').match(/(\+84|0)\d{9,10}/); return m ? m[0] : ''; },
+  yr: s => /^(19|20)\d{2}$/.test(String(s || '').trim()) ? String(s).trim() : '',
+  rows: txt => vcPax({ dsKhach: txt }).map(r => ({ ten: r[0] || '', nam: VCK.yr(r[1]) || r.map(VCK.yr).find(Boolean) || '', namRaw: r[1] || '', sdt: VCK.phone(r.join(' ')), gc: r.slice(2).filter(x => !(VCK.phone(x) && String(x).replace(/[\s.+-]/g, '').length <= 12)).join(' · ') })),
+  /* dán từ Zalo / ghi chú: "1. Nguyễn Văn A - 1990 - 09xx" → "Nguyễn Văn A | 1990 | 09xx" (chỉ đổi khi người dùng bấm) */
+  tidy: txt => String(txt || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { l = l.replace(/^\s*\d+\s*[.)/-]\s+/, ''); if (/[|\t]/.test(l)) return l;
+    const p = l.split(/\s+-\s+|\s*,\s*|\s{2,}/).map(x => x.trim()).filter(Boolean); if (p.length < 2) { const y = l.match(/\b(19|20)\d{2}\b/); return y ? l.replace(y[0], '').trim().replace(/\s+/g, ' ') + ' | ' + y[0] : l; } return p.join(' | '); }).join('\n'),
+  need: d => [['bBTen', 'tên bên thuê'], ['bBSdt', 'điện thoại bên thuê'], ['bBMst', 'MST / CCCD bên thuê'], ['xeId', 'xe'], ['laiXe1', 'lái xe'], ['hanhTrinh', 'hành trình'], ['diemDon', 'điểm đón'], ['diemTra', 'điểm trả'], ['ngayDon', 'ngày đón'], ['gioDon', 'giờ đón']].filter(([k]) => !String(d[k] || '').trim()).map(x => x[1]),
+  /* các cảnh báo khi lưu (không chặn, người lưu tự quyết) */
+  warn(d, self) {
+    const W = [], miss = VCK.need(d), R = VCK.rows(d.dsKhach), n = R.length, v = (DB.vehicles || []).find(x => x.id === d.xeId), cap = v ? Math.max(0, (+v.soCho || 0) - 1) : 0;
+    if (miss.length) W.push('Thiếu thông tin: ' + miss.join(', ') + '. Từ 01/01/2028 dữ liệu hợp đồng phải gửi Bộ Công an trước chuyến đi.');
+    if (!n) W.push('Chưa có danh sách hành khách: lái xe phải mang theo (hoặc xem được trên điện thoại) danh sách kèm hợp đồng.');
+    if (n && +d.soKhach && n !== +d.soKhach) W.push(`Danh sách có ${n} người nhưng "Số hành khách" ghi ${d.soKhach}.`);
+    if (n && cap && n > cap) W.push(`Danh sách ${n} người vượt số chỗ của xe ${v.bks} (${cap} khách).`);
+    if (R.some(r => !r.ten)) W.push('Có dòng trong danh sách khách thiếu họ tên.');
+    const ht = VCK.nm(d.hanhTrinh), bt = VCK.nm(d.bBTen), O = (DB.hdvc || []).filter(x => x !== self && x.ngayDon && VCK.nm(x.hanhTrinh) === ht && ht && VCK.nm(x.bBTen) !== bt);
+    const same = O.filter(x => x.ngayDon === d.ngayDon && (x.gioDon || '') === (d.gioDon || ''));
+    if (same.length) W.push(`Dấu hiệu hợp đồng trá hình: đã có ${same.length} hợp đồng khác cùng ngày giờ, cùng hành trình nhưng bên thuê khác (${same.slice(0, 3).map(vcSo).join(', ')}). Xe hợp đồng không được gom khách nhiều người thuê.`);
+    if (d.ngayDon) { const lo = D.add(d.ngayDon, -14), hi = D.add(d.ngayDon, 14), days = new Set(O.filter(x => (x.gioDon || '') === (d.gioDon || '') && x.ngayDon >= lo && x.ngayDon <= hi).map(x => x.ngayDon)); days.delete(d.ngayDon);
+      if (days.size >= 2) W.push(`Dấu hiệu chạy lịch cố định: cùng hành trình, cùng giờ ${d.gioDon || ''} đã lặp ở ${days.size} ngày khác trong 2 tuần với bên thuê khác. Xe hợp đồng không được đặt lịch trình cố định cho nhiều người thuê.`); }
+    const co = S().company || {}, off = [co.diaChi].filter(Boolean).map(VCK.nm), bad = t => { const k = VCK.nm(t); return k && (/\b(van phong|vp|chi nhanh|ben xe|bx)\b/.test(k) || off.some(a => a.length > 8 && (k.includes(a) || a.includes(k)))); };
+    if (bad(d.diemDon) || bad(d.diemTra)) W.push('Điểm đón / trả ghi là văn phòng, chi nhánh hoặc bến xe: xe hợp đồng không được đón, trả khách tại trụ sở, chi nhánh, văn phòng của đơn vị hay điểm cố định.');
+    return W;
+  },
+  /* bảng xem trước danh sách khách ngay dưới ô nhập + nút chuẩn hóa; khóa sau giờ đón (trừ Admin) */
+  attach(m, c) {
+    const ta = m.el.querySelector('[name=dsKhach]'); if (!ta) return; const box = document.createElement('div'); box.className = 'vck'; ta.insertAdjacentElement('afterend', box);
+    const lock = !!c && VCK.started(c) && !PERM.admin();
+    const draw = () => { const R = VCK.rows(ta.value), f = n => m.el.querySelector(`[name=${n}]`), sk = +((f('soKhach') || {}).value || 0);
+      box.innerHTML = R.length ? `<div class="vck-h"><b>${R.length} hành khách</b>${sk && sk !== R.length ? ` <span class="vck-w">· khác "Số hành khách" (${sk})</span>` : ''}${lock ? '' : ' <button type="button" class="btn sm" data-tidy title="Bỏ số thứ tự, tách cột bằng dấu |">Chuẩn hóa danh sách</button> <button type="button" class="btn sm" data-sk>Lấy làm số hành khách</button>'}</div>
+        <div class="vck-t"><table class="tbl compact"><thead><tr><th>#</th><th>Họ tên</th><th>Năm sinh</th><th>Điện thoại</th><th>Ghi chú</th></tr></thead><tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td${r.ten ? '' : ' class="vck-w"'}>${esc(r.ten || 'thiếu tên')}</td><td${r.namRaw && !r.nam ? ' class="vck-w"' : ''}>${esc(r.nam || r.namRaw)}</td><td>${esc(r.sdt)}</td><td>${esc(r.gc)}</td></tr>`).join('')}</tbody></table></div>` : '';
+      const t = box.querySelector('[data-tidy]'); if (t) t.onclick = () => { ta.value = VCK.tidy(ta.value); draw(); };
+      const k = box.querySelector('[data-sk]'); if (k) k.onclick = () => { const s = f('soKhach'); if (s) { s.value = R.length; draw(); } }; };
+    if (lock) { ta.readOnly = true; const n = document.createElement('div'); n.className = 'small vck-w'; n.textContent = 'Xe đã đến giờ đón khách: danh sách khách bị khóa, không thêm người ngoài danh sách. Chỉ Admin sửa được (có ghi nhật ký).'; ta.insertAdjacentElement('beforebegin', n); }
+    ta.addEventListener('input', draw); const sk = m.el.querySelector('[name=soKhach]'); if (sk) sk.addEventListener('input', draw); draw();
+  },
+  /* chuyến hợp đồng của 1 lái xe (hôm nay, ngày mai) gửi kèm tài liệu riêng của lái xe để xem trên điện thoại */
+  forEmp(emp) {
+    const [a, b] = [D.today(), D.add(D.today(), 1)], E = String(emp);
+    return (DB.hdvc || []).filter(c => c.ngayDon && c.ngayDon <= b && (c.ngayTra || c.ngayDon) >= a && [c.laiXe1, c.laiXe2].map(String).includes(E)).sort((x, y) => (x.ngayDon + (x.gioDon || '')).localeCompare(y.ngayDon + (y.gioDon || ''))).map(c => {
+      const v = (DB.vehicles || []).find(x => x.id === c.xeId) || {}, ten = id => ((DB.employees || []).find(e => e.id === id) || {}).ten || '';
+      return { id: c.id, so: vcSo(c), ben: c.bBTen || '', sdt: c.bBSdt || '', ht: c.hanhTrinh || '', don: c.diemDon || '', tra: c.diemTra || '', ngay: c.ngayDon, gio: c.gioDon || '', ngayTra: c.ngayTra || '', gioTra: c.gioTra || '',
+        xe: v.bks || '', lai: [ten(c.laiXe1), ten(c.laiXe2)].filter(Boolean), nv: c.nvPhucVu || '', sk: +c.soKhach || 0, pax: VCK.rows(c.dsKhach).map(r => ({ ten: r.ten, nam: r.nam || r.namRaw, sdt: r.sdt, gc: r.gc })) };
+    });
+  }
+};
+addCSS('.vck{margin-top:6px}.vck-h{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin-bottom:4px}.vck-t{max-height:220px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px}.vck-t td,.vck-t th{font-size:12.5px}.vck-w{color:#b45309}');
 
 /* ===== Giờ chạy ===== */
 const gcSorted = () => DB.giochay.slice().sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
@@ -14710,9 +14771,10 @@ const TX = {
   push() {
     if (!NOTI.can()) return; const [a, b] = TX.win(), E = new Set(Object.keys(TX.sent));
     (DB.lichchay || []).forEach(l => { if (l.ngay >= a && l.ngay <= b && !l._me) [l.laiXe, l.laiXe2, l.phuXe].filter(Boolean).forEach(x => E.add(String(x))); });
+    (DB.hdvc || []).forEach(c => { if (c.ngayDon && c.ngayDon <= b && (c.ngayTra || c.ngayDon) >= a) [c.laiXe1, c.laiXe2].filter(Boolean).forEach(x => E.add(String(x))); });   // chuyến hợp đồng: lái xe xem hợp đồng + danh sách khách
     E.forEach(emp => {
-      const trips = TX.build(emp), h = PM.h(JSON.stringify(trips)); if (TX.sent[emp] === h) return; TX.sent[emp] = h;
-      FB.col().doc('tx_' + emp).set({ t: 'x', emp, d: JSON.stringify(trips), trips: null, at: Date.now() }, { merge: true })   /* lưu dạng chữ JSON: Firestore không nhận mảng lồng nhau (sơ đồ ghế) */.catch(e => { delete TX.sent[emp]; console.warn('TX.push', e); TX.denied(e); });
+      const trips = TX.build(emp), hd = VCK.forEmp(emp), h = PM.h(JSON.stringify(trips) + (hd.length ? JSON.stringify(hd) : '')); if (TX.sent[emp] === h) return; TX.sent[emp] = h;
+      FB.col().doc('tx_' + emp).set({ t: 'x', emp, d: JSON.stringify(trips), h: JSON.stringify(hd), trips: null, at: Date.now() }, { merge: true })   /* lưu dạng chữ JSON: Firestore không nhận mảng lồng nhau (sơ đồ ghế) */.catch(e => { delete TX.sent[emp]; console.warn('TX.push', e); TX.denied(e); });
     });
   },
   /* luật bảo mật chưa cập nhật: báo ngay cho người thao tác (1 lần) */
@@ -15014,7 +15076,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T14:00';
+const APP_BUILD = '2026-11-14T14:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
