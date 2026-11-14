@@ -6561,7 +6561,7 @@ const Auth = {
     const em = empOfUser(u), nm = (u.ten && u.ten !== 'Quản trị viên' ? u.ten : (em && em.ten) || u.ten || u.user);
     const ini = String(nm || '?').trim().split(/\s+/).slice(-1)[0].slice(0, 1).toUpperCase(), av = em && em.avatar;
     box.innerHTML = `<button class="au-btn" type="button" aria-haspopup="true">${av ? `<img src="${av}" alt="">` : `<span class="au-av">${esc(ini)}</span>`}<span class="au-nm"><b>${esc(nm)}</b><small>${esc(u.user)}</small></span>${ic('back')}</button>
-      <div class="au-dd"><div class="au-hd"><b>${esc(nm)}</b><small>${esc(u.user)}</small></div><button data-au="pass">${ic('lock')} Đổi mật khẩu</button>${PWA.can() ? `<button data-au="pwa">${ic('download')} Cài app vào máy</button>` : ''}<button data-au="out" class="out">${ic('x')} Đăng xuất</button></div>`;
+      <div class="au-dd"><div class="au-hd"><b>${esc(nm)}</b><small>${esc(u.user)}</small></div><button data-au="pass">${ic('lock')} Đổi mật khẩu</button>${PWA.can() ? `<button data-au="pwa">${ic('download')} Cài app vào máy</button>` : ''}<button data-au="mc">${ic('cloud')} Máy chủ (chọn nơi cài app)</button><button data-au="out" class="out">${ic('x')} Đăng xuất</button></div>`;
     const btn = box.querySelector('.au-btn'); btn.onclick = e => { e.stopPropagation(); box.classList.toggle('open'); };
     if (!Auth._ddBound) { Auth._ddBound = true; document.addEventListener('click', e => { const b = $('#auMe'); if (b && !b.contains(e.target)) b.classList.remove('open'); }); }
   },
@@ -15143,7 +15143,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T17:45';
+const APP_BUILD = '2026-11-14T18:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -15314,6 +15314,52 @@ addCSS(`.nav a .nav-av{flex:none;width:24px;height:24px;border-radius:50%;object
 .sidebar .nav a.on .nav-av{box-shadow:0 0 0 2px rgba(255,255,255,.95),0 4px 12px rgba(0,0,0,.25)}`);
 { const n0 = Auth.nav, c0 = Auth.chip; Auth.nav = function () { const r = n0.apply(this, arguments); try { MEAV.paint(); } catch (e) { } return r; }; Auth.chip = function () { const r = c0.apply(this, arguments); try { MEAV.paint(); } catch (e) { } return r; }; }
 /* ===== APP CÀI ĐẶT (PWA): biểu tượng "Cài đặt" trên thanh địa chỉ / "Thêm vào màn hình chính"; mở cửa sổ riêng, không tab ===== */
+/* ===== Máy chủ: cùng một app, cùng dữ liệu, chạy ở nhiều địa chỉ (GitHub Pages, Cloudflare Pages…). Người dùng chọn máy chủ để mở / cài app.
+   Danh sách lưu ở Cài đặt (settings.mayChu), Admin sửa được. Chưa sửa: app Thịnh Phát dùng 2 máy chủ mặc định, nhà xe khác chỉ thấy địa chỉ đang chạy. */
+const MAYCHU = {
+  DEF: [{ ten: 'Máy chủ 1 · GitHub', url: 'https://pvbhtgtp.github.io/nhaxethinhphat/' }, { ten: 'Máy chủ 2 · Cloudflare', url: 'https://nhaxethinhphat.pages.dev/' }],
+  norm: u => { let t = String(u || '').trim(); if (!t) return ''; if (!/^https?:\/\//i.test(t)) t = 'https://' + t; return t.replace(/[?#].*$/, '').replace(/index\.html?$/i, '').replace(/\/*$/, '/'); },
+  here: () => MAYCHU.norm(location.origin + location.pathname),
+  list() {
+    let L = null; try { L = (DB.settings && Array.isArray(DB.settings.mayChu)) ? DB.settings.mayChu.filter(x => x && x.url) : null; } catch (e) { }
+    if (L && L.length) return L;
+    const h = MAYCHU.here(); return MAYCHU.DEF.some(x => MAYCHU.norm(x.url) === h) ? MAYCHU.DEF : [{ ten: 'Máy chủ 1', url: h }];
+  },
+  html() {
+    const h = MAYCHU.here(), L = MAYCHU.list(), adm = !!(Auth.user && Auth.user.role === 'admin');
+    if (L.length < 2 && !adm) return '';
+    return `<div class="mc-box"><div class="pwa-t">🌐 Chọn máy chủ</div><div class="small muted" style="margin-bottom:4px">Các máy chủ dùng chung một dữ liệu. Máy chủ này chậm hoặc lỗi thì mở máy chủ khác. Đổi máy chủ phải đăng nhập lại và cài lại app từ máy chủ đó.</div>
+      ${L.map((x, i) => { const on = MAYCHU.norm(x.url) === h; return `<div class="mc-r${on ? ' on' : ''}"><div class="grow" style="min-width:0"><b>${esc(x.ten || 'Máy chủ ' + (i + 1))}</b>${on ? ' <span class="badge b-green">Đang dùng</span>' : ''}<div class="small muted mc-u">${esc(MAYCHU.norm(x.url).replace(/^https:\/\//, ''))}</div></div>
+        <button type="button" class="btn sm" data-mcq="${i}" title="Mã QR để quét bằng điện thoại">QR</button>${on ? '' : `<a class="btn sm pri" href="${esc(MAYCHU.norm(x.url))}" target="_blank" rel="noopener">Mở</a>`}</div><div class="mc-q" data-mcqv="${i}" hidden></div>`; }).join('')}
+      ${adm ? `<button type="button" class="btn sm" data-mce style="margin-top:8px">${ic('edit')} Sửa danh sách máy chủ</button>` : ''}</div>`;
+  },
+  bind(m) {
+    const L = MAYCHU.list();
+    m.el.querySelectorAll('[data-mcq]').forEach(b => b.onclick = async () => {
+      const i = +b.dataset.mcq, box = m.el.querySelector(`[data-mcqv="${i}"]`); if (!box) return;
+      if (!box.hidden) { box.hidden = true; return; }
+      try { await QR.load(); } catch (e) { }
+      const u = MAYCHU.norm(L[i].url), svg = QR.svg(u, 38);
+      box.innerHTML = svg ? `${svg}<div class="small muted">Quét bằng camera điện thoại để mở ${esc(L[i].ten || '')}, rồi cài app</div>` : '<div class="small muted">Chưa tải được mã QR, kiểm tra mạng rồi bấm lại.</div>'; box.hidden = false;
+    });
+    const e = m.el.querySelector('[data-mce]'); if (e) e.onclick = () => { m.close(); MAYCHU.edit(); };
+  },
+  edit() {
+    if (!(Auth.user && Auth.user.role === 'admin')) return toast('Chỉ Admin sửa được danh sách máy chủ', 'err');
+    const L = MAYCHU.list();
+    Form.open({ title: 'Danh sách máy chủ', width: 560, cols: 1, saveText: 'Lưu', value: { t: L.map(x => (x.ten || '') + ' | ' + MAYCHU.norm(x.url)).join('\n') },
+      fields: [{ key: 't', label: 'Mỗi dòng một máy chủ: Tên | địa chỉ', type: 'textarea', rows: 6, hint: 'Ví dụ: Máy chủ 2 · Cloudflare | https://nhaxethinhphat.pages.dev/ — để trống rồi lưu là dùng lại danh sách mặc định' }],
+      onSave: d => {
+        const out = []; String(d.t || '').split('\n').forEach(l => { l = l.trim(); if (!l) return; const p = l.split('|'), url = MAYCHU.norm(p.length > 1 ? p.slice(1).join('|') : p[0]), ten = p.length > 1 ? p[0].trim() : ''; if (!/^https:\/\/[^/\s]+\.[^/\s]+/.test(url)) return; out.push({ ten: ten || 'Máy chủ ' + (out.length + 1), url }); });
+        if (String(d.t || '').trim() && !out.length) { toast('Địa chỉ không hợp lệ (phải bắt đầu bằng https://)', 'err'); return false; }
+        if (out.length) DB.settings.mayChu = out; else delete DB.settings.mayChu;
+        App.changed(); toast('Đã lưu danh sách máy chủ', 'ok');
+      } });
+  },
+  open() { PWA.guide(); }
+};
+addCSS(`.mc-box{border-top:1px solid #e2e8f0;margin-top:12px;padding-top:10px}.mc-r{display:flex;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;margin-top:6px}.mc-r.on{border-color:var(--p);background:var(--p-50,#ecfdf5)}.mc-u{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mc-q{text-align:center;padding:8px 0 2px}`);
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-au="mc"]'); if (!b) return; const m = $('#auMe'); if (m) m.classList.remove('open'); MAYCHU.open(); });
 const PWA = {
   ev: null,
   standalone: () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true,
@@ -15326,11 +15372,12 @@ const PWA = {
       ${row('💻 Máy tính (Chrome / Edge)', !ios && !and, 'Bấm biểu tượng <b>Cài đặt</b> ở cuối thanh địa chỉ → <b>Cài đặt</b>.')}
       ${row('🤖 Android (Chrome)', and, 'Menu <b>⋮</b> → <b>Cài đặt ứng dụng</b> (hoặc Thêm vào màn hình chính) → <b>Cài đặt</b>.')}
       ${row('🍎 iPhone / iPad (Safari)', ios, 'Nút <b>Chia sẻ</b> (ô vuông mũi tên lên) → <b>Thêm vào MH chính</b> → <b>Thêm</b>.')}
-      <p class="small muted" style="margin:10px 0 0">Sau đó mở app bằng biểu tượng <b>${esc(coShort())}</b> trên màn hình.</p>`,
+      <p class="small muted" style="margin:10px 0 0">Sau đó mở app bằng biểu tượng <b>${esc(coShort())}</b> trên màn hình.</p>${MAYCHU.html()}`,
       foot: `<button class="btn" data-x>Đóng</button>${PWA.ev ? `<button class="btn pri" data-go>${ic('download')} Cài ngay</button>` : ''}` });
     m.el.style.zIndex = 900;
     m.el.querySelector('[data-x]').onclick = () => m.close();
     const g = m.el.querySelector('[data-go]'); if (g) g.onclick = () => { m.close(); PWA.install(); };
+    MAYCHU.bind(m);
   },
   async install() {
     if (!PWA.ev) return PWA.guide();
