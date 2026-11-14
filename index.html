@@ -396,7 +396,7 @@ const F = {
 /* ---------- Ngày tháng ---------- */
 const D = {
   iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); },
-  today() { return D.iso(new Date()); },
+  today() { const n = Date.now(); if (D._tv && n - D._tt < 1000) return D._tv; D._tt = n; return (D._tv = D.iso(new Date(n))); },   // gọi rất nhiều lần khi vẽ: nhớ trong 1 giây
   parse(s) { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d || 1); },
   add(s, n) { const d = D.parse(s); d.setDate(d.getDate() + n); return D.iso(d); },
   diff(a, b) { return Math.round((D.parse(a) - D.parse(b)) / 864e5); },
@@ -4074,7 +4074,7 @@ function lcForm(l, pre) {
 setInterval(() => {
   try {
     if (App.cur !== 'lichchay' || document.querySelector('.modal-wrap,.modal')) return;
-    const sig = DB.lichchay.filter(l => l.ngay === lcDay()).map(l => +lcGone(l)).join('');
+    const d0 = lcDay(), sig = DB.lichchay.filter(l => l.ngay === d0).map(l => +lcGone(l)).join('');
     if (sig !== lcSig) { lcSig = sig; App.render(); }
   } catch (e) { }
 }, 30000);
@@ -4199,18 +4199,24 @@ const Lock = {
 const lockMsg = (g, o) => 'Ghế ' + g + ' đang được ' + ((o && o.name) || 'nhân viên khác') + ' thao tác';
 function dvSetB(b) { DV.one = null; const o = DB.datve.find(x => x.id === DV.selB); if (o) dvGrp(o).forEach(x => Lock.release(x.chuyen, x.ghe)); DV.selB = b ? b.id : null; return b ? Promise.all(dvGrp(b).map(x => Lock.take(x.chuyen, x.ghe))).then(r => r.every(Boolean)) : Promise.resolve(true); }
 const DV = { ngay: null, trip: null, tab: 'ghe', tuyen: '', multi: false, sel: [], selTrip: null };
-const dvAllDay = () => DB.lichchay.filter(l => l.ngay === lcDay() && !l.khoa);   // chuyến khóa ở Điều hành không bán vé
+const dvAllDay = () => { const d = lcDay(); return DB.lichchay.filter(l => l.ngay === d && !l.khoa); };   // chuyến khóa ở Điều hành không bán vé
 const dvRoutes = () => [...new Set(dvAllDay().map(l => l.tuyen))].sort(routeCmp);
 const dvRoute = () => { const r = dvRoutes(); return r.includes(DV.tuyen) ? DV.tuyen : (r[0] || ''); };
 const dvDay = () => lcDay();
-const dvTrips = () => DB.lichchay.filter(l => l.ngay === dvDay() && !l.khoa && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.gio).localeCompare(String(b.gio)) || String(a.tuyen).localeCompare(String(b.tuyen), 'vi'));
+const dvTrips = () => { const d = dvDay(), r = dvRoute(); return DB.lichchay.filter(l => l.ngay === d && !l.khoa && (!r || l.tuyen === r)).sort((a, b) => String(a.gio).localeCompare(String(b.gio)) || String(a.tuyen).localeCompare(String(b.tuyen), 'vi')); };
 const dvSO = l => {
   const v = DB.vehicles.find(x => x.id === l.xeId), cap = v && +v.soCho > 2 ? +v.soCho - 2 : 14;
   const hs = v && Array.isArray(v.soDoLs) ? v.soDoLs : null;
   if (hs && hs.length) { const t = l.ngay + ' ' + (l.gio || '00:00'); let pick = hs[0]; for (const e of hs) if (e.tu <= t) pick = e; return sdNorm(pick.soDo, cap); }
   return sdNorm(v && v.soDo, cap);
 };
-const dvBook = id => DB.datve.filter(b => b.chuyen === id && !b.huy);
+/* Vé của 1 chuyến. Lúc đang vẽ màn hình (dữ liệu không đổi) dùng bảng tra theo chuyến dựng 1 lần, thay vì lọc toàn bộ vé cho từng chuyến (rất chậm khi nhiều vé).
+   Ngoài lúc vẽ (lưu, sửa vé…) vẫn lọc trực tiếp như cũ để luôn đúng dữ liệu mới nhất. */
+const DVX = { on: 0, m: null, a: null, n: -1,
+  idx() { if (!DVX.on) return null; const A = DB.datve || []; if (DVX.m && DVX.a === A && DVX.n === A.length) return DVX.m;
+    const M = new Map(); A.forEach(b => { const k = b.chuyen; let L = M.get(k); if (!L) M.set(k, L = []); L.push(b); }); DVX.m = M; DVX.a = A; DVX.n = A.length; return M; } };
+const dvBook = id => { const X = DVX.idx(); return X ? (X.get(id) || []).filter(b => !b.huy) : DB.datve.filter(b => b.chuyen === id && !b.huy); };
+{ const r0 = App.render; App.render = function () { DVX.on++; try { return r0.apply(this, arguments); } finally { if (!--DVX.on) DVX.m = null; } }; }
 /* chuyến mặc định: chuyến có giờ chạy kế tiếp (hôm nay: chuyến sắp chạy gần nhất; hết chuyến thì chuyến cuối) */
 const dvNext = L => { if (!L.length) return null; const n = new Date(), now = D.today() + ' ' + String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); const k = l => (l.ngay || '') + ' ' + (l.gio || '00:00'); if (k(L[0]).slice(0, 10) !== now.slice(0, 10)) return L[0]; return L.find(l => k(l) >= now) || L[L.length - 1]; };
 const dvCur = () => { const L = dvTrips(); const f = L.find(l => l.id === DV.trip); if (f) return f; const x = dvNext(L); DV.trip = x ? x.id : undefined; return x || undefined; };
@@ -5666,8 +5672,8 @@ addCSS(`.dx-wn.dx-wt{left:auto;right:34px;background:#d97706;box-shadow:0 2px 6p
 Object.assign(ACT, {
   dhMode: d => { if (dhMode === d.m) return; dhMode = d.m; dhSel = []; dhOpen = false; App.render(); },
   dhDD: () => { dhOpen = !dhOpen; App.render(); },
-  dhAll: () => { dhSel = [...new Set([...DB.lichchay.filter(l => l.ngay === lcDay()).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; App.render(); },
-  dhG: d => { const all = [...new Set([...DB.lichchay.filter(l => l.ngay === lcDay()).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; let cur = dhSel.filter(g => all.includes(g)); if (!cur.length && all[0]) cur = [all[0]]; if (cur.includes(d.g)) { if (cur.length === 1) return toast('Cần chọn ít nhất một tuyến', 'err'); cur = cur.filter(g => g !== d.g); } else cur = [...cur, d.g]; dhSel = cur; App.render(); },
+  dhAll: () => { const d0 = lcDay(); dhSel = [...new Set([...DB.lichchay.filter(l => l.ngay === d0).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; App.render(); },
+  dhG: d => { const d0 = lcDay(), all = [...new Set([...DB.lichchay.filter(l => l.ngay === d0).map(l => l.tuyen), ...DB.giochay.filter(g => g.tt !== 'ĐÓNG').map(g => g.tuyen)].filter(Boolean).map(dhGrp))]; let cur = dhSel.filter(g => all.includes(g)); if (!cur.length && all[0]) cur = [all[0]]; if (cur.includes(d.g)) { if (cur.length === 1) return toast('Cần chọn ít nhất một tuyến', 'err'); cur = cur.filter(g => g !== d.g); } else cur = [...cur, d.g]; dhSel = cur; App.render(); },
   dhNav: d => { LC.ngay = +d.n === 0 ? D.today() : D.add(lcDay(), +d.n); App.render(); },
   dhDay: d => { LC.ngay = d.d; dhPop = false; App.render(); },
   dhPop: () => { dhPop = !dhPop; App.render(); },
@@ -13875,6 +13881,7 @@ const DOCH = {
     const r = await HS.dcall({ action: 'hs_get', id }, 120000); if (!r || !r.data) return ''; const s = 'data:' + (r.mime || 'application/octet-stream') + ';base64,' + r.data; IMGX.save(id, s); return s;
   },
   B: new Set(),
+  fp(u) { const n = u.length, st = Math.max(1, Math.floor(n / 1500)); let x = ''; for (let i = 0; i < n; i += st) x += u[i]; return n + ':' + PM.h(x) + ':' + PM.h(u.slice(-200)); },   // dấu nhận diện tệp: độ dài + 1.500 ký tự rải đều + đuôi
   async toHS(o, t, quiet) {
     const bk = (o && o.id) + ':' + t; if (DOCH.B.has(bk)) return 0; DOCH.B.add(bk);   // cùng một giấy đang lưu dở: không lưu chồng 2 lần
     try {
@@ -13892,17 +13899,19 @@ const DOCH = {
         const did = u.startsWith(IMGX.PRE) ? u.slice(IMGX.PRE.length) : (IMGX.map.get(u) || '');
         const pool = [...prevY, ...HS.H().filter(h => h.loai === 'file' && (h.ten === nm || h.ten === nm0) && !prevY.includes(h) && DOCH.yOf(h) === y)].filter(h => !h.an && !used.has(h) && (!h.fk || h.fk === k));
         let hit = did && pool.find(h => h.sgId === did);                                 // năm nay đã lưu đúng ảnh này (theo mã Drive): bỏ qua, không cần tải ảnh
+        const fp = u.startsWith('data:') ? DOCH.fp(u) : '';                              // dấu nhanh (không băm cả ảnh): tránh đơ máy khi rà nhiều giấy
+        if (!hit && fp) hit = pool.find(h => h.fp === fp);
         let d = '', mm = null, sg = '', size = 0;
         if (!hit) {
           d = await DOCH.getData(u); mm = d.match(/^data:([^;,]+)[^,]*,(.*)$/); if (!mm) throw new Error('chưa lấy được ảnh ' + l.toLowerCase() + ' từ Drive');   // không lấy được ảnh: dừng loại giấy này, không đụng bản đã lưu
           sg = PM.h(mm[2]); size = Math.round(mm[2].length * 0.75);
           hit = pool.find(h => h.sg === sg) || pool.find(h => !h.sg && !h.sgId && h.size === size && h.mime === mm[1]);   // bản lưu cũ chưa có dấu: so dung lượng + loại tệp
         }
-        if (hit) { used.add(hit); ids.push(hit.id); if (did && hit.sgId !== did) { hit.sgId = did; ch = true; } if (sg && !hit.sg) { hit.sg = sg; ch = true; } if (!hit.fk) { hit.fk = k; ch = true; } continue; }
+        if (hit) { used.add(hit); ids.push(hit.id); if (did && hit.sgId !== did) { hit.sgId = did; ch = true; } if (sg && !hit.sg) { hit.sg = sg; ch = true; } if (fp && hit.fp !== fp) { hit.fp = fp; ch = true; } if (!hit.fk) { hit.fk = k; ch = true; } continue; }
         folder = folder || HS.ensure([y, xe ? '03. Phương tiện' : '02. Nhân sự', DOCH.HSDIR[t], who]);
         const ext = (mm[1].split('/')[1] || 'jpg').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5);
         const id = await HS.store(mm[2], { folder, ten: nm, tenFile: nm + '.' + ext, mime: mm[1], size, hetHan: han, ghiChu: `Tự lưu ${T.label.toLowerCase()} năm ${y}` });
-        if (id) { const it = HS.H().find(h => h.id === id); if (it) Object.assign(it, { sg, sgId: did, fk: k }); ids.push(id); saved++; nk.add(k); }
+        if (id) { const it = HS.H().find(h => h.id === id); if (it) Object.assign(it, { sg, sgId: did, fk: k, fp: fp || DOCH.fp(d) }); ids.push(id); saved++; nk.add(k); }
       }
       const rep = prevY.filter(h => !ids.includes(h.id) && (h.fk ? nk.has(h.fk) : saved > 0));          // bản cùng năm của giấy vừa thay: chỉ ẩn thành "Bản cũ", không xóa (bản các năm trước không đụng)
       const nmap = [...ids, ...prevY.filter(h => !ids.includes(h.id) && !rep.includes(h)).map(h => h.id)];
@@ -13922,7 +13931,7 @@ const DOCH = {
     DOCH._sy = true; let n = 0;
     try {
       const job = [...(DB.vehicles || []).filter(v => v.bks).map(v => [v, DOCH.VT]), ...(DB.employees || []).filter(e => e.ten).map(e => [e, DOCH.ET])];
-      for (const [o, L] of job) for (const t of L) { if (DOCH.TT(t).f.some(([k]) => o[k])) n += await DOCH.toHS(o, t, true); }
+      for (const [o, L] of job) { for (const t of L) { if (DOCH.TT(t).f.some(([k]) => o[k])) n += await DOCH.toHS(o, t, true); } await new Promise(r => setTimeout(r, 40)); }   // nghỉ giữa từng xe / người: máy vẫn phản hồi khi đang rà
       if (n) toast(`Lưu trữ hồ sơ: đã lưu thêm ${n} giấy tờ xe / nhân viên còn thiếu`, 'ok', 6000);
     } finally { DOCH._sy = false; }
     return n;
@@ -14936,7 +14945,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T11:40';
+const APP_BUILD = '2026-11-14T12:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}

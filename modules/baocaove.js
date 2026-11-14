@@ -25,7 +25,7 @@ const BV = {
   prev(a, z) { const n = D.diff(z, a) + 1; return [D.add(a, -n), D.add(a, -1)]; },
   grp(L, f) { const m = new Map(); L.forEach(x => { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; },
   data() {
-    const [a, z] = BV.range(BV.k), c = BV.calc(a, z), p = BV.calc(...BV.prev(a, z)), trip = id => c.T.find(l => l.id === id) || {};
+    const [a, z] = BV.range(BV.k), c = BV.calc(a, z), p = BV.calc(...BV.prev(a, z)), TM = new Map(), trip = id => TM.get(id) || {}; c.T.forEach(l => { if (!TM.has(l.id)) TM.set(l.id, l); });   // tra chuyến bằng bảng, không dò cả danh sách cho từng vé
     const days = []; for (let d = a; d <= z; d = D.add(d, 1)) days.push(d);
     const byDay = days.map(d => { const L = c.B.filter(b => trip(b.chuyen).ngay === d); return { d, n: L.length, dt: sum(L, dvTot) }; });
     const byRoute = [...BV.grp(c.T, l => l.tuyen || '—')].map(([r, T]) => { const ids = new Set(T.map(l => l.id)), L = c.B.filter(b => ids.has(b.chuyen)), run = T.filter(l => dvBook(l.id).length), cap = run.reduce((s, l) => s + (dvCap(l) || 0), 0), dt = sum(L, dvTot), thu = sum(L, BV.coc); return { tuyen: r, ch: T.length, chk: run.length, ve: L.length, ld: cap ? L.length / cap * 100 : null, dt, thu, con: dt - thu }; }).sort((x, y) => y.dt - x.dt);

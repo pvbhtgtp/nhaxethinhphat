@@ -1,6 +1,6 @@
 'use strict';
 /* Module Đặt vé (màn hình đặt vé, sơ đồ ghế, danh sách khách, gọi khách); dữ liệu chuyến/vé, đồng bộ vé, lệnh vận chuyển ở index · tải khi mở màn hình (MODL). */
-const lcRows = () => DB.lichchay.filter(l => l.ngay === lcDay() && (!dvRoute() || l.tuyen === dvRoute())).sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
+const lcRows = () => { const d = lcDay(), r = dvRoute(); return DB.lichchay.filter(l => l.ngay === d && (!r || l.tuyen === r)).sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio))); };
 const lcCols = [
   { key: 'tuyen', label: 'Tuyến', render: l => `<b>${esc(l.tuyen)}</b>` },
   { key: 'gio', label: 'Giờ', align: 'c', val: l => l.gio + (lcGone(l) ? ' · Đã xuất bến' : ''), render: l => `<b>${esc(l.gio)}</b>${lcGone(l) ? '<br><span class="badge b-gray">Đã xuất bến</span>' : ''}` },
