@@ -11148,7 +11148,12 @@ const HS = {
   defYear() { const c = String(new Date().getFullYear()), y = HS.years(); return (y.find(f => f.ten === c) || y[0] || {}).id || (HS.others().length ? '__o' : ''); },
   dcfg: () => (S().hsDrive || {}),
   driveOk() { const c = HS.dcfg(); return !!(c.url && c.key && GS.ok({ url: c.url, key: c.key })); },
-  dcall(body, ms = 90000) { const c = HS.dcfg(); return GS.call(body, { url: c.url, key: c.key, mode: 'gas' }, ms); },
+  dcall(body, ms = 90000) { const c = HS.dcfg(), go = () => GS.call(body, { url: c.url, key: c.key, mode: 'gas' }, ms);
+    /* tải tệp vào thư mục chưa chắc đã có: các lần tải cùng thư mục chạy lần lượt cho tới khi thư mục được tạo xong,
+       tránh 2 lệnh cùng lúc tạo ra 2 thư mục trùng tên trên Drive (vd 2 thư mục "_Anh he thong") */
+    if (body && body.action === 'hs_put' && Array.isArray(body.path)) { const k = body.path.join('/'); if (!(HS._pk = HS._pk || new Set()).has(k)) {
+      const Q = (HS._pq = HS._pq || {}), prev = Q[k] || Promise.resolve(), run = prev.catch(() => { }).then(go).then(r => { HS._pk.add(k); return r; }); Q[k] = run.catch(() => { }); return run; } }
+    return go(); },
   google: () => !!(HS.driveOk() && typeof TK !== 'undefined' && TK.live),     // cần: kho Google Drive + danh mục đồng bộ trực tiếp
   path(id) { const o = []; let f = HS.by(id), g = 0; while (f && g++ < 60) { o.unshift(f); f = HS.by(f.cha); } return o; },
   ptxt: id => HS.path(id).map(f => f.ten).join(' / ') || 'Gốc',
@@ -12332,6 +12337,7 @@ function doPost(e) {
     else if (b.action === 'hs_put') out = put_(b);
     else if (b.action === 'hs_get') out = get_(b);
     else if (b.action === 'hs_del') out = del_(b);
+    else if (b.action === 'hs_gop') out = hsGop_();
     else if (b.action === 'ai') out = ai_(b);
     else throw new Error('Lệnh không hợp lệ: ' + b.action);
   } catch (err) { out = { ok: false, description: String(err.message || err) }; }
@@ -12348,11 +12354,21 @@ function ai_(b) {
   var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/' + path, o);
   return { ok: true, status: r.getResponseCode(), text: r.getContentText() };
 }
-function goc_() { var it = DriveApp.getFoldersByName(THU_MUC_GOC); return it.hasNext() ? it.next() : DriveApp.createFolder(THU_MUC_GOC); }
-function con_(cha, ten) { ten = String(ten).replace(/[\\\/]/g, '-').trim() || '_'; var it = cha.getFoldersByName(ten); return it.hasNext() ? it.next() : cha.createFolder(ten); }
-function ping_() { var g = goc_(); return { ok: true, used: DriveApp.getStorageUsed(), limit: DriveApp.getStorageLimit(), folder: g.getUrl(), name: g.getName() }; }
+var PHIEN_BAN = 2;   // 2: khóa khi tạo thư mục, tự gộp thư mục trùng tên
+function ds_(it) { var L = []; while (it.hasNext()) L.push(it.next()); return L; }
+function gop_(src, dst) {   // dồn mọi tệp và thư mục con của src sang dst (giữ nguyên mã tệp), rồi bỏ src vào thùng rác
+  ds_(src.getFiles()).forEach(function (x) { x.moveTo(dst); });
+  ds_(src.getFolders()).forEach(function (x) { var it = dst.getFoldersByName(x.getName()); if (it.hasNext()) gop_(x, it.next()); else x.moveTo(dst); });
+  src.setTrashed(true);
+}
+function goc_() { var L = ds_(DriveApp.getFoldersByName(THU_MUC_GOC)); if (!L.length) return DriveApp.createFolder(THU_MUC_GOC); for (var i = 1; i < L.length; i++) gop_(L[i], L[0]); return L[0]; }
+function con_(cha, ten) { ten = String(ten).replace(/[\\\/]/g, '-').trim() || '_'; var L = ds_(cha.getFoldersByName(ten)); if (!L.length) return cha.createFolder(ten); for (var i = 1; i < L.length; i++) gop_(L[i], L[0]); return L[0]; }
+function gopAll_(f) { var seen = {}; ds_(f.getFolders()).forEach(function (x) { var n = x.getName(); if (seen[n]) gop_(x, seen[n]); else seen[n] = x; }); for (var n in seen) gopAll_(seen[n]); }
+function hsGop_() { var k = LockService.getScriptLock(); k.waitLock(30000); try { gopAll_(goc_()); } finally { k.releaseLock(); } return { ok: true }; }
+function ping_() { var g = goc_(); return { ok: true, ver: PHIEN_BAN, used: DriveApp.getStorageUsed(), limit: DriveApp.getStorageLimit(), folder: g.getUrl(), name: g.getName() }; }
 function put_(b) {
-  var f = goc_(); (b.path || []).forEach(function (n) { f = con_(f, n); });
+  var k = LockService.getScriptLock(), f; k.waitLock(30000);   // nhiều lệnh tải lên cùng lúc: lần lượt tìm / tạo thư mục, không tạo trùng
+  try { f = goc_(); (b.path || []).forEach(function (n) { f = con_(f, n); }); } finally { k.releaseLock(); }
   var blob = Utilities.newBlob(Utilities.base64Decode(b.data), b.mime || 'application/octet-stream', b.name || 'tep');
   var file = f.createFile(blob);
   return { ok: true, id: file.getId(), url: file.getUrl(), size: file.getSize() };
@@ -12377,13 +12393,20 @@ const HSDUP = {
     G.forEach(L => { if (L.length < 2) return; const S = L.slice().sort((a, b) => String(b.tg || '').localeCompare(String(a.tg || ''))), keep = S.find(h => U.has(h.id)) || S.find(h => h.ref) || S[0]; L.forEach(h => { if (h !== keep && !U.has(h.id)) dup.push({ h, keep }); }); });
     return { dup, bad, all: [...dup.map(x => x.h), ...bad] };
   },
+  async gop() {   // gộp thư mục trùng tên trên Drive (cần Apps Script Kho hồ sơ bản 2 trở lên)
+    if (!HS.driveOk()) return toast('Chưa kết nối Google Drive', 'err');
+    toast('Đang gộp thư mục trùng trên Drive…', '', 4000);
+    try { await HS.dcall({ action: 'hs_gop' }, 300000); toast('Đã gộp thư mục trùng tên trên Drive (tệp giữ nguyên, thư mục thừa vào thùng rác)', 'ok', 6000); }
+    catch (e) { toast(/không hợp lệ|hs_gop/i.test(e.message || '') ? 'Apps Script Kho hồ sơ đang là bản cũ: Management › Kho hồ sơ › Mã Apps Script, dán lại mã mới và Triển khai (phiên bản mới) rồi thử lại.' : 'Chưa gộp được: ' + esc(e.message || e), 'err', 9000); }
+  },
   open() {
     if (!PERM.admin()) return toast('Chỉ Admin được rà soát và xóa tệp', 'err');
     const r = HSDUP.find(), row = (h, note) => `<tr><td>${esc(h.tenFile || h.ten || '')}</td><td class="small muted">${esc(HS.ptxt(h.folder))}</td><td class="small">${h.size ? MG.mb(h.size) : '—'}</td><td class="small">${note}</td></tr>`;
     const m = Modal.open({ title: 'Rà soát tệp trùng / tệp lỗi', width: 760, body: !r.all.length ? '<p>Không có tệp trùng hay tệp lỗi.</p>' : `<p style="margin-top:0"><b>${r.dup.length}</b> tệp trùng · <b>${r.bad.length}</b> tệp lỗi. Tệp trên Google Drive chuyển vào <b>thùng rác</b> (khôi phục được trong 30 ngày). Bản đang dùng được giữ lại.</p>
       <div class="tbl-wrap free" style="max-height:52vh"><table class="tbl compact"><thead><tr><th>Tệp sẽ xóa</th><th>Thư mục</th><th>Dung lượng</th><th>Lý do</th></tr></thead><tbody>${r.dup.map(x => row(x.h, 'Trùng với ' + esc(x.keep.tenFile || x.keep.ten || '') + ' (giữ)')).join('')}${r.bad.map(h => row(h, '<span style="color:#DC2626">Lỗi: không còn nội dung</span>')).join('')}</tbody></table></div>`,
-      foot: `<button class="btn" data-x>Đóng</button>${r.all.length ? `<button class="btn pri danger" data-go>${ic('trash')} Xóa ${r.all.length} tệp</button>` : ''}` });
+      foot: `<button class="btn left" data-gop title="Gộp các thư mục trùng tên trên Google Drive (vd 2 thư mục _Anh he thong) thành 1, tệp giữ nguyên">${ic('folder')} Gộp thư mục trùng trên Drive</button><button class="btn" data-x>Đóng</button>${r.all.length ? `<button class="btn pri danger" data-go>${ic('trash')} Xóa ${r.all.length} tệp</button>` : ''}` });
     m.el.querySelector('[data-x]').onclick = () => m.close();
+    m.el.querySelector('[data-gop]').onclick = () => HSDUP.gop();
     const go = m.el.querySelector('[data-go]'); if (!go) return;
     go.onclick = async () => {
       if (!await Modal.confirm(`Xóa <b>${r.all.length}</b> tệp trùng / lỗi khỏi Lưu trữ hồ sơ?<br><span class="muted small">Tệp trên Drive vào thùng rác, khôi phục được trong 30 ngày.</span>`, { ok: 'Xóa', danger: true })) return;
@@ -14913,6 +14936,7 @@ const SYS = {
     try { if (PERM.admin() && typeof MG !== 'undefined') {   // dung lượng Google Drive, ảnh chưa tải lên được, tệp trùng / lỗi
       const I = MG.info, p = I && I.limit ? I.used / I.limit * 100 : 0; if (HS.driveOk() && (!MG.at || Date.now() - MG.at > 1800000)) MG.ping(true).catch(() => { });
       if (I && I.limit) add(p < 85, `Google Drive đã dùng ${p.toFixed(0)}% (${MG.mb(I.used)} / ${MG.mb(I.limit)})`, 'Sắp đầy: dọn thùng rác Drive, xóa tệp trùng (Management › Rà soát tệp trùng), mua thêm dung lượng hoặc chuyển ảnh sang Cloudflare R2');
+      if (I && HS.driveOk()) add((+I.ver || 1) >= 2, 'Apps Script Kho hồ sơ là bản mới', 'Bản cũ có thể tạo thư mục trùng tên trên Drive: Management › Kho hồ sơ › Mã Apps Script, dán lại mã và Triển khai phiên bản mới, rồi bấm Rà soát › Gộp thư mục trùng');
       const nf = typeof IMGX !== 'undefined' ? IMGX.fail.size : 0; add(!nf, nf ? `${nf} ảnh chưa tải lên Drive được` : 'Ảnh đã tải lên Drive đầy đủ', 'Drive có thể đã đầy hoặc mất kết nối Apps Script. App tự thử lại sau 10 phút');
       const nd = HSDUP.find().all.length; add(!nd, nd ? `${nd} tệp hồ sơ trùng hoặc lỗi` : 'Không có tệp hồ sơ trùng / lỗi', 'Management › Sức khỏe lưu trữ › Rà soát tệp trùng / tệp lỗi');
     } } catch (e) { }
@@ -14984,7 +15008,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T12:45';
+const APP_BUILD = '2026-11-14T13:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
