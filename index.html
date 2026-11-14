@@ -5894,6 +5894,8 @@ Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"tuyen": "..."
 - "bks": biển số xe đúng như đọc được (ví dụ 60B-123.45); chuyến chưa có xe thì để chuỗi rỗng.
 - "laiXe": tên lái xe đúng như đọc được, giữ nguyên dấu tiếng Việt; chưa có thì để chuỗi rỗng.
 - Mỗi chuyến phải đọc đủ cả giờ, biển số xe và lái xe của CÙNG một ô; không ghép xe của ô này với lái xe của ô khác.
+- Đọc cả các chuyến TĂNG CƯỜNG / chuyến thêm (có thể nằm ở cột, hàng hoặc khu riêng, giờ lẻ không giống lịch thường ngày): mỗi chuyến tăng cường là một phần tử riêng, "tuyen" là tuyến của chuyến đó (ghi trong ô, hoặc tuyến của hàng / khu chứa nó).
+- Cùng một tuyến cùng một giờ có nhiều xe thì mỗi xe là một phần tử riêng.
 - Bỏ qua ô trống. Không bịa dữ liệu, chỗ nào không đọc rõ thì để chuỗi rỗng.
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
@@ -5961,7 +5963,7 @@ Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.
       catch (e) { clearInterval(tick); const c = e && e.code; out.innerHTML = `<div class="sc-bad" style="margin-top:12px">${c === 'cancelled' ? 'Đã dừng quét.' : c === 'timeout' ? esc(AIX.msg(e)) : c === 'not_granted' ? 'Bạn chưa cho phép Claude đọc ảnh nên không quét được.' : c === 'rate_limited' ? 'Đã quét quá nhiều, hãy thử lại sau ít phút.' : c === 'image_rejected' ? 'Ảnh không dùng được (quá lớn hoặc sai định dạng), hãy chọn ảnh khác.' : c === 'invalid_json' ? 'Không đọc được kết quả từ ảnh này, hãy thử ảnh rõ hơn.' : sample.gemini ? esc(AIX.msg(e)) : 'Quét không thành công, hãy thử lại. (' + esc(c || 'lỗi') + ')'}</div>`; go.disabled = false; stop.hidden = true; return; }
       go.disabled = false; stop.hidden = true;
       if (!Array.isArray(res) || !res.length) { out.innerHTML = '<div class="sc-bad" style="margin-top:12px">Không tìm thấy chuyến nào trong ảnh.</div>'; return; }
-      const canAdd = Auth.can('lichchay', 'add');
+      const canAdd = Auth.can('lichchay', 'add') || Auth.can('lichchay', 'edit');   // giờ trên ảnh mà lịch chưa có (chuyến tăng cường, mỗi ngày mỗi khác): người được quét ảnh thì được tạo
       // xe / lái xe chưa chắc chắn (AI đọc khác nhau, không khớp hoặc khớp nhiều người): đưa lựa chọn ngay trong bảng kết quả, chọn xong mới được áp dụng
       const uniq = L => [...new Set(L.filter(Boolean))];
       self.rows = res.map(r => {
@@ -5981,7 +5983,7 @@ Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.
           if (!r.tuyen) st = 'Không xác định được tuyến' + (r.rt ? ' "' + r.rt + '"' : '') + ', chọn tuyến'; else if (!r.gio) st = 'Không đọc được giờ';
           else if (!v || !e) st = (r.badV && !v) || (r.badE && !e) ? 'Các AI đọc không thống nhất ' + [!v && r.badV && 'xe', !e && r.badE && 'lái xe'].filter(Boolean).join(', ') + ', chọn đúng' : (r.rb && !v) || (r.rl && !e) ? 'Có ' + [r.rb && !v && 'xe', r.rl && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, chọn đúng' : (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');   // một chuyến hợp lệ phải đủ cả 3: giờ chạy + lái xe + xe
           else if (r.trip && !lcCan(r.trip)) st = 'Chuyến đã khóa (đã xuất bến)'; else if (r.trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; }
-          else if (canAdd) { st = 'Tạo chuyến mới'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
+          else if (canAdd) { st = 'Tạo chuyến mới (tăng cường, chỉ ngày này)'; ok = true; } else st = 'Chưa có chuyến này trong lịch';
           r.st = st; r.ok = ok;
         });
         dhClash(self.rows, () => day); self.rows.forEach(r => { if (!r.ok && r.trip) r.hold = r.trip; });
@@ -15126,7 +15128,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T16:30';
+const APP_BUILD = '2026-11-14T16:45';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
