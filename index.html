@@ -1807,6 +1807,7 @@ function migrate(db) {
 const S = () => DB.settings;
 /* Tên nhà xe / ký hiệu văn bản: lấy từ Cài đặt › Thông tin công ty (mỗi nhà xe tự nhập), không viết cứng trong code.
    Để trống thì tự suy từ tên công ty: tên ngắn = 2 chữ cuối (vd "Thịnh Phát"), tên app = "Nhà Xe " + tên ngắn, ký hiệu = chữ cái đầu (vd TGTP). */
+function cpLX() { const v = coC().cpKhacLX; return v === undefined || v === null || String(v).trim() === '' ? 0.04 : Math.max(0, +v || 0) / 100; }   // tỷ lệ chi phí khác của lái xe
 function coC() { try { return (typeof DB !== 'undefined' && DB && DB.settings && DB.settings.company) || {}; } catch (e) { return {}; } }
 function coBody() { return String(coC().ten || '').normalize('NFC').toUpperCase().replace(/^\s*(CÔNG\s*TY|CTY|HỢP\s*TÁC\s*XÃ|HTX|DOANH\s*NGHIỆP\s*TƯ\s*NHÂN|DNTN)\s*/, '').replace(/^(TRÁCH\s*NHIỆM\s*HỮU\s*HẠN|TNHH|CỔ\s*PHẦN|CP)\s*/, '').replace(/^(MỘT\s*THÀNH\s*VIÊN|MTV|HAI\s*THÀNH\s*VIÊN)\s*/, '').trim(); }
 function coShort() { const c = coC(); if (String(c.tenNgan || '').trim()) return String(c.tenNgan).trim(); const w = coBody().split(/\s+/).filter(Boolean).slice(-2); return w.map(x => x.charAt(0) + x.slice(1).toLowerCase()).join(' '); }
@@ -1842,7 +1843,7 @@ function summarize(ym, eid) {
   for (const k in a.d) { const c = CODES[a.d[k]]; if (!c) continue; o.lv += c.lv; o.hl += c.hl; o.kl += c.kl; if (o[a.d[k]] !== undefined) o[a.d[k]]++; }
   for (const d in lc) { o.lc += lc[d].cong; o.tienCong += lc[d].tien; if (!a.d[d]) { o.lv += lc[d].cong; o.hl += lc[d].cong; } }
   if (!drv && e) o.tienCong = +e.luongCoDinh || 0;
-  o.cpKhac = drv ? Math.round(o.tienCong * 0.04) : 0; // Chi phí khác = 4% tiền công, chỉ áp dụng cho lái xe
+  o.cpKhac = drv ? Math.round(o.tienCong * cpLX()) : 0; // Chi phí khác = % tiền công (Cài đặt › Thông tin công ty, mặc định 4%), chỉ áp dụng cho lái xe
   if (!drv) { const au = autoDays(ym, e); for (const d in au) if (!a.d[d]) { o.lv += 1; o.hl += 1; o.auto = (o.auto || 0) + 1; } }
   return o;
 }
@@ -1866,15 +1867,38 @@ const tuyenNhom = t => { const p = String(t || '').split(/\s*(?:<>|<->|↔|⇄|-
 function empTuyen(ym, eid) { const c = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe === eid && l.tuyen && String(l.ngay).startsWith(ym)) { const g = tuyenNhom(l.tuyen); c[g] = (c[g] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); } }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ t, n })); }
 const allTuyen = ym => [...new Set([...(DB.lichchay || []).filter(l => l.tuyen && String(l.ngay).startsWith(ym)).map(l => l.tuyen), ...(DB.giochay || []).map(g => g.tuyen).filter(Boolean)].map(tuyenNhom))].sort((a, b) => a.localeCompare(b, 'vi'));
 const allNhom = () => [...new Set([...(DB.lichchay || []).map(l => l.tuyen), ...(DB.giochay || []).map(g => g.tuyen)].filter(Boolean).map(tuyenNhom))].sort((a, b) => a.localeCompare(b, 'vi'));
-/* 2 nhóm tuyến chính của nhà xe (gộp chiều đi + về). Lái xe được xếp vào 1 trong 2 nhóm; ai có chạy nhóm còn lại thì là "chạy chéo" */
+/* Nhóm tuyến (gộp chiều đi + về) dùng cho Chấm công, Lương, Chạy chéo, Bảng lái xe theo tuyến. KHÔNG viết cứng tên tuyến:
+   - Admin tự sửa trong "Nhóm tuyến" (tên nhóm, ký hiệu, điểm đi, các tuyến thuộc nhóm, thứ tự) — lưu ở Cài đặt (settings.nhomTuyen).
+   - Chưa sửa thì tự tạo từ Giờ chạy: mỗi cặp 2 đầu tuyến A ⇄ B là 1 nhóm; điểm đi lấy theo "Thông tin tuyến", tên = "A ⇄ B", ký hiệu = chữ cái đầu của điểm đi.
+   Lái xe được xếp vào nhóm chính (cố định trong hồ sơ hoặc nhóm chạy nhiều công nhất trong tháng); chạy nhóm khác là "chạy chéo". */
 const MRT = {
-  list: [
-    { k: 'bh', n: 'BIÊN HÒA ⇄ VŨNG TÀU', s: 'BH', re: /bien hoa.*vung tau|vung tau.*bien hoa/ },
-    { k: 'hn', n: 'HỐ NAI ⇄ VŨNG TÀU', s: 'HN', re: /ho nai.*vung tau|vung tau.*ho nai/ }
-  ],
-  nm: t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(),
-  of(t) { const k = MRT.nm(t); return MRT.list.find(m => m.re.test(k)) || null; },
+  nm: t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(),
+  up: t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toUpperCase().replace(/\s+/g, ' ').trim(),
+  ends: t => String(t || '').split(/\s*(?:⇄|<>|->|→|–|-)\s*/).map(x => x.trim()).filter(Boolean),
+  key(t) { const e = MRT.ends(t).map(MRT.up); return e.length >= 2 ? [e[0], e[e.length - 1]].sort().join('|') : MRT.up(t); },
+  routes() { const R = []; [...(DB.giochay || []).map(g => g.tuyen), ...(DB.lichchay || []).map(l => l.tuyen)].forEach(t => { if (t && !R.includes(t)) R.push(t); }); return R; },
+  /* các tuyến gom theo cặp 2 đầu: { key: { t: tuyến mẫu, all: [các tên tuyến] } } */
+  pairs() { const P = {}; MRT.routes().forEach(t => { const k = MRT.key(t); if (!k) return; (P[k] = P[k] || { t, all: [] }).all.push(t); }); return P; },
+  aOf(t) { try { const a = typeof TTT !== 'undefined' ? TTT.get(t).a : ''; if (a) return String(a); } catch (e) { } return MRT.ends(t)[0] || ''; },
+  ini: t => MRT.up(t).split(/[^A-Z0-9]+/).filter(Boolean).map(x => x[0]).join('') || '?',
+  auto() {   // nhóm tự tạo từ Giờ chạy (khi Admin chưa tự sắp)
+    const P = MRT.pairs(); return Object.keys(P).sort().map(k => { const t = P[k].t, e = MRT.ends(t), a = MRT.aOf(t), b = e.find(x => MRT.up(x) !== MRT.up(a)) || e[e.length - 1] || '';
+      return { id: 'a:' + k, ten: (b && MRT.up(b) !== MRT.up(a) ? String(a).toUpperCase() + ' ⇄ ' + String(b).toUpperCase() : String(t).toUpperCase()), ma: MRT.ini(a), di: a, keys: [k] }; });
+  },
+  cfg() { const L = (DB.settings || {}).nhomTuyen; return Array.isArray(L) && L.length ? L : MRT.auto(); },
+  _sig: '', _l: [],
+  get list() {
+    const C = MRT.cfg(), sig = JSON.stringify(C);
+    if (sig === MRT._sig) return MRT._l;
+    const L = C.filter(g => g && (g.keys || []).length).map((g, i) => ({ k: String(g.id || 'g' + i), n: String(g.ten || '').trim() || ('NHÓM ' + (i + 1)), s: String(g.ma || '').trim() || MRT.ini(g.ten), di: g.di || '', keys: new Set(g.keys) }));
+    L.forEach(m => { const O = L.filter(x => x !== m); m.o = O.length === 1 ? O[0] : { k: '~o:' + m.k, n: O.map(x => x.n).join(' + ') || 'nhóm khác', s: O.map(x => x.s).join('+'), ks: O.map(x => x.k) }; });
+    MRT._sig = sig; MRT._l = L; return L;
+  },
+  of(t) { if (!t) return null; const k = MRT.key(t); return MRT.list.find(m => m.keys.has(k)) || null; },
+  inG: (m, g) => !!m && !!g && (m.ks ? m.ks.includes(g.k) : m.k === g.k),
   rank(g) { const i = MRT.list.findIndex(m => m.n === g); return i < 0 ? 9 : i; },
+  dir(t) { const m = MRT.of(t), a = m && m.di ? MRT.up(m.di) : ''; if (!a) return 'di'; const e = MRT.up(MRT.ends(t)[0] || t); return e === a || e.includes(a) || a.includes(e) ? 'di' : 've'; },   // chiều đi = tuyến bắt đầu từ điểm đi của nhóm
+  cpRate: () => cpLX(),   // % chi phí khác của lái xe (Cài đặt › Thông tin công ty), trừ cả phần chạy chéo
   // công từng nhóm chính trong tháng (cả chiều đi và về)
   cong(ym, eid) {
     const o = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe !== eid || !String(l.ngay).startsWith(ym)) return; const m = MRT.of(l.tuyen); if (m) o[m.k] = (o[m.k] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); });
@@ -1886,10 +1910,47 @@ const MRT = {
     return L[0] || null;
   },
   ran(e, ym, name) { const m = MRT.list.find(x => x.n === name); return !!m && isDriver(e) && (MRT.cong(ym, e.id)[m.k] || 0) > 0; },
-  cross(e, ym) { if (!isDriver(e)) return 0; const m = MRT.main(e, ym); if (!m) return 0; return MRT.cong(ym, e.id)[m.o.k] || 0; },
-  badge(e, ym) { const m = MRT.main(e, ym), x = MRT.cross(e, ym); return m && x ? ` <span class="cc-x" title="Nhóm ${esc(m.n)}, có chạy ${esc(m.o.n)} (chiều đi và về) ${F.num ? F.num(x) : x} công">+${F.num ? F.num(x) : x} công ${esc(m.o.s)}</span>` : ''; }
+  cross(e, ym) { if (!isDriver(e)) return 0; const m = MRT.main(e, ym); if (!m) return 0; const c = MRT.cong(ym, e.id); return Object.keys(c).filter(k => k !== m.k).reduce((s, k) => s + c[k], 0); },
+  badge(e, ym) { const m = MRT.main(e, ym), x = MRT.cross(e, ym); return m && x ? ` <span class="cc-x" title="Nhóm ${esc(m.n)}, có chạy ${esc(m.o.n)} (chiều đi và về) ${F.num ? F.num(x) : x} công">+${F.num ? F.num(x) : x} công ${esc(m.o.s)}</span>` : ''; },
+  can: () => !!Auth.user && (Auth.user.role === 'admin' || Auth.can('caidat', 'edit')),
+  /* Sửa nhóm tuyến: tên, ký hiệu, điểm đi, tuyến thuộc nhóm, thứ tự */
+  edit() {
+    if (!MRT.can()) return toast('Chỉ Admin hoặc người có quyền sửa Cài đặt được sửa nhóm tuyến', 'err');
+    const P = MRT.pairs(), pk = Object.keys(P).sort(), lab = k => { const p = P[k]; return p ? [...new Set(p.all)].join(' / ') : k.replace('|', ' ⇄ '); };
+    let G = JSON.parse(JSON.stringify(MRT.cfg()));
+    const m = Modal.open({ title: 'Nhóm tuyến (chấm công, lương, chạy chéo)', width: 760, body: '<div data-b></div>', foot: `<button class="btn left" data-auto>${ic('refresh')} Tạo lại tự động từ Giờ chạy</button><button class="btn" data-add>${ic('plus')} Thêm nhóm</button><button class="btn" data-x>Đóng</button><button class="btn pri" data-ok>${ic('save')} Lưu</button>` });
+    const q = s => m.el.querySelector(s), B = q('[data-b]');
+    const read = () => { B.querySelectorAll('[data-g]').forEach(r => { const g = G[+r.dataset.g]; if (!g) return; g.ten = r.querySelector('[data-f="ten"]').value.trim(); g.ma = r.querySelector('[data-f="ma"]').value.trim().toUpperCase(); g.di = r.querySelector('[data-f="di"]').value; g.keys = [...r.querySelectorAll('[data-k]:checked')].map(c => c.dataset.k); }); };
+    const draw = () => {
+      const used = k => G.findIndex(g => (g.keys || []).includes(k));
+      B.innerHTML = `<p class="small muted" style="margin-top:0">Mỗi nhóm gộp cả chiều đi và về. Lái xe được xếp vào nhóm chính; chạy nhóm khác là chạy chéo. Thứ tự nhóm là thứ tự hiện ở Chấm công, Bảng lái xe theo tuyến và sắp xếp tuyến.</p>
+        ${G.map((g, i) => { const ends = [...new Set((g.keys || []).flatMap(k => P[k] ? MRT.ends(P[k].t) : k.split('|')))];
+          return `<div class="card" data-g="${i}" style="padding:10px;margin-bottom:8px"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <label class="field" style="flex:2;min-width:200px"><span>Tên nhóm</span><input class="inp" data-f="ten" value="${esc(g.ten || '')}"></label>
+          <label class="field" style="width:90px"><span>Ký hiệu</span><input class="inp" data-f="ma" value="${esc(g.ma || '')}"></label>
+          <label class="field" style="flex:1;min-width:140px"><span>Điểm đi (chiều đi)</span><select class="inp" data-f="di"><option value="">—</option>${[...new Set([g.di, ...ends].filter(Boolean))].map(x => `<option ${MRT.up(x) === MRT.up(g.di) ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+          <span class="row" style="gap:4px"><button class="btn sm" data-up="${i}" ${i ? '' : 'disabled'} title="Lên">↑</button><button class="btn sm" data-dn="${i}" ${i < G.length - 1 ? '' : 'disabled'} title="Xuống">↓</button><button class="btn sm danger" data-del="${i}" title="Xóa nhóm">${ic('trash')}</button></span></div>
+          <div class="small" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 14px">${pk.map(k => { const u = used(k); return `<label style="${u >= 0 && u !== i ? 'opacity:.45' : ''}"><input type="checkbox" data-k="${esc(k)}" ${(g.keys || []).includes(k) ? 'checked' : ''} ${u >= 0 && u !== i ? 'disabled title="Đang thuộc nhóm khác"' : ''}> ${esc(lab(k))}</label>`; }).join('') || '<span class="muted">Chưa có tuyến trong Giờ chạy</span>'}</div></div>`; }).join('')}
+        ${pk.filter(k => used(k) < 0).length ? `<p class="small" style="color:#b45309">Tuyến chưa thuộc nhóm nào (không tính chạy chéo): ${pk.filter(k => used(k) < 0).map(k => esc(lab(k))).join(', ')}</p>` : ''}`;
+      B.querySelectorAll('[data-k]').forEach(c => c.onchange = () => { read(); draw(); });
+      B.querySelectorAll('[data-f="di"]').forEach(c => c.onchange = read);
+      B.querySelectorAll('[data-up],[data-dn]').forEach(b => b.onclick = () => { read(); const i = +(b.dataset.up ?? b.dataset.dn), j = b.dataset.up != null ? i - 1 : i + 1; [G[i], G[j]] = [G[j], G[i]]; draw(); });
+      B.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { read(); G.splice(+b.dataset.del, 1); draw(); });
+    };
+    q('[data-add]').onclick = () => { read(); G.push({ id: 'g' + Date.now().toString(36), ten: '', ma: '', di: '', keys: [] }); draw(); };
+    q('[data-auto]').onclick = () => { G = MRT.auto(); draw(); };
+    q('[data-x]').onclick = () => m.close();
+    q('[data-ok]').onclick = () => {
+      read(); const L = G.filter(g => (g.keys || []).length);
+      if (!L.length) return toast('Cần ít nhất 1 nhóm có tuyến', 'err');
+      const bad = L.find(g => !g.ten); if (bad) return toast('Nhập tên cho mọi nhóm', 'err');
+      const names = L.map(g => g.ten.toUpperCase()); if (new Set(names).size !== names.length) return toast('Hai nhóm không được trùng tên', 'err');
+      L.forEach((g, i) => { if (!g.id || String(g.id).startsWith('a:')) g.id = 'g' + i + Date.now().toString(36); });
+      DB.settings.nhomTuyen = L; MRT._sig = ''; App.changed(); m.close(); toast('Đã lưu nhóm tuyến', 'ok'); try { App.render(); } catch (e) { }
+    };
+    draw();
+  }
 };
-MRT.list[0].o = MRT.list[1]; MRT.list[1].o = MRT.list[0];
 /* Tuyến chính: đặt cố định trong hồ sơ, hoặc tự động = nhóm tuyến có nhiều công nhất trong tháng. Lương CK và BHXH chỉ trừ ở tuyến chính */
 /* ===== CHẠY CHÉO: lái xe / xe chạy tuyến khác tuyến chính của mình (cố định trong hồ sơ, hoặc tự động: tuyến chạy nhiều nhất trong tháng) ===== */
 const XC = {
@@ -2765,7 +2826,7 @@ COMPANY_FIELDS.splice(6, 0,
   { key: 'daiDien', label: 'Người đại diện (ký HĐLĐ)' }, { key: 'chucVuDD', label: 'Chức vụ người đại diện' },
   { key: 'dkkd', label: 'ĐKKD / giấy phép kinh doanh', full: true }, { key: 'stkDN', label: 'Số tài khoản công ty' }, { key: 'nganHangDN', label: 'Ngân hàng công ty' },
   { key: 'tenApp', label: 'Tên app / tên nhà xe', hint: 'Hiện trên đầu app, màn hình đăng nhập, thông báo. Để trống: Nhà Xe + 2 chữ cuối tên công ty' }, { key: 'tenNgan', label: 'Tên ngắn (dưới biểu tượng trên điện thoại)', hint: 'Để trống: 2 chữ cuối tên công ty' },
-  { key: 'kyHieuHD', label: 'Ký hiệu số HĐLĐ', hint: 'VD: ABC thì số HĐ là 1/2026/HĐLD-ABC. Để trống: chữ cái đầu tên công ty' }, { key: 'ngayTraLuong', label: 'Ngày trả lương hằng tháng', type: 'number' });
+  { key: 'kyHieuHD', label: 'Ký hiệu số HĐLĐ', hint: 'VD: ABC thì số HĐ là 1/2026/HĐLD-ABC. Để trống: chữ cái đầu tên công ty' }, { key: 'ngayTraLuong', label: 'Ngày trả lương hằng tháng', type: 'number' }, { key: 'cpKhacLX', label: 'Chi phí khác của lái xe (% tiền công)', type: 'number', hint: 'Trừ vào lương lái xe, cả phần chạy chéo. Để trống: 4' });
 addCSS(`
 .hd{font-family:'Times New Roman',Times,serif;font-size:12.5px;line-height:1.42;color:#111;text-align:justify}
 .hd p{margin:3px 0}.hd .hd-h{font-size:13px;font-weight:700;margin:11px 0 3px;text-align:left}
@@ -3936,8 +3997,7 @@ const gcXe = g => DB.vehicles.find(v => v.id === g.xeId) || {};
 const gcLai = g => (DB.employees.find(e => e.id === g.laiXe) || {}).ten || '';
 /* thứ tự ưu tiên tuyến trong ô chọn tuyến */
 function routeKey(r) { return String(r || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim(); }
-const ROUTE_ORDER = [/bien hoa.*vung tau/, /vung tau.*bien hoa/, /ho nai.*vung tau/, /vung tau.*ho nai/];
-function routeRank(r) { const k = routeKey(r), i = ROUTE_ORDER.findIndex(re => re.test(k)); return i < 0 ? 99 : i; }
+function routeRank(r) { try { const m = MRT.of(r), i = m ? MRT.list.indexOf(m) : -1; return i < 0 ? 99 : i * 2 + (MRT.dir(r) === 've' ? 1 : 0); } catch (e) { return 99; } }   // thứ tự theo Nhóm tuyến: nhóm 1 chiều đi, nhóm 1 chiều về, nhóm 2…
 function routeCmp(a, b) { return (routeRank(a) - routeRank(b)) || String(a).localeCompare(String(b), 'vi'); }
 /* ===== Lịch chạy ===== */
 const LC = { ngay: null };
@@ -7855,6 +7915,7 @@ const HUB = {
       { k: 'them xe phuong tien moi', icon: 'box', t: 'Thêm xe', ok: HUB.can('phuongtien', 'add'), run: () => { App.go('phuongtien'); setTimeout(() => vehForm(), 80); } },
       { k: 'gui luong zalo thong bao', icon: 'send', t: 'Gửi lương qua Zalo', ok: typeof ZB !== 'undefined' && ZB.admin(), run: () => { App.go('bangluong'); setTimeout(() => ZB.open(), 120); } },
       { k: 'luu tru google drive dong bo github du lieu', icon: 'database', t: 'Lưu trữ Google / GitHub', ok: typeof ZB !== 'undefined' && ZB.admin(), run: () => setTimeout(() => HUB.open('gdata'), 220) },
+      { k: 'nhom tuyen chay cheo cham cong luong', icon: 'bus', t: 'Nhóm tuyến (chấm công, lương, chạy chéo)', ok: typeof MRT !== 'undefined' && MRT.can(), run: () => setTimeout(() => MRT.edit(), 220) },
       { k: 'cai dat zalo bot token', icon: 'message', t: 'Cài đặt Zalo Bot', ok: typeof ZB !== 'undefined' && ZB.admin(), run: () => setTimeout(() => HUB.open('zalo'), 220) },
       { k: 'in phieu luong', icon: 'printer', t: 'In phiếu lương', ok: HUB.can('bangluong'), run: () => { App.go('bangluong'); setTimeout(() => ACT.slipAll && ACT.slipAll({}), 120); } },
       { k: 'luu file sao luu', icon: 'save', t: 'Lưu vào file', ok: true, run: () => ACT.saveFile() }
@@ -9219,16 +9280,13 @@ async function aiSampler() {
   document.addEventListener('click', e => { const b = e.target.closest('[data-au=ai]'); if (!b) return; e.stopImmediatePropagation(); const m = $('#auMe'); m && m.classList.remove('open'); AIX.setup(); }, true);
 }
 
-/* ===== Bảng lái xe theo nhóm tuyến (để in / xuất Excel) =====
-   Biên Hòa ⇄ Vũng Tàu: tuyến có chứa "Biên Hòa" và "Vũng Tàu" (cả 2 chiều)
-   Hố Nai ⇄ Vũng Tàu:  tuyến có chứa "Hố Nai" và "Vũng Tàu" (cả 2 chiều) */
+/* ===== Bảng lái xe theo nhóm tuyến (để in / xuất Excel): mỗi nhóm trong MRT.list (sửa ở Nhóm tuyến) là 1 bảng ===== */
 const RTP = {
-  // chiều đi = tuyến bắt đầu từ Biên Hòa / Hố Nai; chiều về = bắt đầu từ Vũng Tàu
-  dir(t) { const k = MRT.nm(t), v = k.indexOf('vung tau'), o = Math.max(k.indexOf('bien hoa'), k.indexOf('ho nai')); return v >= 0 && o >= 0 && v < o ? 've' : 'di'; },
+  dir: t => MRT.dir(t),   // chiều đi = tuyến bắt đầu từ điểm đi của nhóm (sửa trong Nhóm tuyến)
   rows(m, ym) {
     const by = {};
     (DB.lichchay || []).forEach(l => {
-      if (!l.laiXe || !String(l.ngay).startsWith(ym) || !m.re.test(MRT.nm(l.tuyen))) return;
+      if (!l.laiXe || !String(l.ngay).startsWith(ym) || MRT.of(l.tuyen) !== m) return;
       const e = DB.employees.find(x => x.id === l.laiXe); if (!e) return;
       const o = by[e.id] = by[e.id] || { e, di: 0, ve: 0, cong: 0, days: new Set(), xe: new Set() };
       const n = +l.soChuyen || 1; o[RTP.dir(l.tuyen)] += n; o.cong += congTuyen(l.tuyen) * n; o.days.add(+String(l.ngay).slice(8, 10));
@@ -9247,14 +9305,14 @@ const RTP = {
   // cột giống Bảng chấm công, bỏ Mã NV và Phòng ban
   cols() { const c = vCham.cols(); return [c[1], ...c.slice(3)]; },
   /* công của lái xe chỉ tính trên các tuyến thuộc nhóm m, theo từng ngày */
-  congNhom(e, ym, m) { const d = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe !== e.id || !String(l.ngay).startsWith(ym)) return; const g = MRT.of(l.tuyen); if (!g || g.k !== m.k) return; const k = +String(l.ngay).slice(8, 10); d[k] = (d[k] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); }); return d; },
-  tienNhom(e, ym, m) { let t = 0; (DB.lichchay || []).forEach(l => { if (l.laiXe !== e.id || !String(l.ngay).startsWith(ym)) return; const g = MRT.of(l.tuyen); if (!g || g.k !== m.k) return; const v = (DB.vehicles || []).find(x => x.id === l.xeId); t += congTuyen(l.tuyen) * (+l.soChuyen || 1) * (v ? +v.tienTai || 0 : 0); }); return t; },
+  congNhom(e, ym, m) { const d = {}; (DB.lichchay || []).forEach(l => { if (l.laiXe !== e.id || !String(l.ngay).startsWith(ym)) return; const g = MRT.of(l.tuyen); if (!MRT.inG(m, g)) return; const k = +String(l.ngay).slice(8, 10); d[k] = (d[k] || 0) + congTuyen(l.tuyen) * (+l.soChuyen || 1); }); return d; },
+  tienNhom(e, ym, m) { let t = 0; (DB.lichchay || []).forEach(l => { if (l.laiXe !== e.id || !String(l.ngay).startsWith(ym)) return; const g = MRT.of(l.tuyen); if (!MRT.inG(m, g)) return; const v = (DB.vehicles || []).find(x => x.id === l.xeId); t += congTuyen(l.tuyen) * (+l.soChuyen || 1) * (v ? +v.tienTai || 0 : 0); }); return t; },
   rowsOf(m) { const ym = UI.m, n = D.daysIn(ym); return RTP.emps(m).map(e => { const mn0 = MRT.main(e, ym);
     /* lái xe chạy chéo (nhóm chính là tuyến khác): chỉ hiện số công chạy trên tuyến này, không lặp lương (lương nằm ở nhóm chính) */
     if (mn0 && mn0.k !== m.k) { const d = RTP.congNhom(e, ym, m), tot = Object.values(d).reduce((x, y) => x + y, 0), tail = RTP.cols().length - 1 - n - 1;
-      const tien = RTP.tienNhom(e, ym, m), cp = Math.round(tien * 0.04); return { e, cheo: true, tag: '', v: [e.ten, ...Array.from({ length: n }, (_, i) => d[i + 1] || ''), tot, tien, cp, '', '', tien - cp] }; }
+      const tien = RTP.tienNhom(e, ym, m), cp = Math.round(tien * MRT.cpRate()); return { e, cheo: true, tag: '', v: [e.ten, ...Array.from({ length: n }, (_, i) => d[i + 1] || ''), tot, tien, cp, '', '', tien - cp] }; }
     const a = att(ym, e.id), s = summarize(ym, e.id), lc = s.drv ? lcDays(ym, e.id) : {}, au = s.drv ? {} : autoDays(ym, e), x = MRT.cross(e, ym), mn = MRT.main(e, ym);
-    const ch = x > 0 && mn && mn.k === m.k, oc = ch ? RTP.congNhom(e, ym, m.o) : {}, ot = ch ? RTP.tienNhom(e, ym, m.o) : 0, cc = Math.round(ot * 0.04);   // lái xe có chạy sang nhóm kia: công và tiền phần đó hiện ở bảng nhóm kia, CK / BHXH / nợ vẫn trừ ở đây
+    const ch = x > 0 && mn && mn.k === m.k, oc = ch ? RTP.congNhom(e, ym, m.o) : {}, ot = ch ? RTP.tienNhom(e, ym, m.o) : 0, cc = Math.round(ot * MRT.cpRate());   // lái xe có chạy sang nhóm kia: công và tiền phần đó hiện ở bảng nhóm kia, CK / BHXH / nợ vẫn trừ ở đây
     return { e, tag: '', v: [e.ten, ...Array.from({ length: n }, (_, i) => a.d[i + 1] || (lc[i + 1] ? (ch ? (Math.max(0, lc[i + 1].cong - (oc[i + 1] || 0)) || '') : lc[i + 1].cong) : au[i + 1] ? 'X' : '')), ch ? s.lv - x : s.lv, s.drv || s.tienCong ? s.tienCong - ot : '', s.cpKhac - cc, ...(o => [o.lck, o.bh, o.show ? o.thucNhan - (ot - cc) : ''])(PO.of(ym, e.id))] }; }); },
   print() {
     const ym = UI.m, n = D.daysIn(ym), cols = RTP.cols(), L = RTP.pick(), num = v => typeof v === 'number' ? (v ? F.num(v) : '0') : esc(v);
@@ -9272,7 +9330,7 @@ const RTP = {
   }
 };
 addCSS(`.rtp-h{margin:16px 0 6px;font-size:14px;color:#111}.rtp-h small{font-weight:500;color:#555;font-size:12px}.cc-pb .cc-rtp{margin-left:auto;background:#fff;border-style:solid}`);
-Object.assign(ACT, { rtpPrint: () => RTP.print(), rtpExcel: () => RTP.excel() });
+Object.assign(ACT, { rtpPrint: () => RTP.print(), rtpExcel: () => RTP.excel(), mrtEdit: () => MRT.edit() });
 Object.assign(Auth.ACT_PERM, { rtpPrint: ['chamcong', 'view'], rtpExcel: ['chamcong', 'view'] });
 
 /* ===== PHÂN QUYỀN THEO PHÒNG BAN & CHỨC VỤ =====
@@ -14873,7 +14931,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T10:15';
+const APP_BUILD = '2026-11-14T11:20';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
