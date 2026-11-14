@@ -6635,8 +6635,9 @@ const vUsers = {
         { key: 'user', label: 'Tên đăng nhập', render: u => { const em = empOfUser(u); return `<div class="who">${avatarHTML(u.ten || (em && em.ten) || u.user, em && em.avatar)}<b>${esc(u.user)}</b></div>`; } }, { key: 'ten', label: 'Họ và tên' },
         { key: 'role', label: 'Vai trò', val: u => (roles[u.role] || {}).name || u.role, render: u => `<span class="badge ${u.role === 'admin' ? 'b-p' : 'b-green'}">${esc((roles[u.role] || {}).name || u.role)}</span>` },
         { key: 'active', label: 'Trạng thái', val: u => u.active === false ? 'Đã khóa' : 'Đang dùng', render: u => `<span class="badge ${u.active === false ? 'b-red' : 'b-green'}">${u.active === false ? 'Đã khóa' : 'Đang dùng'}</span>` },
-        { key: 'lastLogin', label: 'Đăng nhập gần nhất', val: u => u.lastLogin ? new Date(u.lastLogin).toLocaleString('vi-VN') : 'Chưa đăng nhập' }],
-      actions: u => `<button class="ibtn" data-act="userPass" data-id="${u.id}" data-tip="Đặt lại mật khẩu">${ic('shield')}</button>` + rowBtns(u.id, 'userEdit', 'userDel'), onRow: u => userForm(u), empty: 'Chưa có tài khoản'
+        { key: 'lastLogin', label: 'Đăng nhập gần nhất', val: u => u.lastLogin ? new Date(u.lastLogin).toLocaleString('vi-VN') : 'Chưa đăng nhập' },
+        ...(USRF.on() ? [{ key: 'fb', label: 'Đăng nhập 1 lần', val: u => USRF.txt(u), render: u => USRF.badge(u) }] : [])],
+      actions: u => (USRF.on() && u.active !== false ? `<button class="ibtn" data-act="userFbu" data-id="${u.id}" data-tip="${u.fb ? 'Cấp lại' : 'Cấp'} đăng nhập 1 lần (đặt mật khẩu tạm)">${ic('cloud')}</button>` : '') + `<button class="ibtn" data-act="userPass" data-id="${u.id}" data-tip="Đặt lại mật khẩu">${ic('shield')}</button>` + rowBtns(u.id, 'userEdit', 'userDel'), onRow: u => userForm(u), empty: 'Chưa có tài khoản'
     });
     onVal('roleSel', v => { vUsers.roleSel = v; App.render(); });
     el.querySelectorAll('[data-pmrow]').forEach(c => c.onchange = () => el.querySelectorAll(`[data-pm^="${c.dataset.pmrow}:"]`).forEach(i => i.checked = c.checked));
@@ -7387,6 +7388,12 @@ addCSS(`.gs-mode{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0
    - nhaxe_acl/{uid}: danh sách được phép (vai trò, còn hoạt động). nhaxe_dir/{băm sđt}: cho biết email nội bộ hiện tại của sđt.
    - Admin cấp / đặt lại mật khẩu ngay trong app; người dùng tự đổi mật khẩu thì Firebase đổi theo.
    - Máy quản lý vẫn có thể vào bằng mã kết nối chung (tài khoản chủ). */
+/* Tài khoản người dùng: cột "Đăng nhập 1 lần" (cấp tài khoản Firebase) — trước nằm ở Management mục 5, gom về đây cho cùng một chỗ */
+const USRF = {
+  on: () => { try { return GS.cfg().mode === 'fb'; } catch (e) { return false; } },
+  txt: u => u.active === false ? 'Đã khóa' : u.fb && !u.fbStale ? 'Đã cấp' : u.fbStale ? 'Cần cấp lại' : 'Chưa cấp',
+  badge: u => { const t = USRF.txt(u); return `<span class="badge ${t === 'Đã cấp' ? 'b-green' : t === 'Đã khóa' ? 'b-gray' : 'b-amber'}">${t}</span>`; }
+};
 const FBU = {
   DOMAIN: 'nhaxe-tp.app', admin: {}, _ready: null, _sig: '', _last: null,
   /* đẩy dữ liệu (có tài khoản vừa cấp) lên Firebase NGAY và chờ xong, để nhân viên đăng nhập là thấy tài khoản của mình */
@@ -7559,22 +7566,19 @@ const FBU = {
     return `<div class="hub-h">5 · Đăng nhập 1 lần bằng tài khoản app</div>
       <div class="hub-card">
         <div class="hub-zs ${c.acct ? 'ok' : ''}" style="margin-bottom:10px">${ic(c.acct ? 'check' : 'lock')}<div><b>${c.acct ? 'Đang bật: nhân viên chỉ cần đăng nhập app' : 'Đang tắt: máy mới phải nhập mã kết nối'}</b><small>${c.acct ? 'Số điện thoại + mật khẩu app cũng là chìa khóa vào dữ liệu' : 'Bật để bỏ bước nhập email và mã kết nối'}</small></div></div>
-        <p class="hub-p">Mỗi tài khoản cần được <b>cấp</b> 1 lần. Người nào đăng nhập app trên máy quản lý (đang vào bằng mã kết nối) sẽ <b>tự được cấp</b>. Hoặc bấm <b>Cấp</b> để đặt mật khẩu tạm cho họ.</p>
-        <div class="fbu-l">${U.map(u => `<div class="fbu-r"><div><b>${esc(u.ten || u.user)}</b><small>${esc(u.user)} · ${esc((DB.roles[u.role] || {}).name || u.role)}</small></div>${st(u)}${u.active !== false ? `<button class="btn sm" data-g="fbuGive" data-id="${u.id}" ${on ? '' : 'disabled'}>${u.fb ? 'Cấp lại' : 'Cấp'}</button>` : ''}</div>`).join('')}</div>
+        <p class="hub-p">Mỗi tài khoản cần được <b>cấp</b> 1 lần. Người nào đăng nhập app trên máy quản lý (đang vào bằng mã kết nối) sẽ <b>tự được cấp</b>. Hoặc vào <b>Tài khoản người dùng</b> bấm <b>Cấp</b> để đặt mật khẩu tạm cho họ.</p>
+        <div class="hub-zs" style="margin:8px 0">${ic('users')}<div><b>Đã cấp ${U.filter(u => u.active !== false && u.fb && !u.fbStale).length}/${U.filter(u => u.active !== false).length} tài khoản đang dùng</b><small>Cấp, cấp lại từng người ở mục Tài khoản người dùng (cột Đăng nhập 1 lần, nút đám mây)</small></div></div>
+        <div class="hub-btns" style="margin-bottom:8px"><button class="btn" data-g="fbuUsers">${ic('users')} Mở Tài khoản người dùng</button></div>
         <div class="hub-btns">${c.acct ? `<button class="btn danger sm" data-g="fbuOff">Tắt đăng nhập 1 lần</button>` : `<button class="btn pri" data-g="fbuOn" ${on ? '' : 'disabled'}>${ic('check')} Bật đăng nhập 1 lần</button>`}</div>
         <p class="hub-p" style="margin-top:8px">Sau khi bật: dán lại <b>Rules ở mục 2</b> (đã có thêm phần tài khoản) và <b>tải lại index.html cho GitHub</b> ở mục 4.</p>
       </div>`;
   },
   async act(a, b) {
     const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
+    if (a === 'fbuUsers') return App.go('users');
     if (a === 'fbuGive') return busy(async () => {
       const u = (DB.users || []).find(x => x.id === b.dataset.id); if (!u) return;
-      if (!(await FBU.isAdmin())) throw new Error('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin để cấp');
-      const pw = await new Promise(ok => Form.open({ title: (u.fb ? 'Cấp lại' : 'Cấp') + ' tài khoản: ' + esc(u.user), width: 420, saveText: 'Cấp tài khoản', value: { pw: '' }, fields: [{ key: 'pw', label: 'Mật khẩu tạm cho ' + esc(u.ten || u.user), required: true, full: true, hint: 'Từ 6 ký tự. Người dùng đăng nhập bằng mật khẩu này rồi app bắt đổi mật khẩu mới.' }], onSave: v => { if (!v.pw || v.pw.length < 6) { toast('Mật khẩu tạm tối thiểu 6 ký tự', 'err'); return false; } ok(v.pw); }, onClose: () => ok(null) }));
-      if (!pw) return;
-      await Auth.setPass0(u, pw); u.mustChange = true; await FBU.provision(u, pw); Store.changed(); const sv = await FBU.flush();
-      if (!sv) toast('Chưa lưu được dữ liệu lên Firebase, bấm Lưu rồi báo nhân viên đăng nhập sau.', 'err', 8000);
-      toast(`Đã cấp tài khoản cho ${esc(u.ten || u.user)}. Báo họ đăng nhập bằng số ${esc(u.user)} và mật khẩu tạm.`, 'ok', 8000); HUB.setTab('gdata');
+      if (await FBU.give(u)) HUB.setTab('gdata');
     });
     if (a === 'fbuOn') return busy(async () => {
       if (!(await FBU.isAdmin())) throw new Error('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin');
@@ -7591,6 +7595,15 @@ const FBU = {
     });
     if (a === 'fbuOff') { if (!await Modal.confirm('<b style="color:#b91c1c">CẢNH BÁO: tắt đăng nhập 1 lần thì TOÀN BỘ nhân viên không đăng nhập được app</b> (chỉ máy có mã kết nối của quản lý mới vào được).<br><br>Chỉ tắt khi thật sự cần. Vẫn tắt?', { ok: 'Vẫn tắt', danger: true })) return;
       if (!await Modal.confirm('Xác nhận lần 2: tắt đăng nhập 1 lần cho mọi nhân viên?', { ok: 'Tắt', danger: true })) return; DB.settings.gsync = { ...(DB.settings.gsync || {}), acct: false }; GS.saveCfg({ ...GS.local(), acct: false }); Store.changed(); HUB.setTab('gdata'); }
+  },
+  /* cấp (hoặc cấp lại) đăng nhập 1 lần cho 1 tài khoản: hỏi mật khẩu tạm, tạo tài khoản Firebase. Trả về true nếu đã cấp */
+  async give(u) {
+      if (!(await FBU.isAdmin())) throw new Error('Máy này cần vào bằng mã kết nối của quản lý hoặc tài khoản Admin để cấp');
+      const pw = await new Promise(ok => Form.open({ title: (u.fb ? 'Cấp lại' : 'Cấp') + ' tài khoản: ' + esc(u.user), width: 420, saveText: 'Cấp tài khoản', value: { pw: '' }, fields: [{ key: 'pw', label: 'Mật khẩu tạm cho ' + esc(u.ten || u.user), required: true, full: true, hint: 'Từ 6 ký tự. Người dùng đăng nhập bằng mật khẩu này rồi app bắt đổi mật khẩu mới.' }], onSave: v => { if (!v.pw || v.pw.length < 6) { toast('Mật khẩu tạm tối thiểu 6 ký tự', 'err'); return false; } ok(v.pw); }, onClose: () => ok(null) }));
+      if (!pw) return;
+      await Auth.setPass0(u, pw); u.mustChange = true; await FBU.provision(u, pw); Store.changed(); const sv = await FBU.flush();
+      if (!sv) toast('Chưa lưu được dữ liệu lên Firebase, bấm Lưu rồi báo nhân viên đăng nhập sau.', 'err', 8000);
+      toast(`Đã cấp tài khoản cho ${esc(u.ten || u.user)}. Báo họ đăng nhập bằng số ${esc(u.user)} và mật khẩu tạm.`, 'ok', 8000); return true;
   }
 };
 /* ---- nối vào các phần có sẵn ---- */
@@ -8350,7 +8363,7 @@ const ACC = {
     m.el.querySelector('[data-ok]').onclick = async () => {
       const pw = ACC.readPw(m); if (!pw) return; m.close(); if (b) b.disabled = true;
       for (const u of L) { await Auth.setPass0(u, pw); u.mustChange = true; }
-      const r = await ACC.provisionAll(L, pw, 'Đang cấp'); HUB.setTab('gdata');
+      const r = await ACC.provisionAll(L, pw, 'Đang cấp'); if (App.cur === 'users') App.render(); else HUB.setTab('gdata');
       ACC.report(`Đã cấp ${r.ok}/${L.length} tài khoản`, L.map(u => `<b>${esc(u.ten || u.user)}</b> · ${esc(u.user)}`).concat(r.bad.map(x => `<span class="acc-bad">Chưa cấp được ${esc(x)}</span>`)), pw);
     };
   }
@@ -8361,16 +8374,17 @@ addCSS(`.acc-l{display:flex;flex-direction:column;gap:6px;max-height:300px;overf
 // Màn hình Người dùng: thêm 2 nút
 {
   const t0 = vUsers.tools; vUsers.tools = () => `<button class="btn" data-act="userPassAll">${ic('shield')} Đặt lại mật khẩu hàng loạt</button><button class="btn" data-act="userFromEmp">${ic('plus')} Tạo từ nhân viên</button>` + t0();
-  Object.assign(ACT, { userPassAll: () => ACC.resetAll(), userFromEmp: () => ACC.fromEmp() });
-  Object.assign(Auth.ACT_PERM, { userPassAll: ['users', 'edit'], userFromEmp: ['users', 'add'] });
-  ['userPassAll', 'userFromEmp'].forEach(k => { const fn = ACT[k], [mo, a] = Auth.ACT_PERM[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
+  Object.assign(ACT, { userPassAll: () => ACC.resetAll(), userFromEmp: () => ACC.fromEmp(),
+    userFbu: async (d, b) => { const u = (DB.users || []).find(x => x.id === d.id); if (!u) return; if (b) b.disabled = true; try { if (await FBU.give(u)) App.render(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b && b.isConnected) b.disabled = false; } } });
+  Object.assign(Auth.ACT_PERM, { userPassAll: ['users', 'edit'], userFromEmp: ['users', 'add'], userFbu: ['users', 'edit'] });
+  ['userPassAll', 'userFromEmp', 'userFbu'].forEach(k => { const fn = ACT[k], [mo, a] = Auth.ACT_PERM[k]; ACT[k] = (...x) => { if (Auth.guard(mo, a)) return fn(...x); }; });
 }
 // Mục 5 (Lưu trữ → Firebase): chọn nhân viên để cấp, cấp tất cả, giải thích khi nút bị mờ
 {
   const h0 = FBU.html; FBU.html = function () {
     const h = h0.call(FBU), on = GS.on && GS.cfg().mode === 'fb', ne = ACC.emps().filter(x => x.ok).length, nw = (DB.users || []).filter(u => u.active !== false && (!u.fb || u.fbStale)).length;
     const extra = `${on ? '' : `<div class="fbu-note">${ic('alert')} Các nút đang mờ vì máy này <b>chưa kết nối dữ liệu dùng chung</b>. Làm xong mục 1–3 (hoặc bấm "Quản lý: vào bằng mã kết nối" ở màn hình đăng nhập) rồi quay lại đây.</div>`}
-      <div class="hub-btns" style="justify-content:flex-start;margin-top:8px"><button class="btn sm pri" data-g="fbuEmp" ${on ? '' : 'disabled'}>${ic('plus')} Chọn nhân viên để cấp${ne ? ` (${ne} chưa có tài khoản)` : ''}</button>${nw ? `<button class="btn sm" data-g="fbuGiveAll" ${on ? '' : 'disabled'}>${ic('check')} Cấp tất cả chưa cấp (${nw})</button>` : ''}</div>`;
+`;   // nút Chọn nhân viên để cấp / Cấp tất cả chưa cấp đã chuyển sang Tài khoản người dùng
     const i = h.indexOf('<div class="hub-btns">'); return i < 0 ? h + extra : h.slice(0, i) + extra + h.slice(i);
   };
   const a0 = FBU.act; FBU.act = function (a, b) {
@@ -9826,7 +9840,9 @@ DRV.on = function () { const u = Auth.user; if (!u || u.role === 'admin') return
 { const u0 = vUsers.render;
   vUsers.render = function (el) { const r = u0.apply(this, arguments); try { el.querySelectorAll('.card').forEach(c => { const h = c.querySelector('h3'); if (h && /Phân quyền theo vai trò/.test(h.textContent)) c.outerHTML = `<div class="card"><div class="card-h"><h3>${ic('shield')} Phân quyền đã chuyển sang Cài đặt</h3></div><div class="card-b"><p class="small muted" style="margin:0 0 10px">Quyền của mỗi tài khoản đi theo <b>phòng ban</b> trong hồ sơ nhân viên. Vào <b>Cài đặt → Phân quyền theo phòng ban</b> để tích Xem · Thêm · Sửa · Xóa cho từng phòng ban. Admin là quyền cao nhất.</p><button class="btn pri" data-act="pdGo">${ic('settings')} Mở phân quyền theo phòng ban</button></div></div>`; }); } catch (e) { } return r; };
   vUsers.title = 'Tài khoản người dùng'; vUsers.desc = 'Tạo tài khoản đăng nhập, đặt lại mật khẩu, chọn quyền (tự động theo phòng ban hoặc Admin)';
-  vUsers.tools = () => `<button class="btn pri" data-act="userAdd">${ic('plus')} Thêm tài khoản</button>`; }
+  vUsers.tools = () => { let ne = 0, nw = 0; try { if (USRF.on()) { ne = ACC.emps().filter(x => x.ok).length; nw = (DB.users || []).filter(u => u.active !== false && (!u.fb || u.fbStale)).length; } } catch (e) { }
+    return (USRF.on() ? `<button class="btn" data-act="userFromEmp">${ic('plus')} Tạo từ nhân viên${ne ? ` (${ne})` : ''}</button>${nw ? `<button class="btn" data-act="userFbuAll">${ic('cloud')} Cấp đăng nhập 1 lần cho tất cả chưa cấp (${nw})</button>` : ''}` : '') + `<button class="btn pri" data-act="userAdd">${ic('plus')} Thêm tài khoản</button>`; };
+  Object.assign(ACT, { userFbuAll: (d, b) => ACC.giveAll(b) }); Auth.ACT_PERM.userFbuAll = ['users', 'edit']; { const f = ACT.userFbuAll; ACT.userFbuAll = (...x) => { if (Auth.guard('users', 'edit')) return f(...x); }; } }
 Object.assign(ACT, { pdGo: () => { App.go('caidat'); setTimeout(() => window.scrollTo(0, 0), 60); } });
 Auth.ACT_PERM.pdGo = ['users', 'view'];
 addCSS(`.pd-chips{display:flex;flex-wrap:wrap;gap:6px}.pd-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #d6dce7;background:#fff;border-radius:999px;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;color:#334155;cursor:pointer}.pd-chip svg{width:14px;height:14px}.pd-chip b{font-weight:600;opacity:.75;font-size:11.5px}.pd-chip:hover{border-color:var(--p)}.pd-chip.on{background:var(--p);border-color:var(--p);color:#fff}.pd-chip.adm:not(.on){background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9}
@@ -15150,7 +15166,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T18:15';
+const APP_BUILD = '2026-11-14T18:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
