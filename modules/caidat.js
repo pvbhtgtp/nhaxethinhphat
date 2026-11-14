@@ -10,7 +10,7 @@ function printCard() {
   const o = new Proxy(st.inCfg, {
     get: (t, k) => k === 'kyHieuHD' ? PCFG.suffix() : k === 'fs80' ? (+((S().ve80 || {}).fs) || 100) : t[k],
     set: (t, k, v) => {
-      if (k === 'kyHieuHD') { const c = S().company = S().company || {}; c.kyHieuHD = String(v || '').trim().toUpperCase() || 'TGTP'; }
+      if (k === 'kyHieuHD') { const c = S().company = S().company || {}; c.kyHieuHD = String(v || '').trim().toUpperCase() || coKH(); }
       else if (k === 'fs80') { S().ve80 = { ...(S().ve80 || {}), fs: Math.min(140, Math.max(70, +v || 100)) }; }
       else t[k] = v;
       return true;
@@ -26,7 +26,7 @@ function printCard() {
     { key: 'mTop', label: 'Lề trên', type: 'number', hint: 'Chuẩn 20 – 25' }, { key: 'mBottom', label: 'Lề dưới', type: 'number', hint: 'Chuẩn 20 – 25' },
     { key: 'mLeft', label: 'Lề trái', type: 'number', hint: 'Chuẩn 30 – 35' }, { key: 'mRight', label: 'Lề phải', type: 'number', hint: 'Chuẩn 15 – 20' },
     { type: 'section', label: 'Đánh số văn bản và hồ sơ' },
-    { key: 'kyHieuHD', label: 'Hậu tố số văn bản (mã hồ sơ)', hint: 'Mặc định TGTP, ví dụ 01/QĐBN-TGTP. Dùng chung với Ký hiệu số HĐLĐ ở Thông tin công ty', full: true }
+    { key: 'kyHieuHD', label: 'Hậu tố số văn bản (mã hồ sơ)', hint: 'Để trống: chữ cái đầu tên công ty, ví dụ 01/QĐBN-ABC. Dùng chung với Ký hiệu số HĐLĐ ở Thông tin công ty', full: true }
   ];
   return settingsCard('Quy tắc in', fields, o, 2, () => PCFG.css());
 }

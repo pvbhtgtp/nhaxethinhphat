@@ -2,12 +2,12 @@
 <html lang="vi" data-theme="teal" data-ux-den="std" data-ux-menu="pin"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Management · Nhà Xe Thịnh Phát</title>
+<title>Management · Nhà Xe</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ffffff">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Thịnh Phát">
+<meta name="apple-mobile-web-app-title" content="Nhà Xe">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
 
@@ -1805,6 +1805,13 @@ function migrate(db) {
 
 /* ---------- Tính toán ---------- */
 const S = () => DB.settings;
+/* Tên nhà xe / ký hiệu văn bản: lấy từ Cài đặt › Thông tin công ty (mỗi nhà xe tự nhập), không viết cứng trong code.
+   Để trống thì tự suy từ tên công ty: tên ngắn = 2 chữ cuối (vd "Thịnh Phát"), tên app = "Nhà Xe " + tên ngắn, ký hiệu = chữ cái đầu (vd TGTP). */
+function coC() { try { return (typeof DB !== 'undefined' && DB && DB.settings && DB.settings.company) || {}; } catch (e) { return {}; } }
+function coBody() { return String(coC().ten || '').normalize('NFC').toUpperCase().replace(/^\s*(CÔNG\s*TY|CTY|HỢP\s*TÁC\s*XÃ|HTX|DOANH\s*NGHIỆP\s*TƯ\s*NHÂN|DNTN)\s*/, '').replace(/^(TRÁCH\s*NHIỆM\s*HỮU\s*HẠN|TNHH|CỔ\s*PHẦN|CP)\s*/, '').replace(/^(MỘT\s*THÀNH\s*VIÊN|MTV|HAI\s*THÀNH\s*VIÊN)\s*/, '').trim(); }
+function coShort() { const c = coC(); if (String(c.tenNgan || '').trim()) return String(c.tenNgan).trim(); const w = coBody().split(/\s+/).filter(Boolean).slice(-2); return w.map(x => x.charAt(0) + x.slice(1).toLowerCase()).join(' '); }
+function coApp() { const c = coC(); if (String(c.tenApp || '').trim()) return String(c.tenApp).trim(); return ('Nhà Xe ' + coShort()).trim(); }
+function coKH() { const c = coC(); if (String(c.kyHieuHD || '').trim()) return String(c.kyHieuHD).trim(); const k = coBody().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/Đ/g, 'D').split(/[^A-Z0-9]+/).filter(Boolean).map(x => x[0]).join(''); return k || 'NX'; }
 const empById = id => DB.employees.find(e => e.id === id);
 function att(ym, eid) { DB.cham[ym] = DB.cham[ym] || {}; return DB.cham[ym][eid] = DB.cham[ym][eid] || { d: {}, ot: 0 }; }
 /* Lái xe: ngày công lấy từ bảng Lịch chạy; tiền công = ngày công × Tiền tài của xe (bảng Phương tiện) */
@@ -2540,7 +2547,7 @@ Object.assign(ACT, {
 /* ---------- Mẫu quyết định bổ nhiệm người điều hành vận tải ---------- */
 const QD_F = () => [
   { key: 'nv', label: 'Người được bổ nhiệm', type: 'select', blank: '— Chọn nhân viên —', options: () => DB.employees.filter(e => e.trangThai !== 'Đã nghỉ').map(e => ({ value: e.id, label: e.ten })), full: true },
-  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 01/QĐBN-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'ngayKy', label: 'Ngày ký', type: 'date' },
+  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 01/QĐBN-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'ngayKy', label: 'Ngày ký', type: 'date' },
   { key: 'hieuLuc', label: 'Có hiệu lực từ ngày', type: 'date', hint: 'Để trống thì lấy ngày ký' }, { key: 'noi', label: 'Nơi ký', ph: 'Đồng Nai' },
   { key: 'chucDanh', label: 'Chức danh bổ nhiệm', full: true },
   { key: 'trinhDo', label: 'Trình độ chuyên môn / chuyên ngành đào tạo', full: true, hint: 'Phải có bằng tốt nghiệp trung cấp trở lên về chuyên ngành vận tải hoặc trình độ cao đẳng, đại học trở lên đối với chuyên ngành khác theo quy định' },
@@ -2553,7 +2560,7 @@ function qdPrint() {
   const dots = (v, n = 30) => v ? `<b>${esc(v)}</b>` : '.'.repeat(n);
   const dm = iso => { const d = iso && D.parse(iso); return d ? `ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}` : 'ngày ..... tháng ..... năm ......'; };
   const dd = iso => iso ? F.date(iso) : '......./....../..........';
-  const kh = c.kyHieuHD || 'TGTP', soQD = ((v) => /\//.test(v) ? v : v + '/QĐBN-' + kh)(q.so || '01');
+  const kh = c.kyHieuHD || coKH(), soQD = ((v) => /\//.test(v) ? v : v + '/QĐBN-' + kh)(q.so || '01');
   const ong = /^nữ/i.test(e.gioiTinh || '') ? 'Bà' : 'Ông', ten = String(c.ten || '').toUpperCase(), ky = q.ngayKy || '', hl = q.hieuLuc || ky;
   const li = (t, v) => `<li style="margin:3px 0"><b>${t}:</b> ${v}</li>`;
   const rows = [['Trực tiếp tổ chức, điều hành hoạt động vận tải của phương tiện và người lái xe thuộc đơn vị, bảo đảm tuân thủ đúng quy định pháp luật.'], ['Quản lý, theo dõi dữ liệu từ thiết bị giám sát hành trình (GPS) và camera lắp trên xe; kịp thời phát hiện, nhắc nhở và chấn chỉnh lái xe vi phạm tốc độ, thời gian lái xe.'], ['Tổ chức lập và lưu trữ hồ sơ, lý lịch phương tiện, lý lịch hành nghề của lái xe; theo dõi công tác bảo dưỡng, kiểm định và an toàn kỹ thuật phương tiện.'], ['Chịu trách nhiệm trước Giám đốc và trước pháp luật về công tác quản lý an toàn giao thông và điều hành vận tải của đơn vị.']];
@@ -2580,7 +2587,7 @@ Object.assign(ACT, { qdPrint: () => qdPrint() });
 const paPairs = () => { const seen = new Set(), out = []; DB.giochay.forEach(g => { const [a, b] = String(g.tuyen || '').split(/\s*(?:⇄|<>)\s*/).map(x => x.trim()); if (!a || !b) return; const k = [a, b].sort().join('|'); if (seen.has(k)) return; seen.add(k); out.push({ value: g.tuyen, label: a + ' – ' + b }); }); return out; };
 const PA_F = () => [
   { key: 'tuyen', label: 'Tuyến khai thác', type: 'select', blank: '— Chọn tuyến (lấy từ Giờ chạy) —', options: paPairs, full: true },
-  { key: 'so', label: 'Số phương án', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 01/PAKD-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'ngayKy', label: 'Ngày lập', type: 'date' }, { key: 'noi', label: 'Nơi lập', ph: 'Đồng Nai' },
+  { key: 'so', label: 'Số phương án', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 01/PAKD-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'ngayKy', label: 'Ngày lập', type: 'date' }, { key: 'noi', label: 'Nơi lập', ph: 'Đồng Nai' },
   { key: 'maTuyen', label: 'Mã số tuyến (nếu đã có)' }, { key: 'cuLy', label: 'Cự ly tuyến (km)', type: 'number' },
   { key: 'benA', label: 'Bến xe đầu A', ph: 'Để trống: Bến xe + tên điểm đầu' }, { key: 'benB', label: 'Bến xe đầu B', ph: 'Để trống: Bến xe + tên điểm cuối' },
   { key: 'loTrinhDi', label: 'Lộ trình chiều đi (A → B)', type: 'textarea', rows: 2, full: true, hint: 'Ví dụ: Quốc lộ 51, đường cao tốc ..., các điểm dừng đón trả khách theo quy định' },
@@ -2604,7 +2611,7 @@ const PCFG = {
     let el = document.getElementById('pcfg-css'); if (!el) { el = document.createElement('style'); el.id = 'pcfg-css'; document.head.appendChild(el); }
     if (el.textContent !== t) el.textContent = t;
   },
-  suffix() { try { return String((S().company || {}).kyHieuHD || 'TGTP').trim() || 'TGTP'; } catch (e) { return 'TGTP'; } },
+  suffix() { try { return String((S().company || {}).kyHieuHD || coKH()).trim() || coKH(); } catch (e) { return coKH(); } },
   tag(t) { t = String(t || ''); if (!t) return t; const p = PCFG.suffix(); return t.toUpperCase().startsWith(p.toUpperCase() + ' - ') ? t : p + ' - ' + t; }   // tiền tố tên hồ sơ lưu trữ: TGTP - ...
 };
 function paPrint() {
@@ -2619,7 +2626,7 @@ function paPrint() {
   const drivers = DB.employees.filter(e => e.trangThai === 'Đang làm' && /lái\s*xe/i.test(e.chucVu || '')).length;
   const dots = (v, n = 24) => (v !== '' && v != null && v !== 0) ? `<b>${esc(v)}</b>` : '.'.repeat(n);
   const dm = iso => { const d = iso && D.parse(iso); return d ? `ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}` : 'ngày ..... tháng ..... năm ......'; };
-  const kh = c.kyHieuHD || 'TGTP', soPA = ((v) => /\//.test(v) ? v : v + '/PAKD-' + kh)(q.so || '01');
+  const kh = c.kyHieuHD || coKH(), soPA = ((v) => /\//.test(v) ? v : v + '/PAKD-' + kh)(q.so || '01');
   const ten = String(c.ten || '').toUpperCase(), h = t => `<h3 style="margin:14px 0 4px;font-size:14.5px;color:#000">${t}</h3>`, li = t => `<li style="margin:3px 0">${t}</li>`;
   const chuyen = (bn, ts) => ts.length ? ts.map((t, i) => `Chuyến ${i + 1} (${t})`).join(', ') : 'Chuyến 1 (..:..), Chuyến 2 (..:..), Chuyến 3 (..:..)…';
   const gpkd = c.gpkdSo ? `<b>${esc(c.gpkdSo)}</b>, cấp ngày ${c.gpkdNgay ? F.date(c.gpkdNgay) : '....'}${c.gpkdNoiCap ? ', ' + esc(c.gpkdNoiCap) : ''}` : esc(c.dkkd || '.'.repeat(24));
@@ -2654,7 +2661,7 @@ Object.assign(ACT, { paPrint: () => paPrint() });
 const NQ_DEF = { noi: 'Đồng Nai', noiDangKy: 'Phòng Lao động Thương binh và Xã hội TP. Đồng Nai', gioNgay: 7, sangTu: '08:00', sangDen: '11:30', chieuTu: '14:00', chieuDen: '17:30', ngayTuan: 6, tuanMoTa: 'từ Thứ Hai đến Thứ Bảy', nghiTuan: 'Chủ Nhật', tetAm: 5, quocKhanh: 2, phepThuong: 12, phepNang: 14, phepDacBiet: 16, phepThemNam: 5, baoTruocThuong: 3, baoTruocGap: 1, ketHon: 3, conKetHon: 1, tang: 3, khongLuong: 1, thaiSan: 6, thaiSanNamTu: 5, thaiSanNamDen: 14, otThang: 60, otNam: 300, otThuong: 150, otNghi: 200, otLe: 300, kyLuatCongDon: 5, kyLuatNam: 20, nangLuong: 6 };
 const NQ_F = () => [
   { type: 'section', label: 'Quyết định ban hành' },
-  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 02/năm/QĐ-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'soNQ', label: 'Số nội quy', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 02/năm/NQ-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'ngayKy', label: 'Ngày ký', type: 'date' },
+  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 02/năm/QĐ-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'soNQ', label: 'Số nội quy', ph: '01', hint: 'Để trống là 01. Chỉ nhập số thứ tự, tự thành 02/năm/NQ-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'ngayKy', label: 'Ngày ký', type: 'date' },
   { key: 'ngayGopY', label: 'Ngày lấy ý kiến tổ chức đại diện người lao động', type: 'date', hint: 'Để trống thì lấy ngày ký' }, { key: 'noi', label: 'Nơi ký' },
   { key: 'noiDangKy', label: 'Nơi nhận / nơi đăng ký nội quy', full: true },
   { type: 'section', label: 'Thời giờ làm việc và nghỉ ngơi' },
@@ -2681,7 +2688,7 @@ function nqPrint(mode) {
   if (!$('#nqBox')) return; const raw = nqRead(), c = S().company || {};
   if (Auth.can('caidat', 'edit')) { S().nqLD = raw; Store.changed(); }
   const q = {}; Object.keys(NQ_DEF).forEach(k => { const d = NQ_DEF[k], v = raw[k]; q[k] = typeof d === 'number' ? (+v > 0 ? +v : d) : (String(v || '').trim() || d); });
-  const kh = c.kyHieuHD || 'TGTP', ky = raw.ngayKy || D.today(), gy = raw.ngayGopY || ky, yr = String(ky).slice(0, 4);
+  const kh = c.kyHieuHD || coKH(), ky = raw.ngayKy || D.today(), gy = raw.ngayGopY || ky, yr = String(ky).slice(0, 4);
   const mk = (v, t) => { v = v || '01'; return /\//.test(v) ? v : v + '/' + yr + '/' + t + '-' + kh; }, soQD = mk(raw.so, 'QĐ'), soNQ = mk(raw.soNQ, 'NQ');
   const T = x => esc(String(x).replace(':', 'h')), B = x => '<b>' + esc(x) + '</b>';
   const dm = iso => { const d = D.parse(iso); return `ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}`; };
@@ -2757,7 +2764,8 @@ Object.assign(ACT, {
 COMPANY_FIELDS.splice(6, 0,
   { key: 'daiDien', label: 'Người đại diện (ký HĐLĐ)' }, { key: 'chucVuDD', label: 'Chức vụ người đại diện' },
   { key: 'dkkd', label: 'ĐKKD / giấy phép kinh doanh', full: true }, { key: 'stkDN', label: 'Số tài khoản công ty' }, { key: 'nganHangDN', label: 'Ngân hàng công ty' },
-  { key: 'kyHieuHD', label: 'Ký hiệu số HĐLĐ', hint: 'VD: TGTP thì số HĐ là 1/2026/HĐLD-TGTP' }, { key: 'ngayTraLuong', label: 'Ngày trả lương hằng tháng', type: 'number' });
+  { key: 'tenApp', label: 'Tên app / tên nhà xe', hint: 'Hiện trên đầu app, màn hình đăng nhập, thông báo. Để trống: Nhà Xe + 2 chữ cuối tên công ty' }, { key: 'tenNgan', label: 'Tên ngắn (dưới biểu tượng trên điện thoại)', hint: 'Để trống: 2 chữ cuối tên công ty' },
+  { key: 'kyHieuHD', label: 'Ký hiệu số HĐLĐ', hint: 'VD: ABC thì số HĐ là 1/2026/HĐLD-ABC. Để trống: chữ cái đầu tên công ty' }, { key: 'ngayTraLuong', label: 'Ngày trả lương hằng tháng', type: 'number' });
 addCSS(`
 .hd{font-family:'Times New Roman',Times,serif;font-size:12.5px;line-height:1.42;color:#111;text-align:justify}
 .hd p{margin:3px 0}.hd .hd-h{font-size:13px;font-weight:700;margin:11px 0 3px;text-align:left}
@@ -2784,7 +2792,7 @@ function hdInfo0(e) {
   const vao = e.ngayVao && e.ngayVao.slice(0, 4) === y && e.ngayVao > y + '-01-01' ? e.ngayVao : '';
   const tu = ov ? e.hdTu : (vao || y + '-01-01'), den = ov && e.hdDen ? e.hdDen : (e.loaiHD === 'Không xác định thời hạn' ? '' : y + '-12-31'), n = parseInt(String(e.soHD || '').replace(/\D/g, '')) || 0;
   const th = tu && den ? (+den.slice(0, 4) - +tu.slice(0, 4)) * 12 + (+den.slice(5, 7) - +tu.slice(5, 7)) + 1 : '';
-  return { c, tu, den, th, soHD: `${n || '....'}/${y}/HĐLD-${c.kyHieuHD || 'TGTP'}` };
+  return { c, tu, den, th, soHD: `${n || '....'}/${y}/HĐLD-${c.kyHieuHD || coKH()}` };
 }
 const HD_CANCU = ['Căn cứ Bộ luật Lao động và các văn bản hướng dẫn thi hành;', 'Căn cứ Bộ luật Dân sự và các quy định pháp luật có liên quan;', 'Căn cứ nhu cầu sử dụng lao động và kết quả tuyển dụng của Công ty;', 'Căn cứ Nội quy lao động, quy chế tiền lương và các quy định nội bộ của Công ty;', 'Căn cứ nhu cầu và khả năng của hai bên;'];
 const HD_D1b = ['Thực hiện công việc theo Bảng mô tả công việc tại Phụ lục I và các phân công hợp lý của Công ty.', 'Thực hiện đúng chức danh, chuyên môn, phạm vi được giao và chịu sự quản lý, điều hành của người có thẩm quyền.', 'Phối hợp với các bộ phận liên quan để bảo đảm tiến độ, chất lượng và hiệu quả công việc.', 'Thực hiện các công việc khác phù hợp với vị trí, chuyên môn và năng lực theo yêu cầu hợp lý của Công ty.'];
@@ -3017,7 +3025,7 @@ const TV_F = e => [
   { key: 'noiDungBG', label: 'Nội dung bàn giao (mỗi dòng một mục)', type: 'textarea', rows: 2, full: true, ph: /lái\s*xe/i.test(e.chucVu || '') ? 'Ví dụ: Xe 60B-123.45 kèm giấy tờ xe\nThẻ nhận dạng lái xe, đồng phục' : 'Ví dụ: Hồ sơ, sổ sách đang quản lý\nMáy tính, tài khoản phần mềm' },
   { type: 'section', label: 'Quyết định thôi việc' },
   { key: 'hinhThuc', label: 'Hình thức chấm dứt', type: 'select', options: TV_HT, full: true },
-  { key: 'soQD', label: 'Số quyết định', hint: 'Chỉ nhập số thứ tự, tự thành 01/năm/QĐTV-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'ngayQD', label: 'Ngày ký quyết định', type: 'date' },
+  { key: 'soQD', label: 'Số quyết định', hint: 'Chỉ nhập số thứ tự, tự thành 01/năm/QĐTV-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'ngayQD', label: 'Ngày ký quyết định', type: 'date' },
   { key: 'noi', label: 'Nơi ký', ph: 'Đồng Nai' }, { key: 'capNhat', label: 'Khi in quyết định: chuyển hồ sơ sang "Nghỉ việc"', type: 'checkbox' }
 ];
 // cộng n ngày làm việc (bỏ ngày nghỉ tuần theo Cài đặt)
@@ -3043,7 +3051,7 @@ function tvDefaults(e) {
 }
 // dữ liệu chung cho 2 mẫu
 function tvCtx(e, q) {
-  const c = S().company || {}, kh = c.kyHieuHD || 'TGTP', nu = /^nữ/i.test(e.gioiTinh || ''), ong = nu ? 'Bà' : 'Ông';
+  const c = S().company || {}, kh = c.kyHieuHD || coKH(), nu = /^nữ/i.test(e.gioiTinh || ''), ong = nu ? 'Bà' : 'Ông';
   const dots = (v, n = 30) => v ? `<b>${esc(v)}</b>` : '.'.repeat(n);
   const dm = iso => { const d = iso && D.parse(iso); return d ? `ngày ${pad(d.getDate())} tháng ${pad(d.getMonth() + 1)} năm ${d.getFullYear()}` : 'ngày ..... tháng ..... năm ......'; };
   const dd = iso => iso ? F.date(iso) : '......./....../..........';
@@ -3724,7 +3732,7 @@ addCSS(`.hd .nb td,.hd .nb th{border:none}.hd .vc-t th{background:#f1f5f9;text-a
 function coHead(t) { return esc(String(t || '')).replace(/^CÔNG TY TNHH MTV /, 'CÔNG TY TNHH MTV<br>'); }   // tên công ty ngắt 2 dòng ở đầu văn bản
 const vcNext = () => String(Math.max(0, ...DB.hdvc.map(x => parseInt(x.so) || 0)) + 1).padStart(4, '0');
 const vcSo = c => (c.so || '....') + '/HĐVC-' + PCFG.suffix();
-const vcLenhSo = c => (c.so || '....') + '/LVC-' + (((S().company || {}).kyHieuHD) || 'TGTP');
+const vcLenhSo = c => (c.so || '....') + '/LVC-' + (((S().company || {}).kyHieuHD) || coKH());
 const dVN = d => d ? `${d.slice(8, 10)} Tháng ${d.slice(5, 7)} Năm ${d.slice(0, 4)}` : '.... Tháng .... Năm ........';
 const tVN = g => g ? `${g.slice(0, 2)} giờ ${g.slice(3, 5)} phút` : '…… giờ …… phút';
 const dShort = d => d ? F.date(d) : '..../..../........';
@@ -3852,7 +3860,7 @@ const vcPrint = list => PrintDlg.open({ htmls: list.map(vcHTML), title: list.len
 const VC_FIELDS = () => [
   { type: 'section', label: 'Thông tin chung' },
   { key: 'so', label: 'Số hợp đồng', hint: 'Hiển thị dạng 0001/HĐVC-' + PCFG.suffix() }, { key: 'ngayKy', label: 'Ngày ký', type: 'date' },
-  { key: 'soLenhXem', label: 'Số lệnh vận chuyển', readonly: true, hint: 'Tự động = số hợp đồng + /LVC-TGTP (ví dụ 0001/LVC-TGTP)' },
+  { key: 'soLenhXem', label: 'Số lệnh vận chuyển', readonly: true, hint: 'Tự động = số hợp đồng + /LVC- + ký hiệu công ty (ví dụ 0001/LVC-ABC)' },
   { type: 'section', label: 'Bên thuê vận tải (Bên B)' },
   { key: 'bBTen', label: 'Tên đơn vị / cá nhân', required: true, full: true }, { key: 'bBDiaChi', label: 'Địa chỉ', full: true },
   { key: 'bBMst', label: 'Mã số thuế / CCCD' }, { key: 'bBSdt', label: 'Điện thoại' }, { key: 'bBEmail', label: 'Email', full: true },
@@ -3894,7 +3902,7 @@ function vcForm(c, pre) {
     onDelete: isNew || !Auth.can('hdvc', 'del') ? null : () => { DB.hdvc = DB.hdvc.filter(x => x !== c); App.changed(); }
   });
   const so = m.el.querySelector('[name=so]'), sl = m.el.querySelector('[name=soLenhXem]');
-  if (so && sl) { const upd = () => { sl.value = (so.value || '....') + '/LVC-' + (((S().company || {}).kyHieuHD) || 'TGTP'); }; sl.readOnly = true; upd(); so.addEventListener('input', upd); }
+  if (so && sl) { const upd = () => { sl.value = (so.value || '....') + '/LVC-' + (((S().company || {}).kyHieuHD) || coKH()); }; sl.readOnly = true; upd(); so.addEventListener('input', upd); }
   const gi = m.el.querySelector('[name=giaTri]'), gc = m.el.querySelector('[name=giaTriChu]');
   if (gi && gc) {
     const auto = () => { const n = F.parse(gi.value); return n ? docSo(n).toUpperCase() : ''; };
@@ -6877,7 +6885,7 @@ const GS = {
       next(); setTimeout(() => toast('Không tải được dữ liệu từ Google: ' + esc(e.message) + '. Đang dùng dữ liệu trong file.', 'err', 9000), 600);
     });
   },
-  loading(msg) { $$('.gs-load').forEach(n => n.remove()); if (!msg) return; document.body.insertAdjacentHTML('beforeend', `<div class="gs-load" data-runtime="1"><div><span class="gs-spin"></span><b>${esc(msg)}</b><small>Nhà Xe Thịnh Phát</small></div></div>`); },
+  loading(msg) { $$('.gs-load').forEach(n => n.remove()); if (!msg) return; document.body.insertAdjacentHTML('beforeend', `<div class="gs-load" data-runtime="1"><div><span class="gs-spin"></span><b>${esc(msg)}</b><small>${esc(coApp())}</small></div></div>`); },
   connect(next, c, shell, err) {
     $$('.gs-wrap').forEach(n => n.remove());
     const w = document.createElement('div'); w.className = 'gs-wrap au-wrap'; w.dataset.runtime = '1';
@@ -7013,7 +7021,7 @@ const FB = {
       'auth/user-not-found': 'Chưa có tài khoản này trong Firebase Authentication', 'auth/invalid-email': 'Email không hợp lệ', 'auth/too-many-requests': 'Nhập sai quá nhiều lần, chờ vài phút rồi thử lại',
       'auth/network-request-failed': 'Không kết nối được Firebase (kiểm tra mạng, hoặc đang mở trong khung xem của Claude)', 'auth/operation-not-allowed': 'Chưa bật đăng nhập "Email/Password" trong Firebase Authentication',
       'auth/invalid-api-key': 'apiKey không đúng, dán lại đoạn firebaseConfig', 'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'apiKey không đúng, dán lại đoạn firebaseConfig',
-      'auth/unauthorized-domain': 'Tên miền này chưa được phép: vào Authentication → Settings → Authorized domains, thêm pvbhtgtp.github.io',
+      'auth/unauthorized-domain': 'Tên miền này chưa được phép: vào Authentication → Settings → Authorized domains, thêm ' + location.hostname,
       'permission-denied': 'Firebase từ chối: kiểm tra Rules của Firestore (email trong Rules phải trùng email đăng nhập)', 'unavailable': 'Không kết nối được Firestore (mạng yếu hoặc chưa tạo Firestore Database)',
       'not-found': 'Chưa tạo Firestore Database trong dự án Firebase', 'failed-precondition': 'Firestore chưa sẵn sàng: kiểm tra đã tạo Firestore Database chưa'
     };
@@ -7549,7 +7557,7 @@ addCSS(`/* --- thanh trên cùng: hàng 1 = tiêu đề + tài khoản, hàng 2 
 
 /* ---------- Khởi động ---------- */
 const CFG = {
-  id: 'luong', title: 'Nhà Xe Thịnh Phát', tagline: '', icon: 'bus', fileName: 'Nha Xe Thinh Phat.html', theme: THEME,
+  id: 'luong', get title() { return coApp(); }, tagline: '', icon: 'bus', get fileName() { return coApp().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd') + '.html'; }, theme: THEME,
   palette: ['#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#64748b'],
   sample: sampleDB, empty: emptyDB, migrate: db => { migrate(db); db.vehicles = db.vehicles || []; db.giochay = db.giochay || []; db.banggia = db.banggia || []; db.suachua = db.suachua || []; db.nhienlieu = db.nhienlieu || []; db.lylich = db.lylich || []; db.kmxe = db.kmxe || []; db.lichchay = db.lichchay || []; db.datve = db.datve || []; db.guihang = db.guihang || []; db.hdvc = db.hdvc || []; Auth.migrate(db); },
   counts: () => [['Nhân viên', DB.employees.length], ['Phương tiện', DB.vehicles.length], ['Giờ chạy', DB.giochay.length], ['Bảng giá vé', (DB.banggia || []).length], ['Phiếu sửa chữa', (DB.suachua || []).length], ['Phiếu nhiên liệu', (DB.nhienlieu || []).length], ['Ghi nhận lý lịch', (DB.lylich || []).length], ['Dòng km xe', (DB.kmxe || []).length], ['Lịch chạy', DB.lichchay.length], ['Vé đã đặt', DB.datve.length], ['Hợp đồng vận chuyển', DB.hdvc.length], ['Tháng có chấm công', Object.keys(DB.cham).length]],
@@ -7710,7 +7718,7 @@ const BOT = {
     ];
   },
   sys() {
-    return `Bạn là trợ lý của app quản lý nhà xe "${(DB.settings.company || {}).ten || 'Tường Gia Thịnh Phát'}" (chấm công, lương, phương tiện, lái xe, lịch chạy, sửa chữa, lý lịch, km). Trả lời tiếng Việt, ngắn gọn, đúng số liệu. Luôn gọi công cụ để lấy dữ liệu thật, không bịa. Hôm nay ${D.today()}. Ngày hiển thị dạng dd/mm/yyyy. Tiền ghi dạng 1.250.000đ. Muốn sửa dữ liệu thì dùng cap_nhat (app sẽ hỏi xác nhận). Việc tính lương, chấm công hàng loạt, in biểu mẫu thì dùng mo_man_hinh đưa người dùng tới màn hình tương ứng và hướng dẫn bấm nút nào. Nếu công cụ báo thiếu quyền thì nói rõ cho người dùng. Không nêu lương, CCCD của người khác khi công cụ không trả về.`;
+    return `Bạn là trợ lý của app quản lý nhà xe "${(DB.settings.company || {}).ten || coApp()}" (chấm công, lương, phương tiện, lái xe, lịch chạy, sửa chữa, lý lịch, km). Trả lời tiếng Việt, ngắn gọn, đúng số liệu. Luôn gọi công cụ để lấy dữ liệu thật, không bịa. Hôm nay ${D.today()}. Ngày hiển thị dạng dd/mm/yyyy. Tiền ghi dạng 1.250.000đ. Muốn sửa dữ liệu thì dùng cap_nhat (app sẽ hỏi xác nhận). Việc tính lương, chấm công hàng loạt, in biểu mẫu thì dùng mo_man_hinh đưa người dùng tới màn hình tương ứng và hướng dẫn bấm nút nào. Nếu công cụ báo thiếu quyền thì nói rõ cho người dùng. Không nêu lương, CCCD của người khác khi công cụ không trả về.`;
   },
   md(t) {
     let h = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -12124,7 +12132,7 @@ const ATG = {
   def() { const c = V2U.co(); return { so: '01', ngay: D.today(), noi: c.diaChi ? String(c.diaChi).split(',').pop().trim() : '', ten: 'Ban An toàn giao thông', mucDich: 'tăng cường công tác bảo đảm trật tự, an toàn giao thông trong hoạt động kinh doanh vận tải hành khách', thanhVien: `${c.daiDien || '……………………'} | Giám đốc | Trưởng ban\n…………………… | Phụ trách điều hành | Phó ban\n…………………… | Kế toán | Thành viên\n…………………… | Lái xe đại diện | Thành viên`, nhiemVu: 'Xây dựng, tổ chức thực hiện quy chế quản lý an toàn giao thông của công ty.\nKiểm tra điều kiện an toàn kỹ thuật của xe, giấy tờ xe và lái xe trước khi khởi hành.\nQuản lý hồ sơ, sức khỏe, thời gian lái xe và tập huấn nghiệp vụ cho lái xe, nhân viên phục vụ trên xe.\nPhổ biến, nhắc nhở lái xe chấp hành pháp luật giao thông; xử lý hoặc đề xuất xử lý vi phạm.\nThống kê, báo cáo và phối hợp điều tra, giải quyết khi xảy ra tai nạn giao thông.\nPhối hợp với cơ quan chức năng trong công tác bảo đảm an toàn giao thông.' }; },
   get: () => Object.assign(ATG.def(), S().atgt || {}),
   html(qa) {
-    const q = Object.assign(ATG.get(), qa || {}), c = V2U.co(), t = esc(String(c.ten || '').toUpperCase()), kh = c.kyHieuHD || 'TGTP', yr = String(q.ngay).slice(0, 4), so = /\//.test(q.so) ? q.so : `${q.so}/${yr}/QĐ-${kh}`;
+    const q = Object.assign(ATG.get(), qa || {}), c = V2U.co(), t = esc(String(c.ten || '').toUpperCase()), kh = c.kyHieuHD || coKH(), yr = String(q.ngay).slice(0, 4), so = /\//.test(q.so) ? q.so : `${q.so}/${yr}/QĐ-${kh}`;
     const mem = String(q.thanhVien || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => l.split(/\s*\|\s*/));
     const nv = String(q.nhiemVu || '').split('\n').map(l => l.trim()).filter(Boolean);
     const d = D.parse(q.ngay), loc = `${esc(q.noi || '……………')}, ngày ${String(d.getDate()).padStart(2, '0')} tháng ${String(d.getMonth() + 1).padStart(2, '0')} năm ${d.getFullYear()}`;
@@ -12161,7 +12169,7 @@ addCSS(`.v2f .field{display:block;margin:0 0 12px}.v2f .field>span{display:block
           Ban An toàn giao thông · Bổ nhiệm người điều hành · Phương án kinh doanh · Nội quy lao động
    ===================================================================================== */
 const ATG_F = () => [
-  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Chỉ nhập số thứ tự, tự thành 01/2026/QĐ-' + ((S().company || {}).kyHieuHD || 'TGTP') }, { key: 'ngay', label: 'Ngày ký', type: 'date' },
+  { key: 'so', label: 'Số quyết định', ph: '01', hint: 'Chỉ nhập số thứ tự, tự thành 01/2026/QĐ-' + ((S().company || {}).kyHieuHD || coKH()) }, { key: 'ngay', label: 'Ngày ký', type: 'date' },
   { key: 'noi', label: 'Nơi ký', ph: 'Đồng Nai' }, { key: 'ten', label: 'Tên Ban', def: 'Ban An toàn giao thông' },
   { key: 'mucDich', label: 'Mục đích (sau chữ “Xét yêu cầu”)', full: true },
   { key: 'thanhVien', label: 'Thành viên (mỗi dòng: Họ tên | Chức vụ tại công ty | Chức danh trong Ban)', type: 'textarea', rows: 5, full: true },
@@ -12479,7 +12487,7 @@ const APIK = {
   script() {
     const fn = n => { try { const f = (0, eval)(n); return 'var ' + n + ' = ' + f.toString() + ';'; } catch (e) { return '// thiếu hàm ' + n; } };
     const shared = ['sdSpecial', 'sdRenum', 'sdTemplate29', 'sdTemplate16', 'sdTemplate15', 'dvLayout', 'sdDefault', 'sdNorm', 'sdSeats', 'dvSO', 'dvCap', 'bgNorm', 'bgFind', 'bgPrice'].map(fn).join('\n');
-    return `/* ===== CỔNG API · NHÀ XE THỊNH PHÁT (đợt 1: chỉ đọc) =====
+    return `/* ===== CỔNG API · ${coApp().toUpperCase()} (đợt 1: chỉ đọc) =====
    Tạo tự động từ app (module Management → API kết nối). Không cần sửa gì trong tệp này.
    Chạy bằng tài khoản Google chủ dự án Firebase; dữ liệu đọc trực tiếp từ Firestore. */
 var PROJECT_ID = ${JSON.stringify(APIK.pid())};
@@ -13059,6 +13067,19 @@ const IMGX = {
 }
 
 App.cfg = CFG; Store.load();
+/* tên nhà xe theo Cài đặt: tiêu đề tab, tên dưới biểu tượng (iPhone), tên khi cài app (Android/máy tính). Tên giống manifest.json thì giữ nguyên tệp manifest gốc */
+const BRAND = { last: '', apply() { try {
+  const app = coApp(), sh = coShort() || app; if (BRAND.last === app + '|' + sh) return; BRAND.last = app + '|' + sh;
+  const m = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (m) m.content = sh; if (/^Management · /.test(document.title)) document.title = 'Management · ' + app;
+  const l = document.querySelector('link[rel="manifest"]'); if (!l) return; BRAND.href = BRAND.href || l.getAttribute('href');
+  fetch(BRAND.href, { cache: 'no-store' }).then(r => r.json()).then(j => {
+    if (j.name === app && j.short_name === sh) { if (l.getAttribute('href') !== BRAND.href) l.setAttribute('href', BRAND.href); return; }
+    const base = new URL(BRAND.href, location.href), abs = u => u ? new URL(u, base).href : u;
+    const o = { ...j, name: app, short_name: sh, description: 'Quản lý vận tải ' + app, start_url: abs(j.start_url || '.'), scope: abs(j.scope || '.'), icons: (j.icons || []).map(i => ({ ...i, src: abs(i.src) })) };
+    l.setAttribute('href', URL.createObjectURL(new Blob([JSON.stringify(o)], { type: 'application/manifest+json' })));
+  }).catch(() => { });
+} catch (e) { } } };
+setTimeout(() => BRAND.apply(), 1200); setInterval(() => BRAND.apply(), 30000);
 GS.boot(() => Auth.gate(() => {
   App.init(CFG); Auth.chip(); Shell.setup(); Lock.init(); BOT.mount(); HUB.mount(); LOGO.mount(); TB.mount(); NLMK.init(); setTimeout(() => { try { GDN.check(); } catch (e) { } }, 1500);
   lcAutoRun(); setInterval(() => lcAutoRun(), 60000);
@@ -14324,7 +14345,7 @@ const NOTI = {
   got(ev) {
     const L = NOTI.list(); if (L.some(x => x.id === ev.id)) return; L.unshift({ ...ev, rd: 0 }); NOTI.save(L);
     const c = NOTI.cfg(); if (!c.ev[ev.t]) return;
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { try { navigator.serviceWorker.ready.then(r => r.showNotification('Nhà xe Thịnh Phát', { body: ev.txt, tag: ev.id, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: [200, 100, 200] })); } catch (e) { } }
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { try { navigator.serviceWorker.ready.then(r => r.showNotification(coApp(), { body: ev.txt, tag: ev.id, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: [200, 100, 200] })); } catch (e) { } }
     NOTI.speak(ev.txt);
   },
   quiet() { const c = NOTI.cfg(); if (!c.qs || !c.qe) return false; const t = new Date().toTimeString().slice(0, 5); return c.qs <= c.qe ? t >= c.qs && t < c.qe : t >= c.qs || t < c.qe; },
@@ -14852,7 +14873,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T09:45';
+const APP_BUILD = '2026-11-14T10:15';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -15031,11 +15052,11 @@ const PWA = {
   /* hướng dẫn cài vắn tắt (mở từ menu tài khoản hoặc màn hình đăng nhập) */
   guide() {
     const ios = PWA.ios(), and = /android/i.test(navigator.userAgent), row = (t, on, b) => `<div class="pwa-r${on ? ' on' : ''}"><div class="pwa-t">${t}</div><div>${b}</div></div>`;
-    const m = Modal.open({ title: 'Cài app Nhà Xe Thịnh Phát', width: 460, body: `<p class="small muted" style="margin:0 0 10px">Cài 1 lần: app có biểu tượng riêng, mở cửa sổ riêng (không tab, không thanh địa chỉ), tự cập nhật.</p>
+    const m = Modal.open({ title: 'Cài app ' + coApp(), width: 460, body: `<p class="small muted" style="margin:0 0 10px">Cài 1 lần: app có biểu tượng riêng, mở cửa sổ riêng (không tab, không thanh địa chỉ), tự cập nhật.</p>
       ${row('💻 Máy tính (Chrome / Edge)', !ios && !and, 'Bấm biểu tượng <b>Cài đặt</b> ở cuối thanh địa chỉ → <b>Cài đặt</b>.')}
       ${row('🤖 Android (Chrome)', and, 'Menu <b>⋮</b> → <b>Cài đặt ứng dụng</b> (hoặc Thêm vào màn hình chính) → <b>Cài đặt</b>.')}
       ${row('🍎 iPhone / iPad (Safari)', ios, 'Nút <b>Chia sẻ</b> (ô vuông mũi tên lên) → <b>Thêm vào MH chính</b> → <b>Thêm</b>.')}
-      <p class="small muted" style="margin:10px 0 0">Sau đó mở app bằng biểu tượng <b>Thịnh Phát</b> trên màn hình.</p>`,
+      <p class="small muted" style="margin:10px 0 0">Sau đó mở app bằng biểu tượng <b>${esc(coShort())}</b> trên màn hình.</p>`,
       foot: `<button class="btn" data-x>Đóng</button>${PWA.ev ? `<button class="btn pri" data-go>${ic('download')} Cài ngay</button>` : ''}` });
     m.el.style.zIndex = 900;
     m.el.querySelector('[data-x]').onclick = () => m.close();
@@ -15043,7 +15064,7 @@ const PWA = {
   },
   async install() {
     if (!PWA.ev) return PWA.guide();
-    const e = PWA.ev; PWA.ev = null; e.prompt(); const r = await e.userChoice.catch(() => ({})); if (r.outcome === 'accepted') toast(ic('check') + ' Đã cài app Nhà Xe Thịnh Phát', 'ok'); try { Auth.chip(); } catch (x) { }
+    const e = PWA.ev; PWA.ev = null; e.prompt(); const r = await e.userChoice.catch(() => ({})); if (r.outcome === 'accepted') toast(ic('check') + ' Đã cài app ' + esc(coApp()), 'ok'); try { Auth.chip(); } catch (x) { }
   },
   /* màn hình đăng nhập: thêm dòng "Cài app vào máy" */
   login() { if (PWA.standalone()) return; document.querySelectorAll('.au-box').forEach(b => { if (b.querySelector('.pwa-l')) return; b.insertAdjacentHTML('beforeend', `<button type="button" class="pwa-l">${ic('download')} Hướng dẫn cài app vào máy</button>`); b.querySelector('.pwa-l').onclick = () => PWA.guide(); }); }

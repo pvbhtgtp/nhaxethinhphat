@@ -59,7 +59,7 @@ const HC = {
         <g transform="translate(282,100)"><rect x="-1" y="-34" width="2" height="34" fill="#475569"/><rect x="-11" y="-42" width="22" height="10" rx="2" fill="#16a34a"/><text x="0" y="-35" font-size="5.5" text-anchor="middle" fill="#fff" font-weight="700">ĐÓN KHÁCH</text></g>
         <g class="hc-bus"><rect x="0" y="-48" width="150" height="40" rx="7" fill="${col}"/><rect x="6" y="-44" width="112" height="15" rx="3" fill="${dk ? '#fde68a' : '#bae6fd'}" opacity=".9"/>
           ${Array.from({ length: 6 }, (_, i) => `<line x1="${6 + i * 18.7}" y1="-44" x2="${6 + i * 18.7}" y2="-29" stroke="${col}" stroke-width="1.5"/>`).join('')}
-          <rect x="138" y="-44" width="10" height="16" rx="2" fill="#e0f2fe"/><rect x="146" y="-20" width="4" height="5" rx="1" fill="#fef08a"/><text x="62" y="-20" font-size="7" text-anchor="middle" fill="#fff" font-weight="800">THỊNH PHÁT</text>
+          <rect x="138" y="-44" width="10" height="16" rx="2" fill="#e0f2fe"/><rect x="146" y="-20" width="4" height="5" rx="1" fill="#fef08a"/><text x="62" y="-20" font-size="7" text-anchor="middle" fill="#fff" font-weight="800">${esc(coShort().toUpperCase())}</text>
           <g class="hc-hatch"><rect x="40" y="-16" width="46" height="9" rx="1.5" fill="#00000022" stroke="#0003"/></g><rect x="40" y="-16" width="46" height="9" fill="#0f172a" opacity="0" class="hc-hole"/>
           <rect class="hc-door" x="122" y="-44" width="14" height="36" rx="1.5" fill="#cbd5e1" stroke="#64748b" stroke-width=".8"/>
           <g transform="translate(28,-6)"><circle r="7" fill="#111827"/><circle r="3" fill="#9ca3af" class="hc-w"/></g><g transform="translate(118,-6)"><circle r="7" fill="#111827"/><circle r="3" fill="#9ca3af" class="hc-w"/></g></g>
