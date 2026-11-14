@@ -5832,14 +5832,19 @@ const dhVehC = txt => { const n = dhNorm(txt); if (!n) return []; const V = DB.v
   const R = [v => dhNorm(v.bks) === n, ...(d.length >= 4 ? [v => { const x = dd(v); return x.length >= 4 && (x.endsWith(d.slice(-5)) || d.endsWith(x.slice(-5))); }] : [])];
   for (const f of R) for (const P of [A, V]) { const c = P.filter(f); if (c.length) return c; } return []; };
 const dhFindVeh = txt => { const c = dhVehC(txt); return c.length === 1 ? c[0] : null; };
-const dhEmpC = txt => { const n = dhNorm(txt); if (!n) return []; const E = (DB.employees || []).filter(e => e.ten), A = E.filter(e => e.trangThai !== 'Nghỉ việc'), D = A.filter(e => isDriver(e));
+const dhEmpC = txt => { const n = dhNorm(txt); if (!n) return []; const E = (DB.employees || []).filter(e => e.ten), A = E.filter(e => e.trangThai !== 'Nghỉ việc');
+  // chỉ ghép với người có chức vụ Lái xe / Tài xế (kể cả đã nghỉ, vì có thể quét ảnh ngày cũ); không ghép sang nhân viên phòng vé, văn phòng.
+  // Không dùng isDriver vì nó tính cả người từng được gán vào chuyến (lỡ gán nhầm 1 lần là bị coi như lái xe mãi).
+  const lx = e => /l[aá]i\s*xe|t[aà]i\s*x[eế]|driver/i.test(String(e.chucVu || '')), D = A.filter(lx), DQ = E.filter(e => lx(e) && !D.includes(e)), LS = D.length || DQ.length ? [D, DQ] : [A, E];
   const lo = t => String(t || '').normalize('NFC').toLowerCase(), wd = (t, f) => f(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   // mỗi mức thử giữ dấu trước (Tuấn ≠ Tuân), không ra mới bỏ dấu: cả họ tên → đủ các chữ đọc được → tên gọi (chữ cuối)
   const R = [];
   [lo, dhUp].forEach(f => R.push(e => wd(e.ten, f).join(' ') === wd(txt, f).join(' ')));
   [lo, dhUp].forEach(f => { const w = wd(txt, f); if (w.length) R.push(e => { const p = wd(e.ten, f); return w.every(x => p.includes(x)); }); });
-  [lo, dhUp].forEach(f => { const w = wd(txt, f); if (w.length) R.push(e => wd(e.ten, f).slice(-1)[0] === w[w.length - 1]); });
-  for (const f of R) for (const L of [D, A, E]) { const c = L.filter(f); if (c.length) return c; } return []; };
+  [lo, dhUp].forEach(f => { const w = wd(txt, f); if (w.length === 1) R.push(e => wd(e.ten, f).slice(-1)[0] === w[0]); });   // chỉ đọc được tên gọi (1 chữ) mới ghép theo tên gọi
+  // đọc ra đủ họ tên của một nhân viên KHÔNG phải lái xe (phòng vé, văn phòng…) thì không tự ghép sang lái xe khác trùng tên gọi: để trống cho người dùng chọn
+  if (LS[0] === D && !D.concat(DQ).some(R[0]) && !D.concat(DQ).some(R[1]) && E.some(e => !lx(e) && (R[0](e) || R[1](e)))) return [];
+  for (const f of R) for (const L of LS) { const c = L.filter(f); if (c.length) return c; } return []; };
 const dhFindEmp = txt => { const c = dhEmpC(txt); return c.length === 1 ? c[0] : null; };
 addCSS('.sc-drop{position:relative}.sc-drop>svg{width:30px;height:30px;display:block;margin:0 auto 6px}.sc-cam svg{width:16px;height:16px;vertical-align:-3px}.modal-f [hidden]{display:none!important}.sc-in{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.sc-drop{border:2px dashed #94a3b8;border-radius:10px;padding:18px;text-align:center;color:#475569;cursor:pointer;background:#f8fafc}.sc-drop.on{border-color:#2563eb;background:#eff6ff}.sc-prev{max-width:100%;max-height:220px;border-radius:8px;margin-top:10px;border:1px solid #d0d5dd}.sc-tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}.sc-tb th,.sc-tb td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left}.sc-tb th{background:#f2f4f7}.sc-bad{color:#dc2626}.sc-ok{color:#15803d}.sc-sel{display:block;min-width:130px;max-width:200px;padding:3px 6px;font-size:12px;margin-top:3px}');
 /* Kiểm tra logic: cùng một giờ, một xe không thể chạy 2 chuyến, một lái xe không thể lái 2 xe */
@@ -5904,7 +5909,7 @@ Chỉ trả về một đối tượng JSON dạng {"ngay": "DD/MM/YYYY", "chuye
 - Bỏ qua ô trống. Không bịa dữ liệu, chỗ nào không đọc rõ thì để chuỗi rỗng.
 Danh sách tuyến hợp lệ: ${JSON.stringify(routes)}
 Biển số xe của công ty: ${JSON.stringify(DB.vehicles.filter(v => !v.ngung).map(v => v.bks))}
-Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'))(DB.employees.filter(e => e.trangThai !== 'Nghỉ việc' && isDriver(e))).map(e => e.ten).filter(Boolean))}`;
+Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.filter(e => e.trangThai !== 'Nghỉ việc'))(DB.employees.filter(e => /l[aá]i\s*xe|t[aà]i\s*x[eế]|driver/i.test(String(e.chucVu || '')))).map(e => e.ten).filter(Boolean))}`;
       self.dates = []; self.dOk = false; self.ctl = new AbortController(); go.disabled = true; stop.hidden = false; ap.hidden = true; out.innerHTML = '<div class="muted" style="margin-top:12px">Đang đọc ảnh<span data-pg></span>… <b data-sec>0</b> giây <span class="small">(các AI đọc song song, đa số đọc giống nhau là xong)</span></div>'; const t0 = Date.now(), tick = setInterval(() => { const x = out.querySelector('[data-sec]'); if (x) x.textContent = Math.round((Date.now() - t0) / 1000); else clearInterval(tick); }, 500);
       let res;
       // Ảnh dài: cắt thành nhóm 2 đoạn, các nhóm đọc SONG SONG (không chờ nhau); chuyến ở đầu nhóm chưa có tiêu đề tuyến thì lấy tuyến cuối của nhóm trước
@@ -15190,7 +15195,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T19:15';
+const APP_BUILD = '2026-11-14T19:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
