@@ -1886,15 +1886,20 @@ const MRT = {
       return { id: 'a:' + k, ten: (b && MRT.up(b) !== MRT.up(a) ? String(a).toUpperCase() + ' ⇄ ' + String(b).toUpperCase() : String(t).toUpperCase()), ma: MRT.ini(a), di: a, keys: [k] }; });
   },
   cfg() { const L = (DB.settings || {}).nhomTuyen; return Array.isArray(L) && L.length ? L : MRT.auto(); },
-  _sig: '', _l: [],
+  _sig: '', _l: [], _q: null, _t: 0, _of: new Map(),
   get list() {
+    // gọi rất nhiều lần (mỗi chuyến, mỗi lần sắp xếp): chỉ dựng lại khi cài đặt / giờ chạy / lịch chạy đổi, tối đa 3 giây 1 lần
+    const st = (DB.settings || {}).nhomTuyen, q = [st, DB.giochay, DB.lichchay, (DB.giochay || []).length, (DB.lichchay || []).length];
+    if (MRT._q && q.every((x, i) => x === MRT._q[i]) && Date.now() - MRT._t < 3000) return MRT._l;
+    MRT._q = q; MRT._t = Date.now();
     const C = MRT.cfg(), sig = JSON.stringify(C);
     if (sig === MRT._sig) return MRT._l;
+    MRT._of.clear();
     const L = C.filter(g => g && (g.keys || []).length).map((g, i) => ({ k: String(g.id || 'g' + i), n: String(g.ten || '').trim() || ('NHÓM ' + (i + 1)), s: String(g.ma || '').trim() || MRT.ini(g.ten), di: g.di || '', keys: new Set(g.keys) }));
     L.forEach(m => { const O = L.filter(x => x !== m); m.o = O.length === 1 ? O[0] : { k: '~o:' + m.k, n: O.map(x => x.n).join(' + ') || 'nhóm khác', s: O.map(x => x.s).join('+'), ks: O.map(x => x.k) }; });
     MRT._sig = sig; MRT._l = L; return L;
   },
-  of(t) { if (!t) return null; const k = MRT.key(t); return MRT.list.find(m => m.keys.has(k)) || null; },
+  of(t) { if (!t) return null; const L = MRT.list; let m = MRT._of.get(t); if (m === undefined) { const k = MRT.key(t); m = L.find(x => x.keys.has(k)) || null; MRT._of.set(t, m); } return m; },
   inG: (m, g) => !!m && !!g && (m.ks ? m.ks.includes(g.k) : m.k === g.k),
   rank(g) { const i = MRT.list.findIndex(m => m.n === g); return i < 0 ? 9 : i; },
   dir(t) { const m = MRT.of(t), a = m && m.di ? MRT.up(m.di) : ''; if (!a) return 'di'; const e = MRT.up(MRT.ends(t)[0] || t); return e === a || e.includes(a) || a.includes(e) ? 'di' : 've'; },   // chiều đi = tuyến bắt đầu từ điểm đi của nhóm
@@ -1946,7 +1951,7 @@ const MRT = {
       const bad = L.find(g => !g.ten); if (bad) return toast('Nhập tên cho mọi nhóm', 'err');
       const names = L.map(g => g.ten.toUpperCase()); if (new Set(names).size !== names.length) return toast('Hai nhóm không được trùng tên', 'err');
       L.forEach((g, i) => { if (!g.id || String(g.id).startsWith('a:')) g.id = 'g' + i + Date.now().toString(36); });
-      DB.settings.nhomTuyen = L; MRT._sig = ''; App.changed(); m.close(); toast('Đã lưu nhóm tuyến', 'ok'); try { App.render(); } catch (e) { }
+      DB.settings.nhomTuyen = L; MRT._sig = ''; MRT._q = null; App.changed(); m.close(); toast('Đã lưu nhóm tuyến', 'ok'); try { App.render(); } catch (e) { }
     };
     draw();
   }
@@ -13903,7 +13908,7 @@ const DOCH = {
       const nmap = [...ids, ...prevY.filter(h => !ids.includes(h.id) && !rep.includes(h)).map(h => h.id)];
       if (!saved && !ch && nmap.join() === (map[t] || []).join()) return 0;                       // năm nay đã có đủ: bỏ qua
       rep.forEach(h => { h.an = true; h.thay = ids[0] || h.thay; });
-      map[t] = nmap; App.changed();
+      map[t] = nmap; Store.changed();   // lưu nền: không vẽ lại màn hình người đang làm
       if (saved && !quiet) toast(`Đã chép ${T.label.toLowerCase()} vào Lưu trữ hồ sơ: ${esc(HS.ptxt(folder))}`, 'ok', 5000);
       return saved;
     } catch (e) { console.warn('DOCH.toHS', e); if (!quiet) toast('Chưa chép được giấy vào Lưu trữ hồ sơ: ' + esc(e.message || e), 'err', 6000); return 0; }
@@ -14931,7 +14936,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T11:20';
+const APP_BUILD = '2026-11-14T11:40';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
