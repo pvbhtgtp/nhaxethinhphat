@@ -4235,19 +4235,24 @@ Object.assign(ACT, {
     const open = DB.giochay.filter(g => g.tt !== 'ĐÓNG');
     if (!open.length) { toast('Chưa có giờ chạy đang mở', 'err'); return; }
     Form.open({ title: 'Tạo lịch chạy từ Giờ chạy', width: 520, cols: 2, saveText: 'Tạo lịch ngay', value: { tu: lcDay(), den: lcDay(), autoDays: String((S().autoLich && S().autoLich.days) || 7), autoGio: (S().autoLich && S().autoLich.gio) || '06:00' },
-      fields: [{ key: 'tu', label: 'Từ ngày', type: 'date', required: true }, { key: 'den', label: 'Đến ngày', type: 'date', required: true, hint: `Mỗi ngày trong khoảng được tạo ${open.length} chuyến đang MỞ trong mục Giờ chạy, kèm xe và lái xe đã gán. Chuyến đã có sẵn được giữ nguyên. Tối đa 62 ngày một lần` }],
+      fields: [{ key: 'tu', label: 'Từ ngày', type: 'date', required: true }, { key: 'den', label: 'Đến ngày', type: 'date', required: true, hint: `Mỗi ngày trong khoảng được tạo ${open.length} chuyến đang MỞ trong mục Giờ chạy, kèm xe và lái xe đã gán. Chuyến đã có sẵn được giữ nguyên. Tối đa 1 năm (366 ngày) một lần` }],
       onSave: d => {
         S().autoLich = Object.assign({}, S().autoLich || {}, { on: false });
         if (!d.tu || !d.den) { toast('Vui lòng chọn từ ngày và đến ngày', 'err'); return false; }
         if (d.den < d.tu) { toast('Đến ngày phải sau hoặc bằng từ ngày', 'err'); return false; }
-        const days = D.diff(d.den, d.tu) + 1; if (days > 62) { toast('Chỉ tạo tối đa 62 ngày một lần', 'err'); return false; }
+        const days = D.diff(d.den, d.tu) + 1; if (days > 366) { toast('Chỉ tạo tối đa 1 năm (366 ngày) một lần', 'err'); return false; }
         const who = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
         let n = 0;
+        const have = new Set(DB.lichchay.map(x => x.ngay + '|' + x.tuyen + '|' + x.gio)), byXe = new Map();
+        DB.lichchay.forEach(x => { if (!x.xeId) return; const k = x.tuyen + '|' + x.xeId; let m = byXe.get(k); if (!m) byXe.set(k, m = new Map()); if (!m.has(x.ngay)) m.set(x.ngay, x); });
+        byXe.forEach((m, k) => byXe.set(k, [...m.values()].sort((a, b) => a.ngay.localeCompare(b.ngay))));
+        const prevOf = (g, ngay) => { const a = g.xeId && byXe.get(g.tuyen + '|' + g.xeId); if (!a) return null; let lo = 0, hi = a.length; while (lo < hi) { const md = (lo + hi) >> 1; if (a[md].ngay < ngay) lo = md + 1; else hi = md; } return lo ? a[lo - 1] : null; };
         for (let k = 0; k < days; k++) {
           const ngay = D.add(d.tu, k);
           open.forEach(g => {
-            if (!gcRuns(g, ngay) || DB.lichchay.some(x => x.ngay === ngay && x.tuyen === g.tuyen && x.gio === g.gio)) return;
-            const prev = DB.lichchay.filter(x => x.tuyen === g.tuyen && x.xeId && x.xeId === g.xeId && x.ngay < ngay).sort((a, b) => b.ngay.localeCompare(a.ngay))[0];
+            const key = ngay + '|' + g.tuyen + '|' + g.gio;
+            if (!gcRuns(g, ngay) || have.has(key)) return;
+            have.add(key); const prev = prevOf(g, ngay);
             DB.lichchay.push({ id: uid(), ngay, tuyen: g.tuyen, gio: g.gio, xeId: g.xeId || '', laiXe: g.laiXe || '', ...(g.phuXe ? { laiXe2: g.phuXe } : {}), soChuyen: 1, tienCong: prev ? prev.tienCong : 0, nguoiCham: who, tgCham: tg }); n++;
           });
         }
@@ -4259,16 +4264,16 @@ Object.assign(ACT, {
     const dates = [...new Set(DB.lichchay.map(l => l.ngay))].sort().reverse();
     if (!dates.length) { toast('Chưa có lịch nào để sao chép', 'err'); return; }
     Form.open({ title: 'Sao chép lịch chạy', width: 500, cols: 2, saveText: 'Sao chép', value: { tu: dates.find(x => x !== lcDay()) || dates[0], den1: lcDay(), den2: lcDay() },
-      fields: [{ key: 'tu', label: 'Sao chép từ ngày', type: 'select', full: true, options: dates.map(x => ({ value: x, label: F.date(x) })) }, { key: 'den1', label: 'Sang từ ngày', type: 'date', required: true }, { key: 'den2', label: 'Đến ngày', type: 'date', required: true, hint: 'Giữ nguyên tuyến, giờ, xe, lái xe và tiền công. Chuyến đã có sẵn được giữ nguyên. Tối đa 62 ngày một lần' }],
+      fields: [{ key: 'tu', label: 'Sao chép từ ngày', type: 'select', full: true, options: dates.map(x => ({ value: x, label: F.date(x) })) }, { key: 'den1', label: 'Sang từ ngày', type: 'date', required: true }, { key: 'den2', label: 'Đến ngày', type: 'date', required: true, hint: 'Giữ nguyên tuyến, giờ, xe, lái xe và tiền công. Chuyến đã có sẵn được giữ nguyên. Tối đa 1 năm (366 ngày) một lần' }],
       onSave: d => {
         if (!d.den1 || !d.den2) { toast('Vui lòng chọn khoảng ngày đích', 'err'); return false; }
         if (d.den2 < d.den1) { toast('Đến ngày phải sau hoặc bằng từ ngày', 'err'); return false; }
-        const days = D.diff(d.den2, d.den1) + 1; if (days > 62) { toast('Chỉ sao chép tối đa 62 ngày một lần', 'err'); return false; }
+        const days = D.diff(d.den2, d.den1) + 1; if (days > 366) { toast('Chỉ sao chép tối đa 1 năm (366 ngày) một lần', 'err'); return false; }
         const src = DB.lichchay.filter(l => l.ngay === d.tu), who = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
-        let n = 0;
+        let n = 0; const have = new Set(DB.lichchay.map(x => x.ngay + '|' + x.tuyen + '|' + x.gio));
         for (let k = 0; k < days; k++) {
           const ngay = D.add(d.den1, k); if (ngay === d.tu) continue;
-          src.forEach(l => { if (DB.lichchay.some(x => x.ngay === ngay && x.tuyen === l.tuyen && x.gio === l.gio)) return; DB.lichchay.push({ ...l, id: uid(), ngay, nguoiCham: who, tgCham: tg }); n++; });
+          src.forEach(l => { const key = ngay + '|' + l.tuyen + '|' + l.gio; if (have.has(key)) return; have.add(key); DB.lichchay.push({ ...l, id: uid(), ngay, nguoiCham: who, tgCham: tg }); n++; });
         }
         LC.ngay = d.den1; App.changed(); toast(`Đã sao chép ${n} chuyến sang ${days} ngày`, 'ok');
       } });
@@ -15121,7 +15126,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T16:10';
+const APP_BUILD = '2026-11-14T16:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
