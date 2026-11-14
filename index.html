@@ -2097,7 +2097,7 @@ function empForm(e) {
       if (isNew) DB.employees.push({ id: uid(), ...d }); else Object.assign(e, d);
       App.changed(); toast('Đã lưu nhân viên ' + esc(d.ten), 'ok');
       try { HS.afterEmpSave(isNew ? DB.employees[DB.employees.length - 1] : e); } catch (x) { console.warn('HS.afterEmpSave', x); }
-      { const eo = isNew ? DB.employees[DB.employees.length - 1] : e; setTimeout(() => { if (typeof DOCH !== 'undefined') DOCH.syncObj(eo, DOCH.ET); }, 4000); }   // bằng lái, thẻ tập huấn chưa có trong Lưu trữ hồ sơ thì lưu, có rồi thì bỏ qua
+      { const eo = isNew ? DB.employees[DB.employees.length - 1] : e; setTimeout(() => { if (typeof DOCH !== 'undefined') DOCH.syncObj(eo, DOCH.ET); }, 4000); }   // CCCD, bằng lái, thẻ tập huấn, ảnh đại diện, chữ ký chưa có trong Lưu trữ hồ sơ thì lưu, có rồi thì bỏ qua
     },
     onDelete: isNew ? null : () => { if (!REFX.canDel('E', e)) return; DB.employees = DB.employees.filter(x => x !== e); App.changed(); }
   });
@@ -13772,11 +13772,16 @@ const DOCH = {
       } });
   },
   /* Giấy mới tự chép vào Lưu trữ hồ sơ: [Năm] › 03. Phương tiện › <nhóm> › <biển số>  hoặc  [Năm] › 02. Nhân sự › <nhóm> › <tên>; bản lưu trước của cùng loại tự thành "Bản cũ" và ẩn */
-  HSDIR: { cavet: 'Đăng ký, đăng kiểm', dangKiem: 'Đăng ký, đăng kiểm', bhds: 'Bảo hiểm xe', bhvc: 'Bảo hiểm xe', phuHieu: 'Phù hiệu, giấy phép lưu hành', gplx: 'Bằng lái, giấy khám sức khỏe', theNV: 'Hồ sơ lái xe, phụ xe' },
+  HSDIR: { cavet: 'Đăng ký, đăng kiểm', hinhXe: 'Hình ảnh xe', cccd: 'Căn cước công dân', avatar: 'Ảnh đại diện, chữ ký', chuKy: 'Ảnh đại diện, chữ ký', dangKiem: 'Đăng ký, đăng kiểm', bhds: 'Bảo hiểm xe', bhvc: 'Bảo hiểm xe', phuHieu: 'Phù hiệu, giấy phép lưu hành', gplx: 'Bằng lái, giấy khám sức khỏe', theNV: 'Hồ sơ lái xe, phụ xe' },
   /* Chép giấy tờ vào Lưu trữ hồ sơ: GIẤY ĐÃ CÓ THÌ BỎ QUA, CHƯA CÓ THÌ LƯU (so theo mã ảnh trên Drive / dấu băm nội dung / dung lượng với bản lưu trước).
      Giấy đổi thì lưu bản mới, bản cũ chỉ ẩn thành "Bản cũ", không xóa. Dùng cho: thêm giấy mới, sửa hồ sơ xe / nhân viên, và tự rà toàn bộ (DOCH.syncAll). */
-  XT: { cavet: { label: 'Cà vẹt', f: [['cavet', 'Cà vẹt']], han: '', perm: 'phuongtien' } },
+  XT: {
+    cavet: { label: 'Cà vẹt', f: [['cavet', 'Cà vẹt']], perm: 'phuongtien' }, hinhXe: { label: 'Hình ảnh xe', f: [['hinhAnh', 'Hình ảnh xe']], perm: 'phuongtien' },
+    cccd: { label: 'Căn cước công dân', f: [['cccdTruoc', 'Mặt trước'], ['cccdSau', 'Mặt sau']], perm: 'nhanvien' },
+    avatar: { label: 'Ảnh đại diện', f: [['avatar', 'Ảnh đại diện']], perm: 'nhanvien' }, chuKy: { label: 'Chữ ký', f: [['chuKy', 'Chữ ký']], perm: 'nhanvien' }
+  },
   TT: t => DOCH.T[t] || DOCH.XT[t],
+  yOf: h => { try { return String((HS.path(h.folder)[0] || {}).ten || ''); } catch (e) { return ''; } },
   async getData(u) {               // chuỗi ảnh/tệp → data:…;base64 (ảnh đã chuyển lên Drive thì lấy từ bộ nhớ đệm hoặc tải về)
     if (u.startsWith('data:')) return u; if (!u.startsWith(IMGX.PRE)) return '';
     const id = u.slice(IMGX.PRE.length), c = IMGX.img.get(id); if (c) return c;
@@ -13787,14 +13792,19 @@ const DOCH = {
     const bk = (o && o.id) + ':' + t; if (DOCH.B.has(bk)) return 0; DOCH.B.add(bk);   // cùng một giấy đang lưu dở: không lưu chồng 2 lần
     try {
       if (typeof HS === 'undefined' || !HS.google() || !Auth.can('hoso', 'add')) { if (!quiet) toast('Giấy mới đã lưu trong app. Chưa chép vào Lưu trữ hồ sơ vì chưa kết nối Google Drive hoặc chưa có quyền lưu hồ sơ.', '', 6000); return 0; }
-      const T = DOCH.TT(t), xe = T.perm === 'phuongtien', who = xe ? (o.bks || '') : (o.ten || ''), han = DOCH.hanOf(o, t); if (!who) return 0;
-      const map = (o.hsGiay = o.hsGiay || {}), prev = (map[t] || []).map(id => HS.H().find(h => h.id === id)).filter(Boolean);
+      /* Mỗi năm một bộ đủ giấy: [Năm] › 03. Phương tiện / 02. Nhân sự › <nhóm giấy> › <biển số / họ tên>.
+         Tên tệp chuẩn: "<Loại giấy> - <Biển số | Họ tên (Mã NV)>[ - Mặt trước/sau] - <Năm>". Chỉ so với bản đã lưu trong NĂM NAY:
+         sang năm mới thì giấy đang dùng được chép vào thư mục năm mới, bản các năm trước giữ nguyên. */
+      const T = DOCH.TT(t), xe = T.perm === 'phuongtien', who = xe ? (o.bks || '') : (o.ten || ''), han = DOCH.hanOf(o, t), y = D.today().slice(0, 4); if (!who) return 0;
+      const nmWho = xe ? who : who + (o.ma ? ' (' + o.ma + ')' : '');
+      const map = (o.hsGiay = o.hsGiay || {}), prev = (map[t] || []).map(id => HS.H().find(h => h.id === id)).filter(Boolean), prevY = prev.filter(h => DOCH.yOf(h) === y);
       const ids = [], used = new Set(), nk = new Set(); let saved = 0, ch = false, folder = null;
       for (const [k, l] of T.f) {
         const u = String(o[k] || ''); if (!u.startsWith('data:') && !u.startsWith(IMGX.PRE)) continue;
-        const nm = `${T.label} - ${who}${T.f.length > 1 ? ' - ' + l.toLowerCase() : ''}`, did = u.startsWith(IMGX.PRE) ? u.slice(IMGX.PRE.length) : (IMGX.map.get(u) || '');
-        const pool = [...prev, ...HS.H().filter(h => h.loai === 'file' && h.ten === nm && !prev.includes(h))].filter(h => !used.has(h) && (!h.fk || h.fk === k));
-        let hit = did && pool.find(h => h.sgId === did);                                 // đã lưu đúng ảnh này (theo mã Drive): bỏ qua, không cần tải ảnh
+        const side = T.f.length > 1 ? l.replace(/^Ảnh\s+/i, '').toLowerCase() : '', nm = `${T.label} - ${nmWho}${side ? ' - ' + side : ''} - ${y}`, nm0 = `${T.label} - ${who}${T.f.length > 1 ? ' - ' + l.toLowerCase() : ''}`;
+        const did = u.startsWith(IMGX.PRE) ? u.slice(IMGX.PRE.length) : (IMGX.map.get(u) || '');
+        const pool = [...prevY, ...HS.H().filter(h => h.loai === 'file' && (h.ten === nm || h.ten === nm0) && !prevY.includes(h) && DOCH.yOf(h) === y)].filter(h => !h.an && !used.has(h) && (!h.fk || h.fk === k));
+        let hit = did && pool.find(h => h.sgId === did);                                 // năm nay đã lưu đúng ảnh này (theo mã Drive): bỏ qua, không cần tải ảnh
         let d = '', mm = null, sg = '', size = 0;
         if (!hit) {
           d = await DOCH.getData(u); mm = d.match(/^data:([^;,]+)[^,]*,(.*)$/); if (!mm) throw new Error('chưa lấy được ảnh ' + l.toLowerCase() + ' từ Drive');   // không lấy được ảnh: dừng loại giấy này, không đụng bản đã lưu
@@ -13802,21 +13812,22 @@ const DOCH = {
           hit = pool.find(h => h.sg === sg) || pool.find(h => !h.sg && !h.sgId && h.size === size && h.mime === mm[1]);   // bản lưu cũ chưa có dấu: so dung lượng + loại tệp
         }
         if (hit) { used.add(hit); ids.push(hit.id); if (did && hit.sgId !== did) { hit.sgId = did; ch = true; } if (sg && !hit.sg) { hit.sg = sg; ch = true; } if (!hit.fk) { hit.fk = k; ch = true; } continue; }
-        folder = folder || HS.ensure([D.today().slice(0, 4), xe ? '03. Phương tiện' : '02. Nhân sự', DOCH.HSDIR[t], who]);
+        folder = folder || HS.ensure([y, xe ? '03. Phương tiện' : '02. Nhân sự', DOCH.HSDIR[t], who]);
         const ext = (mm[1].split('/')[1] || 'jpg').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5);
-        const id = await HS.store(mm[2], { folder, ten: nm, tenFile: nm + '.' + ext, mime: mm[1], size, hetHan: han, ghiChu: 'Tự lưu giấy tờ' + (xe ? ' phương tiện' : ' nhân viên') });
+        const id = await HS.store(mm[2], { folder, ten: nm, tenFile: nm + '.' + ext, mime: mm[1], size, hetHan: han, ghiChu: `Tự lưu ${T.label.toLowerCase()} năm ${y}` });
         if (id) { const it = HS.H().find(h => h.id === id); if (it) Object.assign(it, { sg, sgId: did, fk: k }); ids.push(id); saved++; nk.add(k); }
       }
-      if (!saved && !ch) return 0;                                                                   // đã có đủ: bỏ qua
-      const rep = prev.filter(h => !ids.includes(h.id) && (h.fk ? nk.has(h.fk) : saved > 0));            // bản lưu trước của giấy vừa thay: chỉ ẩn thành "Bản cũ", không xóa
+      const rep = prevY.filter(h => !ids.includes(h.id) && (h.fk ? nk.has(h.fk) : saved > 0));          // bản cùng năm của giấy vừa thay: chỉ ẩn thành "Bản cũ", không xóa (bản các năm trước không đụng)
+      const nmap = [...ids, ...prevY.filter(h => !ids.includes(h.id) && !rep.includes(h)).map(h => h.id)];
+      if (!saved && !ch && nmap.join() === (map[t] || []).join()) return 0;                       // năm nay đã có đủ: bỏ qua
       rep.forEach(h => { h.an = true; h.thay = ids[0] || h.thay; });
-      map[t] = [...ids, ...prev.filter(h => !ids.includes(h.id) && !rep.includes(h)).map(h => h.id)]; App.changed();
+      map[t] = nmap; App.changed();
       if (saved && !quiet) toast(`Đã chép ${T.label.toLowerCase()} vào Lưu trữ hồ sơ: ${esc(HS.ptxt(folder))}`, 'ok', 5000);
       return saved;
     } catch (e) { console.warn('DOCH.toHS', e); if (!quiet) toast('Chưa chép được giấy vào Lưu trữ hồ sơ: ' + esc(e.message || e), 'err', 6000); return 0; }
     finally { DOCH.B.delete(bk); }
   },
-  VT: ['cavet', 'dangKiem', 'bhds', 'bhvc', 'phuHieu'], ET: ['gplx', 'theNV'],
+  VT: ['cavet', 'dangKiem', 'bhds', 'bhvc', 'phuHieu', 'hinhXe'], ET: ['cccd', 'gplx', 'theNV', 'avatar', 'chuKy'],
   async syncObj(o, L) { let n = 0; for (const t of L) { if (o && DOCH.TT(t).f.some(([k]) => o[k])) n += await DOCH.toHS(o, t, true); } if (n) toast(`Đã lưu ${n} giấy tờ mới vào Lưu trữ hồ sơ`, 'ok', 4500); return n; },
   /* Rà toàn bộ xe và nhân viên: giấy nào chưa có trong Lưu trữ hồ sơ thì lưu, có rồi thì bỏ qua. Chạy nền trên máy Admin có kết nối Drive. */
   async syncAll(manual) {
@@ -14838,7 +14849,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T09:00';
+const APP_BUILD = '2026-11-14T09:30';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
