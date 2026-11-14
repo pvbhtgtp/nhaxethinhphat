@@ -13433,6 +13433,31 @@ window.addEventListener('load', () => { try { const c0 = App.changed; App.change
 /* ===== Sao lưu tự động sang Google Drive (máy chủ dự phòng, 1 chiều) – chỉ Admin =====
    - Bản chính vẫn là nơi lưu đang dùng (Firebase). Máy admin tự gửi bản sao sang Apps Script + Drive.
    - Cấu hình chỉ lưu trên máy này (localStorage), không nằm trong dữ liệu chung nên nhân viên không thấy mã. */
+/* ===== Lấy lại lịch chạy của MỘT ngày từ bản sao lưu (Drive) hoặc bản Firebase cũ, các ngày và dữ liệu khác giữ nguyên ===== */
+const DAYR = {
+  async run(getData, label) {
+    const day = await new Promise(ok => Form.open({ title: 'Lấy lại lịch chạy 1 ngày', width: 420, cols: 1, saveText: 'Xem trước', value: { d: lcDay() },
+      fields: [{ key: 'd', label: 'Ngày cần lấy lại', type: 'date', required: true, hint: 'Chỉ lịch chạy (giờ, tuyến, xe, lái xe) của ngày này được thay bằng ' + esc(label) + '. Các ngày khác, vé, nhân viên… giữ nguyên.' }],
+      onSave: v => { if (!v.d) { toast('Chọn ngày', 'err'); return false; } ok(v.d); }, onClose: () => ok(null) }));
+    if (!day) return;
+    toast('Đang tải ' + esc(label) + '…', '', 3000);
+    const data = await getData(); if (!data || !Array.isArray(data.lichchay)) throw new Error('Bản này không có lịch chạy');
+    const old = data.lichchay.filter(l => l && l.ngay === day), cur = DB.lichchay.filter(l => l.ngay === day);
+    if (!old.length) throw new Error('Bản này không có chuyến nào ngày ' + F.date(day));
+    const ids = new Set(old.map(l => l.id)), busy = l => { try { return (DB.datve || []).some(x => x.chuyen === l.id && !x.huy) || (DB.guihang || []).some(x => x.chuyen === l.id); } catch (e) { return true; } };
+    const keep = cur.filter(l => !ids.has(l.id) && busy(l));   // chuyến hiện tại đã có vé / hàng mà bản cũ không có: giữ lại, không xóa
+    const emp = id => ((DB.employees || []).find(e => e.id === id) || {}).ten || '', xe = id => ((DB.vehicles || []).find(v => v.id === id) || {}).bks || '';
+    const row = l => `<tr><td><b>${esc(l.gio || '')}</b></td><td>${esc(l.tuyen || '')}</td><td>${esc(xe(l.xeId)) || '<span class="muted">—</span>'}</td><td>${esc(emp(l.laiXe)) || '<span class="muted">—</span>'}</td></tr>`;
+    const srt = L => [...L].sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
+    const ok = await Modal.confirm(`Thay lịch chạy ngày <b>${F.date(day)}</b> bằng ${esc(label)}?<div class="small" style="margin:8px 0">Hiện tại: <b>${cur.length}</b> chuyến → sau khi lấy lại: <b>${old.length + keep.length}</b> chuyến${keep.length ? ` (giữ thêm ${keep.length} chuyến đang có vé / hàng)` : ''}.</div>
+      <div style="max-height:300px;overflow:auto"><table class="tbl compact"><thead><tr><th>Giờ</th><th>Tuyến</th><th>Xe</th><th>Lái xe</th></tr></thead><tbody>${srt(old).map(row).join('')}</tbody></table></div>`, { ok: 'Lấy lại lịch ngày ' + F.date(day), title: 'Xem trước lịch sẽ lấy lại' });
+    if (!ok) return;
+    try { if (BK.ok(BK.cfg())) await BK.call({ action: 'snap', data: DB, who: GS.who() }); } catch (e) { }   // lưu bản hiện tại sang Drive trước khi thay (nếu có cấu hình sao lưu)
+    DB.lichchay = DB.lichchay.filter(l => l.ngay !== day || keep.includes(l)).concat(old.map(l => ({ ...l })));
+    try { const bo = (S().autoLich || {}).bo; if (bo && bo[day]) bo[day] = bo[day].filter(k => !old.some(l => l.tuyen + '|' + l.gio === k)); } catch (e) { }
+    App.changed(); toast(`${ic('check')} Đã lấy lại ${old.length} chuyến ngày ${F.date(day)} từ ${esc(label)}`, 'ok', 8000);
+  }
+};
 const BK = {
   K: 'bk.cfg', KS: 'bk.st', busy: false, sig: '', t: null, list: null,
   cfg() { try { const c = Object.assign({ url: '', key: '', on: false, every: 30 }, JSON.parse(localStorage.getItem(BK.K) || '{}') || {}); c.url = BK.norm(c.url); return c; } catch (e) { return { url: '', key: '', on: false, every: 30 }; } },
@@ -13494,7 +13519,7 @@ const BK = {
   listHTML() {
     if (!BK.list) return '';
     if (!BK.list.length) return '<p class="hub-p" style="margin-top:8px">Chưa có bản sao lưu nào trên Drive.</p>';
-    return `<div class="bk-l">${BK.list.map(f => `<div class="bk-r"><div><b>${esc(f.label || f.name)}</b><small>${f.at ? new Date(f.at).toLocaleString('vi-VN') : ''}${f.size ? ' · ' + (f.size > 1048576 ? F.num(f.size / 1048576, 1) + ' MB' : Math.round(f.size / 1024) + ' KB') : ''}</small></div><button class="btn sm" data-g="bkrest" data-n="${esc(f.name)}">${ic('download')} Khôi phục</button></div>`).join('')}</div>`;
+    return `<div class="bk-l">${BK.list.map(f => `<div class="bk-r"><div><b>${esc(f.label || f.name)}</b><small>${f.at ? new Date(f.at).toLocaleString('vi-VN') : ''}${f.size ? ' · ' + (f.size > 1048576 ? F.num(f.size / 1048576, 1) + ' MB' : Math.round(f.size / 1024) + ' KB') : ''}</small></div><span class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-g="bkday" data-n="${esc(f.name)}">${ic('calendar')} Chỉ lấy lại lịch 1 ngày</button><button class="btn sm" data-g="bkrest" data-n="${esc(f.name)}">${ic('download')} Khôi phục</button></span></div>`).join('')}</div>`;
   },
   form() { const q = k => HUB.el.querySelector(`[data-bk="${k}"]`); const uu = BK.norm((q('url') || {}).value); if (q('url') && q('url').value !== uu && /\/exec$/.test(uu)) q('url').value = uu; return { url: uu, key: (q('key') || {}).value.trim(), on: !!(q('on') || {}).checked, every: +((q('every') || {}).value || 30), fo: !!(q('fo') || {}).checked }; },
   async act(a, b) {
@@ -13507,6 +13532,7 @@ const BK = {
       const pf = DB.settings.fodrive || {}; if (fo ? !(pf.on && pf.url === c.url && pf.key === c.key) : pf.on) { DB.settings.fodrive = fo ? { on: true, url: c.url, key: c.key, at: new Date().toISOString() } : { on: false }; FO.cache(); Store.changed(); } if (old.url !== c.url) BK.setSt({ at: '', sig: '', err: '' }); BK.list = null; HUB.setTab('gdata'); toast(c.on ? 'Đã lưu. Đang sao lưu lần đầu…' : 'Đã lưu cài đặt sao lưu', 'ok'); if (c.on) BK.run(true); });
     if (a === 'bknow') return busy(async () => { const c = BK.cfg(); need(c); await BK.run(true); });
     if (a === 'bklist') return busy(async () => { const j = await BK.call({ action: 'list' }); BK.list = j.files || []; const el = HUB.el.querySelector('[data-bklist]'); if (el) el.innerHTML = BK.listHTML(); });
+    if (a === 'bkday') return busy(async () => { const n = b.dataset.n, f = (BK.list || []).find(x => x.name === n) || { name: n }; await DAYR.run(async () => (await BK.call({ action: 'getbk', name: n })).data, 'bản sao lưu Drive ' + (f.label || n) + (f.at ? ' (' + new Date(f.at).toLocaleString('vi-VN') + ')' : '')); });
     if (a === 'bkrest') return busy(async () => {
       const n = b.dataset.n, f = (BK.list || []).find(x => x.name === n) || { name: n };
       if (!await Modal.confirm(`Khôi phục dữ liệu từ bản <b>${esc(f.label || n)}</b>${f.at ? ' (' + new Date(f.at).toLocaleString('vi-VN') + ')' : ''}?<br><span class="small muted">Toàn bộ dữ liệu hiện tại ${GS.on ? 'trên mọi máy ' : ''}sẽ được thay bằng bản này. Bản hiện tại được tự lưu sang Drive trước để có thể quay lại.</span>`, { ok: 'Khôi phục', danger: true, title: 'Khôi phục từ Google Drive' })) return;
@@ -13734,13 +13760,14 @@ const FBH = {
   listHTML() {
     const L = FBH.list; if (!L) return ''; const rows = L.hist || [];
     return `<div class="bk-l"><div class="bk-r" style="background:#f0fdf4;border-color:#bbf7d0"><div><b>Bản hiện tại #${L.cur.ver}</b><small>${esc(FBH.t(L.cur.at))}${L.cur.who ? ' · ' + esc(L.cur.who) : ''}${L.cur.size ? ' · ' + F.num(L.cur.size / 1048576, 1) + ' MB' : ''}</small></div><span class="badge b-green">Đang dùng</span></div>
-      ${rows.map(h => `<div class="bk-r"><div><b>Bản #${h.ver}</b><small>${esc(FBH.t(h.at))}${h.who ? ' · ' + esc(h.who) : ''}${h.size ? ' · ' + F.num(h.size / 1048576, 1) + ' MB' : ''}</small></div><button class="btn sm" data-g="fhBack" data-v="${h.ver}">${ic('download')} Quay về bản này</button></div>`).join('') || '<p class="hub-p" style="margin:6px 0 0">Chưa có bản trước nào. Từ lần lưu tới, Firebase bắt đầu giữ lịch sử.</p>'}</div>`;
+      ${rows.map(h => `<div class="bk-r"><div><b>Bản #${h.ver}</b><small>${esc(FBH.t(h.at))}${h.who ? ' · ' + esc(h.who) : ''}${h.size ? ' · ' + F.num(h.size / 1048576, 1) + ' MB' : ''}</small></div><span class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-g="fhDay" data-v="${h.ver}">${ic('calendar')} Chỉ lấy lại lịch 1 ngày</button><button class="btn sm" data-g="fhBack" data-v="${h.ver}">${ic('download')} Quay về bản này</button></span></div>`).join('') || '<p class="hub-p" style="margin:6px 0 0">Chưa có bản trước nào. Từ lần lưu tới, Firebase bắt đầu giữ lịch sử.</p>'}</div>`;
   },
   async act(a, b) {
     if (!BK.admin()) return toast('Chỉ Admin được xem lịch sử phiên bản', 'err');
     const busy = async f => { b.disabled = true; try { await f(); } catch (e) { toast(esc(e.message), 'err', 9000); } finally { if (b.isConnected) b.disabled = false; } };
     if (!FBH.fbOn()) return toast('Máy này cần đang kết nối Firebase', 'err');
     if (a === 'fhList') return busy(async () => { FBH.list = await GS.call({ action: 'hist' }, GS.cfg(), 30000); const el = HUB.el.querySelector('[data-fhl]'); if (el) el.innerHTML = FBH.listHTML(); });
+    if (a === 'fhDay') return busy(async () => { const v = +b.dataset.v, h = ((FBH.list || {}).hist || []).find(x => x.ver === v) || {}; await DAYR.run(async () => (await GS.call({ action: 'getver', ver: v }, GS.cfg(), 90000)).data, 'bản Firebase #' + v + ' (' + FBH.t(h.at) + ')'); });
     if (a === 'fhBack') return busy(async () => {
       const v = +b.dataset.v, h = ((FBH.list || {}).hist || []).find(x => x.ver === v) || {};
       if (!await Modal.confirm(`Quay về <b>bản #${v}</b> (lưu lúc ${esc(FBH.t(h.at))}${h.who ? ', ' + esc(h.who) : ''})?<br><span class="small muted">Dữ liệu của mọi máy sẽ trở về bản này. Bản hiện tại vẫn được giữ trong lịch sử để quay lại nếu cần.</span>`, { ok: 'Quay về bản này', danger: true, title: 'Quay về bản trước' })) return;
@@ -15195,7 +15222,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T19:30';
+const APP_BUILD = '2026-11-14T19:45';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
