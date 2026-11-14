@@ -6052,6 +6052,28 @@ Tên lái xe của công ty: ${JSON.stringify((L => L.length ? L : DB.employees.
 /* Sau khi quét ảnh và áp dụng vào lịch: nếu mọi chuyến trong ngày đã đủ xe và lái xe thì tự lưu Bảng phân công (PDF ngang, có chữ ký lái xe)
    vào Lưu trữ hồ sơ; quét lại trong ngày thì thay bản cũ (giữ số lần lưu). */
 /* Lưu Bảng phân công nhiều ngày vào Lưu trữ hồ sơ (ngày nào mọi chuyến đủ xe + lái xe mới lưu; lưu lại thì thay bản cũ của ngày đó) */
+/* Điều hành xe: xóa một lần các chuyến không có xe và không có lái xe của ngày đang xem.
+   Hiện danh sách từng giờ để tích bỏ; mặc định chỉ tích các tuyến đang hiện trên bảng; chuyến còn vé / hàng gửi không xóa. */
+ACT.dhDelEmpty = async () => {
+  if (!Auth.guard('dieuhanh', 'del')) return;
+  const day = lcDay(), cur = (typeof vDH !== 'undefined' && vDH._cur) || [], busy = l => { try { return (DB.datve || []).some(x => x.chuyen === l.id && !x.huy) || (typeof GH !== 'undefined' && GH.list ? GH.list(l.id).length : 0); } catch (e) { return true; } };
+  const L = DB.lichchay.filter(l => l.ngay === day && !l.xeId && !l.laiXe && !l.laiXe2 && (!l.khoa || lcAdmin())).sort((a, b) => routeCmp(a.tuyen, b.tuyen) || String(a.gio).localeCompare(String(b.gio)));
+  if (!L.length) return toast('Ngày ' + F.date(day) + ' không có chuyến nào trống (chưa xe, chưa lái xe)', 'ok');
+  const R = [...new Set(L.map(l => l.tuyen))], on = l => !busy(l) && (!cur.length || cur.includes(dhGrp(l.tuyen)));
+  const m = Modal.open({ title: 'Xóa giờ trống · ' + F.date(day), width: 560, body: `<p class="small muted" style="margin-top:0">Các chuyến <b>chưa có xe và chưa có lái xe</b> của ngày ${F.date(day)}. Tích chọn chuyến muốn xóa. Mặc định chỉ chọn các tuyến đang hiện trên bảng; chuyến còn vé / hàng gửi không xóa được.</p>
+    <div style="max-height:360px;overflow:auto">${R.map(r => { const X = L.filter(l => l.tuyen === r); return `<div style="margin-bottom:8px"><label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer"><input type="checkbox" data-dr="${esc(r)}" ${X.some(on) ? 'checked' : ''}> ${esc(r)} <span class="muted small">(${X.length})</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 0 24px">${X.map(l => { const b = busy(l); return `<label class="badge ${b ? 'b-gray' : 'b-amber'}" style="cursor:${b ? 'default' : 'pointer'};gap:4px;display:inline-flex;align-items:center"><input type="checkbox" data-dl="${esc(l.id)}" data-r="${esc(r)}" ${on(l) ? 'checked' : ''} ${b ? 'disabled' : ''}> ${esc(l.gio || '?')}${b ? ' · còn vé/hàng' : ''}</label>`; }).join('')}</div></div>`; }).join('')}</div>`,
+    foot: `<button class="btn" data-no>Hủy</button><button class="btn danger" data-ok>${ic('trash')} Xóa <span data-n></span> chuyến</button>` });
+  const q = s => m.el.querySelectorAll(s), cnt = () => { const n = [...q('[data-dl]:checked')].length; m.el.querySelector('[data-n]').textContent = n; m.el.querySelector('[data-ok]').disabled = !n; };
+  q('[data-dr]').forEach(c => c.onchange = () => { q('[data-dl]').forEach(x => { if (x.dataset.r === c.dataset.dr && !x.disabled) x.checked = c.checked; }); cnt(); });
+  q('[data-dl]').forEach(c => c.onchange = cnt); cnt();
+  m.el.querySelector('[data-no]').onclick = () => m.close();
+  m.el.querySelector('[data-ok]').onclick = () => {
+    const ids = new Set([...q('[data-dl]:checked')].map(c => c.dataset.dl)), gone = new Set(DB.lichchay.filter(l => ids.has(l.id) && l.ngay === day && !l.xeId && !l.laiXe && !busy(l)));
+    if (!gone.size) return m.close();
+    gone.forEach(lcMarkDel); DB.lichchay = DB.lichchay.filter(l => !gone.has(l)); App.changed(); m.close(); toast(`Đã xóa ${gone.size} chuyến trống ngày ${F.date(day)}`, 'ok');
+  };
+};
 /* ngày đọc được trên ảnh: lấy theo đa số các AI; ảnh không ghi năm thì so ngày/tháng với ngày đang chọn */
 dhScan.dateOf = (L, day) => {
   const C = new Map(); (L || []).forEach(t => { const m = String(t).match(/(\d{4})-(\d{1,2})-(\d{1,2})/) || String(t).match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})(?:\s*[\/\-.]\s*(\d{2,4}))?/);
@@ -6462,7 +6484,7 @@ const Auth = {
   VIEWMOD: { dashboard: 'dashboard', dieuhanh: 'dieuhanh', lichchay: 'lichchay', giochay: 'giochay', banggia: 'banggia', suachua: 'suachua', nhienlieu: 'nhienlieu', lylich: 'lylich', kmxe: 'kmxe', phuongtien: 'phuongtien', hdvc: 'hdvc', nhanvien: 'nhanvien', hopdong: 'hopdong', chamcong: 'chamcong', bangluong: 'bangluong', thue: 'thue', caidat: 'caidat', data: 'data', users: 'users' },
   ACT_PERM: {
     dvNav: ['lichchay', 'view'], dvDay: ['lichchay', 'view'], dvTrip: ['lichchay', 'view'], dvPick: ['lichchay', 'view'], dvRestore: ['lichchay', 'edit'], dvPurge: ['lichchay', 'del'], dvCall: ['lichchay', 'view'], dvLocked: ['lichchay', 'view'], dvSearch: ['lichchay', 'view'], dvMvPick: ['lichchay', 'edit'], dvMvCancel: ['lichchay', 'view'], dvMvOther: ['lichchay', 'edit'], dvBA: ['lichchay', 'view'], dvTT: ['lichchay', 'add'], dvPickSeat: ['lichchay', 'add'], dvClearSel: ['lichchay', 'add'], dvBookSel: ['lichchay', 'add'], dvTab: ['lichchay', 'view'], dvRoute: ['lichchay', 'view'], dvPrintMap: ['lichchay', 'view'], dvSeat: ['lichchay', 'view'],
-    dhNav: ['lichchay', 'view'], dhPrint: ['lichchay', 'view'], dhG: ['lichchay', 'view'], dhGo: ['lichchay', 'view'], dhChip: ['lichchay', 'view'], dhMode: ['lichchay', 'view'], dhDD: ['lichchay', 'view'], dhAll: ['lichchay', 'view'], dhAddGio: ['lichchay', 'add'], vtSet: ['lichchay', 'view'], dhUnlock: ['lichchay', 'edit'], dhAdd: ['lichchay', 'add'], dhScan: ['lichchay', 'edit'], dhImport: ['lichchay', 'edit'],
+    dhDelEmpty: ['dieuhanh', 'del'], dhNav: ['lichchay', 'view'], dhPrint: ['lichchay', 'view'], dhG: ['lichchay', 'view'], dhGo: ['lichchay', 'view'], dhChip: ['lichchay', 'view'], dhMode: ['lichchay', 'view'], dhDD: ['lichchay', 'view'], dhAll: ['lichchay', 'view'], dhAddGio: ['lichchay', 'add'], vtSet: ['lichchay', 'view'], dhUnlock: ['lichchay', 'edit'], dhAdd: ['lichchay', 'add'], dhScan: ['lichchay', 'edit'], dhImport: ['lichchay', 'edit'],
     lcAdd: ['lichchay', 'add'], lcQuick: ['lichchay', 'edit'], lcEdit: ['lichchay', 'edit'], lcDel: ['lichchay', 'del'], lcGen: ['lichchay', 'add'], lcNow: ['lichchay', 'add'], lcCopy: ['lichchay', 'add'], lcNav: ['lichchay', 'view'],
     gcAdd: ['giochay', 'add'], gcBulk: ['giochay', 'add'], gcEdit: ['giochay', 'edit'], gcDel: ['giochay', 'del'], gcToggle: ['giochay', 'edit'], gcRoute: ['giochay', 'view'], gcQL: ['giochay', 'view'], bgAdd: ['banggia', 'add'], bgEdit: ['banggia', 'edit'], bgDup: ['banggia', 'add'], bgDel: ['banggia', 'del'],
     nlAdd: ['nhienlieu', 'add'], nlEdit: ['nhienlieu', 'edit'], nlDel: ['nhienlieu', 'del'], nlPrint: ['nhienlieu', 'view'], nlSet: ['nhienlieu', 'edit'],
@@ -15222,7 +15244,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-14T19:45';
+const APP_BUILD = '2026-11-14T20:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
