@@ -6194,6 +6194,7 @@ const dhX = {
       if (!cur || cur.fin) continue;
       if (/^(đã\s*)?hủy\b/i.test(s)) { cur.huy = true; continue; }
       if (plateRe.test(s)) { cur.bks = s; continue; }
+      const gh = s.match(/^Ghế ngồi\s+(\d+)\s*chỗ/i); if (gh) { cur.cho = +gh[1]; continue; }
       if (/^\d+%\s*\(\s*\d+\s*vé/i.test(s)) { const st = s.slice(s.indexOf(')') + 1); if (/hủy/i.test(st)) cur.huy = true; cur.fin = true; continue; }
       if (NOISE.test(s)) continue;
       if (!cur.lai) cur.lai = s;
@@ -6201,8 +6202,20 @@ const dhX = {
     Object.keys(hdr).forEach(r => { const p = cnt[r] || 0, H = hdr[r]; if (p !== H.n && p !== H.n - H.h) warn.push(`Tuyến ${r}: đọc được ${p} chuyến nhưng Vexere ghi ${H.n} chuyến${H.h ? ` (${H.h} hủy)` : ''}. Có thể dán thiếu hoặc đang ẩn chuyến.`); });
     const routes = Object.keys(cnt).length; if (!routes) return { kind: 'list', items: [], warn, routes: 0 };
     if (!ngay) warn.push('Không thấy ngày trong nội dung dán: app dùng ngày đang xem.');
-    const items = out.filter(x => !x.huy).map(x => ({ ngay, tuyen: x.tuyen, gio: x.gio, bks: x.bks, lai: x.lai, soChuyen: 1 }));
+    const items = out.filter(x => !x.huy).map(x => ({ ngay, tuyen: x.tuyen.split(/\s+-\s+/).map(p => p.trim().toLocaleUpperCase('vi')).join(' ⇄ '), gio: x.gio, bks: x.bks, lai: x.lai, cho: x.cho || 0, soChuyen: 1 }));
     return { kind: 'list', items, warn, routes, ngay, nHuy: out.length - items.length };
+  },
+  /* Tên viết hoa toàn bộ (NGUYỄN QUANG DUY) đổi thành chữ hoa đầu từ khi thêm vào danh sách */
+  title(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi').replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toLocaleUpperCase('vi')); },
+  /* Thêm lái xe chưa có trong danh sách (hồ sơ ngắn, đánh dấu để bổ sung sau) */
+  newEmp(ten, ngay, src) {
+    const pbs = (S().phongBan || []); let n = DB.employees.length + 1, ma; do { ma = 'NV' + String(n++).padStart(3, '0'); } while (DB.employees.some(x => x.ma === ma));
+    const e = { id: uid(), ma, ten, gioiTinh: 'Nam', phongBan: pbs.find(p => /xe|v[aậ]n|l[aá]i/i.test(p)) || pbs[0] || '', chucVu: 'Lái xe', trangThai: 'Đang làm', ngayVao: D.today(), soNPT: 0, pcKhongThue: 0, pcChiuThue: 0, ghiChu: 'Thêm tự động từ ' + (src || 'lịch Vexere') + ' ngày ' + F.date(ngay) + ', cần bổ sung hồ sơ', themTuLich: ngay };
+    DB.employees.push(e); return e;
+  },
+  newVeh(a, ngay, src) {
+    const v = { id: uid(), bks: String(a.bks).toUpperCase(), soCho: a.cho ? a.cho + 2 : 16, tienTai: 150000, nuocSX: 'Việt Nam', icon: 'van|#0ea5e9', gpsNcc: 'Công ty Cổ phần Công nghệ Trực tuyến Skysoft', ghiChu: 'Thêm tự động từ ' + (src || 'lịch Vexere') + ' ngày ' + F.date(ngay) + ', cần bổ sung hồ sơ xe', themTuLich: ngay };
+    DB.vehicles.push(v); return v;
   },
   template() {
     const day = lcDay(), G = [...(DB.giochay || [])].sort((a, b) => String(a.tuyen).localeCompare(String(b.tuyen), 'vi') || String(a.gio).localeCompare(String(b.gio)));
@@ -6213,7 +6226,7 @@ const dhX = {
   open() {
     if (!Auth.can('dieuhanh', 'edit') && !Auth.can('dieuhanh', 'add')) return toast('Tài khoản không có quyền sửa lịch chạy', 'err');
     const day = lcDay(), self = this; self.rows = [];
-    const m = Modal.open({ title: 'Nhập điều hành xe từ Excel', width: 880, body: `<div class="sc-vx" style="margin-bottom:12px"><b>Dán lịch từ Vexere</b><div class="small muted">Mở trang Điều hành xe của Vexere, chọn ngày, bôi đen toàn trang (Chọn tất cả), Sao chép, rồi dán vào ô dưới.</div><textarea class="inp" data-vxtxt rows="3" placeholder="Dán nội dung trang Vexere vào đây" style="width:100%;margin-top:6px"></textarea><button type="button" class="btn sm" data-vxgo style="margin-top:6px">Đọc nội dung đã dán</button><div class="small" data-vxmsg style="margin-top:6px"></div></div><div class="sc-drop" data-pick>${ic('sheet')}<b>Bấm để chọn file Excel (.xlsx) hoặc CSV, hoặc kéo thả vào đây</b><div class="small muted" style="margin-top:4px">Nhận 2 kiểu: <b>danh sách</b> (cột Ngày, Tuyến, Giờ, Biển số, Lái xe) hoặc <b>bảng điều hành</b> (hàng = tuyến, cột = giờ, ô = biển số + lái xe). Không có cột Ngày thì nhập vào ngày <b>${F.date(day)}</b>.</div><input type="file" class="sc-in" accept=".xlsx,.csv" data-file></div><div data-out></div>`,
+    const m = Modal.open({ title: 'Nhập điều hành xe từ Excel', width: 880, body: `<div class="sc-vx" style="margin-bottom:12px"><b>Dán lịch từ Vexere</b><div class="small muted">Mở trang Điều hành xe của Vexere, chọn ngày, bôi đen toàn trang (Chọn tất cả), Sao chép, rồi dán vào ô dưới.</div><textarea class="inp" data-vxtxt rows="3" placeholder="Dán nội dung trang Vexere vào đây" style="width:100%;margin-top:6px"></textarea><button type="button" class="btn sm" data-vxgo style="margin-top:6px">Đọc nội dung đã dán</button><div class="small" data-vxmsg style="margin-top:6px"></div></div><div class="small" style="margin:0 0 10px;display:flex;flex-wrap:wrap;gap:6px 18px"><label><input type="checkbox" data-opE checked> Thêm lái xe chưa có trong danh sách</label><label><input type="checkbox" data-opV checked> Thêm biển số chưa có trong danh sách</label><label><input type="checkbox" data-opN checked> Cho phép tạo tuyến / chuyến mới</label></div><div class="sc-drop" data-pick>${ic('sheet')}<b>Bấm để chọn file Excel (.xlsx) hoặc CSV, hoặc kéo thả vào đây</b><div class="small muted" style="margin-top:4px">Nhận 2 kiểu: <b>danh sách</b> (cột Ngày, Tuyến, Giờ, Biển số, Lái xe) hoặc <b>bảng điều hành</b> (hàng = tuyến, cột = giờ, ô = biển số + lái xe). Không có cột Ngày thì nhập vào ngày <b>${F.date(day)}</b>.</div><input type="file" class="sc-in" accept=".xlsx,.csv" data-file></div><div data-out></div>`,
       foot: `<button class="btn left" data-tpl>${ic('download')} Tải file mẫu</button><button class="btn" data-no>Đóng</button><button class="btn pri" data-apply hidden>${ic('check')} Áp dụng các dòng đã chọn</button>` });
     const q = s => m.el.querySelector(s), out = q('[data-out]'), ap = q('[data-apply]'), fi = q('[data-file]'), drop = q('[data-pick]');
     q('[data-no]').onclick = m.close; q('[data-tpl]').onclick = () => dhX.template();
@@ -6226,36 +6239,75 @@ const dhX = {
     const load = async (f, pre) => {
       if (!f && !pre) return; let rows = []; if (!pre) try { rows = (await XLSX.read(f)).filter(r => r && r.some(c => String(c ?? '').trim() !== '')); } catch (e) { return toast(esc(e.message || 'Không đọc được file'), 'err', 6000); }
       const P = pre || dhX.parse(rows); if (!P.items.length) { out.innerHTML = `<div class="sc-bad" style="margin-top:12px">Không nhận ra dữ liệu. Cần có cột <b>Tuyến</b>, <b>Giờ</b> và <b>Biển số</b> hoặc <b>Lái xe</b>, hoặc bảng có hàng tiêu đề là các giờ chạy. Bấm "Tải file mẫu" để xem cách ghi.</div>`; ap.hidden = true; return; }
-      const canAdd = Auth.can('dieuhanh', 'add'), routes = [...new Set([...DB.giochay.map(g => g.tuyen), ...DB.lichchay.map(l => l.tuyen)].filter(Boolean))];
+      self.lastP = P; self.lastF = f;
+      const opE = q('[data-opE]').checked && Auth.can('nhanvien', 'add'), opV = q('[data-opV]').checked && Auth.can('phuongtien', 'add'), canAdd = Auth.can('dieuhanh', 'add') && q('[data-opN]').checked;
+      const routes = [...new Set([...DB.giochay.map(g => g.tuyen), ...DB.lichchay.map(l => l.tuyen)].filter(Boolean))];
       self.rows = P.items.map(r => {
         const ngay = r.ngay || day, tuyen = dhFindRoute(r.tuyen, routes) || (canAdd ? r.tuyen : ''), gio = r.gio, v = dhFindVeh(r.bks), e = dhFindEmp(r.lai);
-        const trip = tuyen && gio ? DB.lichchay.find(l => l.ngay === ngay && l.tuyen === tuyen && l.gio === gio) : null; let st, ok = false;
+        // chỉ thêm khi KHÔNG có ai trùng: nhiều người giống tên hoặc trùng tên nhân viên khác chức vụ thì để nhập tay, tránh tạo người trùng
+        const addE = !e && r.lai && opE && !dhEmpC(r.lai).length && !DB.employees.some(x => dhNorm(x.ten) === dhNorm(r.lai)) ? { ten: dhX.title(r.lai) } : null;
+        const addV = !v && r.bks && opV && !dhVehC(r.bks).length ? { bks: String(r.bks).toUpperCase(), cho: r.cho || 0 } : null;
+        const vOk = !!(v || addV), eOk = !!(e || addE);
+        const trip = tuyen && gio ? DB.lichchay.find(l => l.ngay === ngay && l.tuyen === tuyen && l.gio === gio) : null; let st, ok = false, same = false;
+        const cv = trip ? DB.vehicles.find(x => x.id === trip.xeId) : null, ce = trip ? DB.employees.find(x => x.id === trip.laiXe) : null;
         if (!tuyen) st = 'Không xác định được tuyến'; else if (!gio) st = 'Không đọc được giờ';
-        else if ((r.bks && !v) || (r.lai && !e)) st = 'Có ' + [r.bks && !v && 'xe', r.lai && !e && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
-        else if (!v || !e) st = (!v && !e ? 'Thiếu cả lái xe và xe' : !e ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');
-        else if (trip && !lcCan(trip)) st = 'Chuyến đã khóa'; else if (trip) { st = 'Cập nhật chuyến có sẵn'; ok = true; } else if (canAdd) { st = routes.includes(tuyen) ? 'Tạo chuyến mới' : 'Tạo chuyến (tuyến mới)'; ok = true; } else st = 'Chưa có chuyến này';
-        return { ngay, tuyen, gio, v, e, trip, rb: r.bks, rl: r.lai, soChuyen: r.soChuyen || 1, st, ok };
+        else if ((r.bks && !v && !addV) || (r.lai && !e && !addE)) st = 'Có ' + [r.bks && !v && !addV && 'xe', r.lai && !e && !addE && 'lái xe'].filter(Boolean).join(', ') + ' không khớp danh sách, nhập tay';
+        else if (!vOk || !eOk) st = (!vOk && !eOk ? 'Thiếu cả lái xe và xe' : !eOk ? 'Thiếu lái xe: không có lái xe thì xe không chạy được' : 'Thiếu xe: lái xe chưa biết chạy xe nào');
+        else {
+          same = !!(trip && v && e && trip.xeId === v.id && trip.laiXe === e.id);
+          if (trip && !lcCan(trip)) st = same ? 'Khớp lịch hiện có (chuyến đã khóa)' : 'Khác lịch hiện có, chuyến đã khóa nên không sửa';
+          else if (trip) { ok = true; st = same ? 'Khớp lịch hiện có' : (!trip.xeId && !trip.laiXe ? 'Điền vào chuyến đang trống' : 'Khác lịch hiện có, sẽ cập nhật'); }
+          else if (canAdd) { st = routes.includes(tuyen) ? 'Tạo chuyến mới' : 'Tạo chuyến (tuyến mới)'; ok = true; } else st = 'Chưa có chuyến này';
+          if (ok && !same && (addE || addV)) st += ' + thêm ' + [addE && 'lái xe', addV && 'xe'].filter(Boolean).join(', ') + ' mới';
+        }
+        return { ngay, tuyen, gio, v, e, trip, rb: r.bks, rl: r.lai, soChuyen: r.soChuyen || 1, addE, addV, same, curV: cv ? cv.bks : '', curE: ce ? ce.ten : '', st, ok };
       });
-      dhClash(self.rows, r => r.ngay);
+      dhClash(self.rows.filter(r => r.v && r.e), r => r.ngay);   // dòng có tên / xe mới chưa có trong danh sách thì chưa thể trùng với chuyến khác
       const cell = (x, raw) => x ? `<span class="sc-ok">${esc(x)}</span>` : raw ? `<span class="sc-bad" title="Không khớp danh sách">${esc(raw)} ?</span>` : '<span class="muted">—</span>';
       const days = [...new Set(self.rows.map(r => r.ngay))];
-      out.innerHTML = `<div style="margin-top:12px"><b>${esc(f ? f.name : 'Dán từ Vexere')}</b> · ${P.kind === 'grid' ? 'bảng điều hành' : 'danh sách'} · <b>${self.rows.length}</b> chuyến · ${days.length === 1 ? 'ngày ' + F.date(days[0]) : days.length + ' ngày (' + F.date(days.sort()[0]) + ' → ' + F.date(days[days.length - 1]) + ')'} <span class="muted small">· chữ đỏ là chỗ không khớp danh sách, sẽ không được điền</span></div>
-        <div class="tbl-wrap free" style="max-height:52vh;margin-top:8px"><table class="tbl compact"><thead><tr><th class="c"><input type="checkbox" data-all checked></th><th>Ngày</th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>Kết quả</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td class="c"><input type="checkbox" data-i="${i}" ${r.ok ? 'checked' : 'disabled'}></td><td>${F.date(r.ngay)}</td><td>${esc(r.tuyen || '—')}</td><td>${esc(r.gio || '—')}</td><td>${cell(r.v && r.v.bks, r.rb)}</td><td>${cell(r.e && r.e.ten, r.rl)}</td><td><span class="badge ${r.ok ? (r.trip ? 'b-blue' : 'b-green') : 'b-red'}">${esc(r.st)}</span></td></tr>`).join('')}</tbody></table></div>`;
+      const cx = (r, k) => { const o = k === 'v' ? r.v : r.e, raw = k === 'v' ? r.rb : r.rl, add = k === 'v' ? r.addV : r.addE, nm = k === 'v' ? (o && o.bks) : (o && o.ten), cur = k === 'v' ? r.curV : r.curE;
+        return (o ? cell(nm, '') : add ? `<span style="color:#b45309" title="Chưa có trong danh sách, sẽ được thêm">+ ${esc(k === 'v' ? add.bks : add.ten)} (mới)</span>` : cell('', raw)) + (r.trip && !r.same && cur ? `<div class="small muted">App: ${esc(cur)}</div>` : ''); };
+      const nSame = self.rows.filter(r => r.same).length, nDiff = self.rows.filter(r => r.trip && !r.same && r.st.startsWith('Khác')).length, nNew = self.rows.filter(r => r.ok && !r.trip).length, nBad = self.rows.filter(r => !r.ok && !r.st.includes('khóa')).length;
+      out.innerHTML = `<div style="margin-top:12px"><b>${esc(f ? f.name : 'Dán từ Vexere')}</b> · ${P.kind === 'grid' ? 'bảng điều hành' : 'danh sách'} · <b>${self.rows.length}</b> chuyến · ${days.length === 1 ? 'ngày ' + F.date(days[0]) : days.length + ' ngày (' + F.date(days.sort()[0]) + ' → ' + F.date(days[days.length - 1]) + ')'} <span class="muted small">· chữ đỏ là chỗ không khớp danh sách, sẽ không được điền; chữ cam là tên / xe mới sẽ được thêm</span></div>
+        <div class="small" style="margin-top:4px">Khớp lịch hiện có <b>${nSame}</b> · Khác lịch hiện có <b style="color:#b45309">${nDiff}</b> · Chuyến mới <b>${nNew}</b> · Không áp dụng được <b class="sc-bad">${nBad}</b></div>
+        <div class="tbl-wrap free" style="max-height:52vh;margin-top:8px"><table class="tbl compact"><thead><tr><th class="c"><input type="checkbox" data-all checked></th><th>Ngày</th><th>Tuyến</th><th>Giờ</th><th>Xe</th><th>Lái xe</th><th>Kết quả</th></tr></thead><tbody>${self.rows.map((r, i) => `<tr><td class="c"><input type="checkbox" data-i="${i}" ${r.ok ? (r.same ? '' : 'checked') : 'disabled'}></td><td>${F.date(r.ngay)}</td><td>${esc(r.tuyen || '—')}</td><td>${esc(r.gio || '—')}</td><td>${cx(r, 'v')}</td><td>${cx(r, 'e')}</td><td><span class="badge ${r.ok ? (r.trip ? 'b-blue' : 'b-green') : 'b-red'}">${esc(r.st)}</span></td></tr>`).join('')}</tbody></table></div>`;
       out.querySelector('[data-all]').onchange = e => out.querySelectorAll('[data-i]:not(:disabled)').forEach(c => c.checked = e.target.checked);
       ap.hidden = !self.rows.some(r => r.ok);
     };
     fi.onchange = () => { load(fi.files[0]); fi.value = ''; };
+    ['[data-opE]', '[data-opV]', '[data-opN]'].forEach(k => q(k).onchange = () => { if (self.lastP) load(self.lastF, self.lastP); });
     drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); }; drop.ondragleave = () => drop.classList.remove('on');
     drop.ondrop = e => { e.preventDefault(); drop.classList.remove('on'); load(e.dataTransfer.files[0]); };
     ap.onclick = () => {
-      let up = 0, nw = 0; const who = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
+      let up = 0, nw = 0, same = 0; const who = (Auth.user && (Auth.user.ten || Auth.user.user)) || '', tg = D.today() + ' ' + new Date().toTimeString().slice(0, 5);
+      const src = self.lastF ? 'file Excel ' + self.lastF.name : 'lịch Vexere', madeE = [], madeV = [], newR = [], days = new Set();
+      const known = new Set([...DB.giochay.map(g => g.tuyen), ...DB.lichchay.map(l => l.tuyen)].filter(Boolean));
       m.el.querySelectorAll('[data-i]:checked').forEach(cb => {
-        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok || !r.v || !r.e) return;
-        if (r.trip) { if (!lcCan(r.trip)) return; r.trip.xeId = r.v.id; r.trip.laiXe = r.e.id; if (r.soChuyen) r.trip.soChuyen = r.soChuyen; up++; }
-        else { DB.lichchay.push({ id: uid(), ngay: r.ngay, tuyen: r.tuyen, gio: r.gio, xeId: r.v ? r.v.id : '', laiXe: r.e ? r.e.id : '', soChuyen: r.soChuyen || 1, tienCong: 0, nguoiCham: who, tgCham: tg }); nw++; }
+        const r = self.rows[+cb.dataset.i]; if (!r || !r.ok) return;
+        if (r.trip && !lcCan(r.trip)) return;
+        if (r.same) { same++; return; }
+        // tên / xe chưa có thì thêm vào danh sách (tìm lại trước: dòng trước đó có thể vừa thêm đúng người này)
+        let v = r.v, e = r.e;
+        if (!v && r.addV) { v = dhFindVeh(r.rb); if (!v) { v = dhX.newVeh(r.addV, r.ngay, src); madeV.push(v); } }
+        if (!e && r.addE) { e = dhFindEmp(r.rl); if (!e) { e = dhX.newEmp(r.addE.ten, r.ngay, src); madeE.push(e); } }
+        if (!v || !e) return;
+        if (r.trip) { r.trip.xeId = v.id; r.trip.laiXe = e.id; if (r.soChuyen) r.trip.soChuyen = r.soChuyen; up++; days.add(r.ngay); }
+        else { if (!known.has(r.tuyen)) { known.add(r.tuyen); newR.push(r); } DB.lichchay.push({ id: uid(), ngay: r.ngay, tuyen: r.tuyen, gio: r.gio, xeId: v.id, laiXe: e.id, soChuyen: r.soChuyen || 1, tienCong: 0, nguoiCham: who, tgCham: tg }); nw++; days.add(r.ngay); }
       });
-      if (!up && !nw) return toast('Chưa chọn dòng nào để áp dụng', 'err');
-      App.changed(); m.close(); toast(`Đã nhập từ Excel: cập nhật ${up} chuyến, tạo mới ${nw} chuyến`, 'ok');
+      if (!up && !nw && !same) return toast('Chưa chọn dòng nào để áp dụng', 'err');
+      // Nhật ký hồ sơ (chỉ Admin xem): ghi rõ ai, lúc nào, thêm gì, từ nguồn nào
+      try {
+        if (typeof HS !== 'undefined' && HS.logAdd) {
+          const ds = [...days].sort(), dtxt = !ds.length ? '' : ds.length === 1 ? F.date(ds[0]) : F.date(ds[0]) + ' → ' + F.date(ds[ds.length - 1]);
+          madeE.forEach(e => HS.logAdd('Thêm tự động', 'Lái xe', e.ten, 'Từ ' + src + ' · mã ' + e.ma + ' · ngày lịch ' + F.date(e.themTuLich) + ' · cần bổ sung hồ sơ'));
+          madeV.forEach(v => HS.logAdd('Thêm tự động', 'Xe', v.bks, 'Từ ' + src + ' · ' + v.soCho + ' chỗ · ngày lịch ' + F.date(v.themTuLich) + ' · cần bổ sung hồ sơ xe'));
+          newR.forEach(r => HS.logAdd('Thêm tự động', 'Tuyến', r.tuyen, 'Từ ' + src + ' · ngày ' + F.date(r.ngay)));
+          HS.logAdd('Nhập lịch', 'Điều hành xe', dtxt, 'Từ ' + src + ': cập nhật ' + up + ', tạo mới ' + nw + ', đã khớp ' + same + (madeE.length ? ', thêm ' + madeE.length + ' lái xe' : '') + (madeV.length ? ', thêm ' + madeV.length + ' xe' : '') + (newR.length ? ', thêm ' + newR.length + ' tuyến' : ''));
+        }
+      } catch (e) { console.warn('hsLog', e); }
+      App.changed(); m.close(); toast(`Đã nhập lịch: cập nhật ${up} chuyến, tạo mới ${nw} chuyến${same ? ', ' + same + ' chuyến đã khớp' : ''}${madeE.length ? ', thêm ' + madeE.length + ' lái xe mới vào danh sách nhân viên' : ''}${madeV.length ? ', thêm ' + madeV.length + ' xe mới' : ''}${newR.length ? ', thêm ' + newR.length + ' tuyến mới' : ''}`, 'ok', 7000);
+      // lưu Bảng phân công của từng ngày vừa nhập vào Lưu trữ hồ sơ (như khi quét ảnh), lần lượt từ ngày cũ đến mới
+      if (days.size && typeof dhScan !== 'undefined' && dhScan.archive) setTimeout(async () => { for (const d of [...days].sort()) { try { await dhScan.archive(d); } catch (e) { console.warn('archive', e); } } }, 300);
     };
   }
 };
@@ -10195,7 +10247,7 @@ const SLOG = {
   },
   async load(days) {
     const R = await Promise.all(Array.from({ length: days }, (_, n) => FB.col().doc(SLOG.day(D.add(D.today(), -n))).get().then(s => s.exists ? (s.data().e || []) : []).catch(() => [])));
-    return R.flat().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    return R.flat().sort((a, b) => String(a.at).localeCompare(String(b.at)));   // thời gian tăng dần, mới nhất ở cuối
   },
   KN: () => (typeof LCR !== 'undefined' && LCR.KN) || {},
   txt(d) { const K = SLOG.KN(); return Object.entries(d || {}).map(([k, [a, x, m]]) => `${K[k] || k}${a ? ' <b class="lg-a">+' + a + '</b>' : ''}${x ? ' <b class="lg-x">−' + x + '</b>' : ''}${m ? ' <span class="muted">sửa ' + m + '</span>' : ''}`).join(' · '); },
@@ -10204,7 +10256,7 @@ const SLOG = {
     let days = 3, q = '';
     const m = Modal.open({ title: 'Nhật ký lưu dữ liệu', width: 980, body: `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><select class="inp" data-dd style="width:auto">${[1, 3, 7, 30, 60].map(n => `<option value="${n}"${n === days ? ' selected' : ''}>${n === 1 ? 'Hôm nay' : n + ' ngày gần đây'}</option>`).join('')}</select><input class="inp" data-q placeholder="Lọc theo người, máy, mục dữ liệu…" style="flex:1;min-width:200px"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-x> Chỉ lần xóa nhiều / bị chặn</label></div><div data-l class="muted">Đang tải…</div>`, foot: '<button class="btn" data-cancel>Đóng</button>' });
     m.el.querySelector('[data-cancel]').onclick = () => m.close(); let L = [];
-    const draw = () => { const k = q.trim().toLowerCase(), xo = m.el.querySelector('[data-x]').checked;
+    const draw = () => { setTimeout(() => { const w = m.el.querySelector('[data-l] .tbl-wrap'); if (w) w.scrollTop = w.scrollHeight; }, 0); const k = q.trim().toLowerCase(), xo = m.el.querySelector('[data-x]').checked;
       const V = L.filter(r => (!xo || r.blocked || Object.values(r.d || {}).some(v => v[1] >= 5)) && (!k || [r.who, r.dev, r.app, SLOG.txt(r.d).replace(/<[^>]+>/g, ''), (r.blocked || []).join(' ')].join(' ').toLowerCase().includes(k)));
       m.el.querySelector('[data-l]').innerHTML = V.length ? `<div class="tbl-wrap free" style="max-height:60vh"><table class="tbl compact lg-t"><thead><tr><th>Thời gian</th><th>Người lưu</th><th>Máy</th><th>Thay đổi</th></tr></thead><tbody>${V.map(r => { const big = r.blocked || Object.values(r.d || {}).some(v => v[1] >= 5);
         return `<tr class="${big ? 'lg-big' : ''}"><td class="nw">${esc(dvLog.fmt(D.iso(new Date(r.at)) + ' ' + new Date(r.at).toTimeString().slice(0, 8)))}</td><td>${esc(r.who || '—')}</td><td class="nw small">${esc(r.dev || '')}<br><span class="muted">bản ${esc(r.app || '')}</span></td><td class="wrap">${r.blocked ? `<b class="lg-x">⛔ Bị chặn:</b> ${esc(r.blocked.join('; '))}` : SLOG.txt(r.d) || '<span class="muted">(cài đặt)</span>'}${r.force ? ' <span class="badge b-amber">ghi đè</span>' : ''}</td></tr>`; }).join('')}</tbody></table></div><div class="small muted" style="margin-top:6px">${V.length} lần lưu · dòng đỏ: xóa từ 5 bản ghi trở lên hoặc bị chặn</div>` : '<div class="muted" style="padding:14px">Không có lần lưu nào</div>'; };
@@ -11795,6 +11847,8 @@ Object.assign(HS, {
 /* ---------- Nhật ký hồ sơ: ai thêm / xóa / đổi tên / chuyển / thay bản (lưu ở S().hsLog, giữ 300 dòng mới nhất, chỉ Admin xem) ---------- */
 Object.assign(HS, {
   logs: () => (S().hsLog = S().hsLog || []),
+  /* ghi 1 dòng vào Nhật ký hồ sơ từ nơi khác (VD: tự thêm lái xe / xe / tuyến khi nhập lịch), cùng khuôn: thời gian, người, việc, loại, đối tượng, chi tiết */
+  logAdd(a, k, n, d) { const L = HS.logs(); L.push({ t: dvLog.now(), u: HS.who(), a, k, n, d: d || '' }); if (L.length > 300) L.splice(0, L.length - 300); },
   /* ảnh chụp danh sách thư mục + hồ sơ để so sánh trước/sau */
   shot() {
     const m = new Map();
@@ -11821,10 +11875,11 @@ Object.assign(HS, {
     return put.length;
   },
   logDlg() {
-    const L = HS.logs().slice().reverse().slice(0, 150);
+    const L = HS.logs().map((x, i) => [x, i]).sort((a, b) => String(a[0].t || '').localeCompare(String(b[0].t || '')) || a[1] - b[1]).map(p => p[0]);   // thời gian tăng dần, cùng phút giữ thứ tự ghi
     const rows = L.map(x => `<tr><td class="nw">${esc(dvLog.fmt(x.t))}</td><td>${esc(x.u || '—')}</td><td class="nw"><b>${esc(x.a)}</b></td><td>${esc(x.k)}</td><td>${esc(x.n)}${x.d ? `<div class="muted small">${esc(x.d)}</div>` : ''}</td></tr>`).join('');
-    const m = Modal.open({ title: ic('clock') + ' Nhật ký hồ sơ', width: 760, body: L.length ? `<div class="muted small" style="margin-bottom:8px">${L.length} thao tác gần nhất (tối đa 300 thao tác được lưu).</div><div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Việc</th><th>Loại</th><th>Đối tượng</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Chưa có thao tác nào được ghi lại.</div>', foot: '<button class="btn" data-no>Đóng</button>' });
+    const m = Modal.open({ title: ic('clock') + ' Nhật ký hồ sơ', width: 760, body: L.length ? `<div class="muted small" style="margin-bottom:8px">${L.length} thao tác, xếp theo ngày giờ tăng dần (cũ → mới, mới nhất ở cuối). Tối đa 300 thao tác gần nhất được lưu.</div><div class="tbl-wrap free"><table class="tbl compact"><thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Việc</th><th>Loại</th><th>Đối tượng</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Chưa có thao tác nào được ghi lại.</div>', foot: '<button class="btn" data-no>Đóng</button>' });
     m.el.querySelector('[data-no]').onclick = () => m.close();
+    const w = m.el.querySelector('.tbl-wrap'); if (w) w.scrollTop = w.scrollHeight;   // mở ra thấy thao tác mới nhất ở cuối
   }
 });
 {
@@ -15357,7 +15412,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-16T09:00';
+const APP_BUILD = '2026-11-16T11:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
