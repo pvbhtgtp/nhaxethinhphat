@@ -15420,7 +15420,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-17T10:00';
+const APP_BUILD = '2026-11-17T11:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -15822,6 +15822,39 @@ body[data-view=lichchay] .dv-side .btn,body[data-view=lichchay] .dv-main .btn,bo
 body[data-view=lichchay] .dv-t:focus-visible,body[data-view=lichchay] .dv-d:focus-visible,body[data-view=lichchay] .dv-seat:focus-visible,body[data-view=lichchay] .dv-tabs button:focus-visible{outline:2px solid var(--p,#059669);outline-offset:2px}
 @media(max-width:700px){body[data-view=lichchay] .dv-tbl{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}body[data-view=lichchay] .dv-tbl th,body[data-view=lichchay] .dv-tbl td{white-space:nowrap}body[data-view=lichchay] .dv-tabs button{padding:8px 10px}}
 @media(prefers-reduced-motion:reduce){body[data-view=lichchay] .dv-d,body[data-view=lichchay] .dv-t,body[data-view=lichchay] .dv-tabs button,body[data-view=lichchay] .dv-bar>div,body[data-view=lichchay] .dv-tbl tbody tr{transition:none}body[data-view=lichchay] .dv-t:hover{transform:none}}`);
+
+/* ===== ĐIỀU HÀNH: giao diện mới (mặc định). Chỉ CSS, giới hạn trong màn Điều hành, không đổi chức năng. Xóa khối addCSS này để quay lại giao diện cũ. ===== */
+addCSS(`body[data-view=dieuhanh]{--dv-r:14px;--dv-line:#e6eaf0;--dv-sh:0 1px 2px rgba(16,24,40,.05),0 6px 16px -8px rgba(16,24,40,.14);--dv-bad:#dc2626;--dv-ease:.18s ease}
+body[data-view=dieuhanh] .dx-top2{border-radius:var(--dv-r);border-color:var(--dv-line);box-shadow:var(--dv-sh);padding:12px 14px}
+body[data-view=dieuhanh] .dx-dt .inp,body[data-view=dieuhanh] .dx-hd .inp{height:40px;border-radius:10px}
+body[data-view=dieuhanh] .dx-sel{border-radius:10px;border-color:var(--dv-line);transition:border-color var(--dv-ease),box-shadow var(--dv-ease)}
+body[data-view=dieuhanh] .dx-sel.open{border-color:var(--p,#059669);box-shadow:0 0 0 3px var(--vt-s,#a7f3d0)}
+body[data-view=dieuhanh] .dx-tag{border-radius:8px}
+body[data-view=dieuhanh] .dx-en{min-height:40px;transition:background var(--dv-ease),border-color var(--dv-ease),color var(--dv-ease)}
+body[data-view=dieuhanh] .dx-en.on{background:var(--p-50,#ecfdf5);border-color:var(--p,#059669);color:var(--p-d,#047857)}
+body[data-view=dieuhanh] .dx-en.on .ck{background:var(--p,#059669);border-color:var(--p,#059669)}
+body[data-view=dieuhanh] .dx-rd.on i{border-color:var(--p,#059669)}
+body[data-view=dieuhanh] .dx-rd.on i::after{background:var(--p,#059669)}
+body[data-view=dieuhanh] .dx-wrap{border-radius:var(--dv-r);border-color:var(--dv-line);box-shadow:var(--dv-sh)}
+body[data-view=dieuhanh] .dx thead th{background:#f8fafc;color:#344054;border-bottom:1px solid var(--dv-line);position:sticky;top:0;z-index:2}
+body[data-view=dieuhanh] .dx-chip{border-radius:12px;border-color:var(--dv-line);transition:border-color var(--dv-ease),box-shadow var(--dv-ease),transform var(--dv-ease)}
+@media(hover:hover){body[data-view=dieuhanh] .dx-chip:hover{transform:translateY(-1px);box-shadow:var(--dv-sh)}}
+body[data-view=dieuhanh] .dx-chip b,body[data-view=dieuhanh] .dx-chip .n{font-variant-numeric:tabular-nums}
+body[data-view=dieuhanh] .dx-chip.full{border-left-color:var(--dv-bad)}
+body[data-view=dieuhanh] .dx-addbtn{width:40px;height:40px;border-color:var(--p,#059669);color:var(--p,#059669);transition:background var(--dv-ease)}
+body[data-view=dieuhanh] .dx-addbtn:hover{background:var(--p-50,#ecfdf5)}
+body[data-view=dieuhanh] .dx-foot{color:#475467}
+body[data-view=dieuhanh] .dx-cal .dv-days{gap:6px}
+body[data-view=dieuhanh] .dx-cal .dv-d{min-height:46px;border-radius:12px;transition:background var(--dv-ease),color var(--dv-ease),box-shadow var(--dv-ease)}
+body[data-view=dieuhanh] .dx-cal .dv-d:hover:not(.sel){background:var(--p-50,#ecfdf5)}
+body[data-view=dieuhanh] .dx-cal .dv-d.sel{box-shadow:0 6px 14px -6px rgba(5,150,105,.55)}
+body[data-view=dieuhanh] .dx-cal .dv-d.tod:not(.sel){box-shadow:inset 0 0 0 1.5px var(--p,#059669)}
+body[data-view=dieuhanh] .dx-cal .dv-d b{font-variant-numeric:tabular-nums}
+body[data-view=dieuhanh] #view .card{border-radius:var(--dv-r);border:1px solid var(--dv-line);box-shadow:var(--dv-sh)}
+body[data-view=dieuhanh] #view .tbl-wrap{border-radius:12px}
+body[data-view=dieuhanh] .dx-top2 .btn,body[data-view=dieuhanh] .dx-wrap .btn,body[data-view=dieuhanh] .dx-bar .btn{min-height:40px;border-radius:10px;transition:background var(--dv-ease),border-color var(--dv-ease),box-shadow var(--dv-ease)}
+body[data-view=dieuhanh] .dx-chip:focus-visible,body[data-view=dieuhanh] .dx-en:focus-visible,body[data-view=dieuhanh] .dx-rd:focus-visible,body[data-view=dieuhanh] .dx-addbtn:focus-visible,body[data-view=dieuhanh] .dx-cal .dv-d:focus-visible{outline:2px solid var(--p,#059669);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){body[data-view=dieuhanh] .dx-chip,body[data-view=dieuhanh] .dx-en,body[data-view=dieuhanh] .dx-sel,body[data-view=dieuhanh] .dx-addbtn,body[data-view=dieuhanh] .dx-cal .dv-d{transition:none}body[data-view=dieuhanh] .dx-chip:hover{transform:none}}`);
 
 /* ===== LỆNH TỪ XA CHO ADMIN: cập nhật / tải lại máy nhân viên (từng người hoặc tất cả) =====
    - Admin bấm nút trong bảng "Tình trạng hệ thống" (khiên): ghi lệnh vào tài liệu 'hf_cmd' (chỉ chữ, Rules hiện tại đã cho phép tiền tố hf_).
