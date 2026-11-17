@@ -3327,7 +3327,7 @@ const fileThumb = v => v ? (fileIsPdf(v) ? '<b style="color:#dc2626;font-size:13
     if (f.type === 'sodo') return sdoHTML(f, v);
     if (f.type !== 'file') return f0(f, v);
     v = v ?? '';
-    return `<div class="field${f.full ? ' full' : ''}"><span>${f.label}</span><div class="img-pick"><div class="ph" data-fph>${fileThumb(v)}</div><div class="row"><label class="btn sm">${ic('upload')} Chọn file<input type="file" accept="image/*,application/pdf" hidden data-fil="${f.key}" data-max="${f.max || 2400}"></label><button type="button" class="btn sm" data-filclear>Bỏ file</button></div><input type="hidden" name="${f.key}" data-fval value="${esc(v)}"></div>${f.hint ? `<small>${f.hint}</small>` : ''}</div>`;
+    return `<div class="field${f.full ? ' full' : ''}"><span>${f.label}</span><div class="img-pick"><div class="ph" data-fph>${fileThumb(v)}</div><div class="row"><label class="btn sm">${ic('upload')} Chọn file<input type="file" accept="image/*,application/pdf" hidden data-fil="${f.key}" data-max="${f.max || 2400}"></label><button type="button" class="btn sm" data-filclear>Bỏ file</button>${typeof VEH_AUTO !== 'undefined' && VEH_AUTO[f.key] ? `<button type="button" class="btn sm" data-filread title="Đọc lại file này bằng AI và điền lại các trường của giấy tờ (chưa lưu cho đến khi bấm Lưu)">${ic('refresh')} Đọc lại</button>` : ''}</div><input type="hidden" name="${f.key}" data-fval value="${esc(v)}"></div>${f.hint ? `<small>${f.hint}</small>` : ''}</div>`;
   };
   document.addEventListener('change', e => {
     const el = e.target; if (!(el.matches && el.matches('[data-fil]')) || !el.files[0]) return;
@@ -3338,6 +3338,15 @@ const fileThumb = v => v ? (fileIsPdf(v) ? '<b style="color:#dc2626;font-size:13
       const r = new FileReader(); r.onload = () => put(r.result); r.readAsDataURL(file);
     } else resizeImage(file, +el.dataset.max || 2400).then(put).catch(() => toast('Không đọc được ảnh', 'err'));
   });
+  /* Đọc lại giấy tờ đã gắn trong form xe: dùng đúng hàm tự điền như lúc tải file lên, chỉ điền vào form, chưa lưu cho đến khi bấm Lưu */
+  const vehReread = b => {
+    const box = b.closest('.img-pick'), inp = box && box.querySelector('[data-fil]'); if (!inp) return;
+    let url = box.querySelector('[data-fval]').value;
+    if (url && url.startsWith('nxdrv:') && typeof IMGX !== 'undefined') { url = IMGX.img.get(url.slice(6)) || ''; if (!url) return toast('Ảnh đang tải về từ Google Drive, thử lại sau vài giây', '', 4000); }
+    if (!url) return toast('Chưa có file giấy tờ để đọc, hãy chọn file trước', 'err');
+    b.disabled = true; Promise.resolve(vehAuto(inp.dataset.fil, url, b.closest('.modal'))).catch(() => { }).finally(() => { b.disabled = false; });
+  };
+  document.addEventListener('click', e => { const r = e.target.closest && e.target.closest('[data-filread]'); if (r) vehReread(r); });
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-filclear]'); if (!b) return; const box = b.closest('.img-pick'); box.querySelector('[data-fval]').value = ''; box.querySelector('[data-fph]').innerHTML = ic('upload'); });
 }
 /* Icon xe: chọn kiểu + màu, hoặc tải ảnh riêng; bấm vào icon trong bảng để sửa nhanh */
@@ -6628,7 +6637,7 @@ const Auth = {
     if (mod === 'users') return u.role === 'admin';
     const r = DB.roles[u.role]; return !!(r && (r.perms[mod] || []).includes(act));
   },
-  canView: id => Auth.can(Auth.VIEWMOD[id] || id, 'view') || (id === 'chuyentoi' && typeof LXV !== 'undefined' && LXV.is() && (Auth.can('lichchay', 'view') || Auth.can('cuatoi', 'view'))),
+  canView: id => Auth.can(Auth.VIEWMOD[id] || id, 'view') || (id === 'scan' && !!Auth.user) || (id === 'chuyentoi' && typeof LXV !== 'undefined' && LXV.is() && (Auth.can('lichchay', 'view') || Auth.can('cuatoi', 'view'))),   // Scan tài liệu: mọi tài khoản đã đăng nhập đều mở được (lưu vào hồ sơ vẫn theo quyền hồ sơ)
   firstView: () => ['dashboard', 'nhanvien', 'lichchay', 'giochay', 'banggia', 'phuongtien', 'suachua', 'nhienlieu', 'lylich', 'kmxe', 'hdvc', 'hopdong', 'chamcong', 'bangluong', 'thue', 'caidat', 'data', 'users'].find(Auth.canView) || null,
   guard(mod, act, msg) { if (Auth.can(mod, act)) return true; toast(msg || `Tài khoản của bạn không có quyền ${Auth.ACTS[act].toLowerCase()} mục này`, 'err'); return false; },
   // ----- đăng nhập -----
@@ -12200,12 +12209,9 @@ addCSS(`.dv-rcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230
 .dv-rc.on b{color:var(--rc)}
 .dv-plus{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px dashed #635BFF!important;background:#EFEEFF!important;color:#5145E5!important;min-height:64px;font-weight:700}
 .dv-plus:hover{background:#E0DEFF!important}
-body[data-view=lichchay] .dv-main,body[data-view=lichchay] .dv-side{font-weight:600}
-body[data-view=lichchay] .dv-t .tm{font-size:18px;font-weight:800}body[data-view=lichchay] .dv-t .r,body[data-view=lichchay] .dv-t .r span{font-size:14px;font-weight:700}
-body[data-view=lichchay] .dv-seat{font-weight:700}body[data-view=lichchay] .dv-seat .no{font-size:16px;font-weight:800}
-body[data-view=lichchay] .dv-seat b,body[data-view=lichchay] .dv-seat .nm{font-weight:800}
-body[data-view=dieuhanh] .dx-wrap,body[data-view=dieuhanh] .dx-bar,body[data-view=dieuhanh] .dx-stats{font-weight:600}
-body[data-view=dieuhanh] .dx-chip{font-weight:700}body[data-view=dieuhanh] .dx th{font-weight:800;font-size:15px}
+body[data-view=lichchay] .dv-t .tm{font-size:18px}body[data-view=lichchay] .dv-t .r,body[data-view=lichchay] .dv-t .r span{font-size:14px}
+body[data-view=lichchay] .dv-seat .no{font-size:16px}
+body[data-view=dieuhanh] .dx th{font-size:15px}
 .sb{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:0 0 14px}
 .sb-i{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px}
 .sb-i .h{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:600}.sb-i .h em{font-style:normal;color:#64748B;font-weight:500}
@@ -15420,7 +15426,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-17T11:00';
+const APP_BUILD = '2026-11-17T14:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -15786,21 +15792,21 @@ body[data-view=lichchay] .dv-side{padding:14px}
 body[data-view=lichchay] .dv-days{gap:6px;margin:10px 0 14px}
 body[data-view=lichchay] .dv-d{min-height:46px;border-radius:12px;padding:6px 0;transition:background var(--dv-ease),color var(--dv-ease),box-shadow var(--dv-ease)}
 body[data-view=lichchay] .dv-d:hover:not(.sel){background:var(--p-50,#ecfdf5)}
-body[data-view=lichchay] .dv-d small{font-size:10px;letter-spacing:.04em;text-transform:uppercase;font-weight:600}
-body[data-view=lichchay] .dv-d b{font-size:15px;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-d small{letter-spacing:.04em;text-transform:uppercase}
+body[data-view=lichchay] .dv-d b{font-variant-numeric:tabular-nums}
 body[data-view=lichchay] .dv-d.sel{box-shadow:0 6px 14px -6px rgba(5,150,105,.55)}
 body[data-view=lichchay] .dv-d.tod:not(.sel){box-shadow:inset 0 0 0 1.5px var(--p,#059669)}
 body[data-view=lichchay] .dv-trips{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
 body[data-view=lichchay] .dv-t{border-radius:12px;border-color:var(--dv-line);padding:9px 10px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:border-color var(--dv-ease),box-shadow var(--dv-ease),transform var(--dv-ease),background var(--dv-ease)}
 @media(hover:hover){body[data-view=lichchay] .dv-t:hover{transform:translateY(-1px);box-shadow:var(--dv-sh);border-color:#c7ded4}}
 body[data-view=lichchay] .dv-t.sel{border-color:var(--p,#059669);background:var(--p-50,#ecfdf5);box-shadow:0 0 0 3px var(--vt-s,#a7f3d0)}
-body[data-view=lichchay] .dv-t .tm{font-size:16px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-body[data-view=lichchay] .dv-t .r{font-size:11.5px;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-t .tm{letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-t .r{font-variant-numeric:tabular-nums}
 body[data-view=lichchay] .dv-bar{height:6px;border-radius:999px;background:#eef1f5;margin-top:6px}
 body[data-view=lichchay] .dv-bar>div{border-radius:999px;transition:width .3s ease}
 body[data-view=lichchay] .dv-t.full .dv-bar>div{background:var(--dv-bad)}
 body[data-view=lichchay] .dv-tabs{gap:6px;padding:10px 12px;border-bottom:1px solid var(--dv-line)}
-body[data-view=lichchay] .dv-tabs button{min-height:40px;padding:8px 12px;border-radius:10px;border-bottom:0;font-weight:600;transition:background var(--dv-ease),color var(--dv-ease)}
+body[data-view=lichchay] .dv-tabs button{min-height:40px;padding:8px 12px;border-radius:10px;border-bottom:0;transition:background var(--dv-ease),color var(--dv-ease)}
 body[data-view=lichchay] .dv-tabs button:hover:not(.on){background:#f2f4f7}
 body[data-view=lichchay] .dv-tabs button.on{background:var(--p-50,#ecfdf5);color:var(--p-d,#047857)}
 body[data-view=lichchay] .dv-tabs b{font-variant-numeric:tabular-nums}
@@ -15809,7 +15815,7 @@ body[data-view=lichchay] .dv-grid{gap:10px}
 body[data-view=lichchay] .dv-grid .dv-seat{border-radius:12px}
 body[data-view=lichchay] .dv-seat .no{font-variant-numeric:tabular-nums}
 body[data-view=lichchay] .dv-seat .tag{border-radius:0 11px 0 10px}
-body[data-view=lichchay] .dv-tbl th{background:#f8fafc;color:#667085;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:9px 10px}
+body[data-view=lichchay] .dv-tbl th{background:#f8fafc;color:#667085;letter-spacing:.04em;text-transform:uppercase;padding:9px 10px}
 body[data-view=lichchay] .dv-tbl td{padding:9px 10px}
 body[data-view=lichchay] .dv-tbl td.r,body[data-view=lichchay] .dv-tbl th.r{font-variant-numeric:tabular-nums}
 body[data-view=lichchay] .dv-tbl tbody tr{transition:background var(--dv-ease)}
