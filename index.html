@@ -11489,8 +11489,8 @@ const HS = {
     const f = String(h.tenFile || '').match(/(\d{4}-\d{2}-\d{2})\.\w+$/); if (f) return f[1];
     return String(h.tg || '').slice(0, 10);
   },
-  /* sắp xếp theo ngày tăng dần (cũ → mới); cùng ngày thì theo thời điểm lưu rồi theo tên */
-  cmpH: (a, b) => HS.dkey(a).localeCompare(HS.dkey(b)) || String(a.tg || '').localeCompare(String(b.tg || '')) || HS.cmp(a, b),
+  /* sắp xếp theo ngày gần nhất lên đầu (mới → cũ); cùng ngày thì lưu sau lên trước, rồi theo tên */
+  cmpH: (a, b) => HS.dkey(b).localeCompare(HS.dkey(a)) || String(b.tg || '').localeCompare(String(a.tg || '')) || HS.cmp(a, b),
   by: id => HS.F().find(f => f.id === id),
   isYear: f => !!f && !f.cha && /^\d{4}$/.test(String(f.ten).trim()),
   years: () => HS.F().filter(HS.isYear).sort((a, b) => String(b.ten).localeCompare(String(a.ten))),
@@ -15420,7 +15420,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-17T08:00';
+const APP_BUILD = '2026-11-17T10:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
@@ -15778,6 +15778,50 @@ setInterval(() => UX.tick(), 2000);
 }
 addCSS(`.upd-bar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:270;display:flex;align-items:center;gap:10px;background:#0c4a6e;color:#fff;padding:8px 10px 8px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:12.5px;max-width:calc(100vw - 24px)}.upd-bar svg{width:16px;height:16px;flex:none}.upd-bar .btn{background:#fff;color:#0c4a6e;border-color:#fff;flex:none}`);
 window.addEventListener('load', () => { try { UPD.mount(); } catch (e) { } });
+
+/* ===== ĐẶT VÉ: giao diện mới (mặc định). Chỉ CSS, giới hạn trong màn Đặt vé, không đổi chức năng. Xóa khối addCSS này để quay lại giao diện cũ. ===== */
+addCSS(`body[data-view=lichchay]{--dv-r:14px;--dv-line:#e6eaf0;--dv-sh:0 1px 2px rgba(16,24,40,.05),0 6px 16px -8px rgba(16,24,40,.14);--dv-ok:#16a34a;--dv-warn:#d97706;--dv-bad:#dc2626;--dv-ease:.18s ease}
+body[data-view=lichchay] .dv-side,body[data-view=lichchay] .dv-main{border-radius:var(--dv-r);border:1px solid var(--dv-line);box-shadow:var(--dv-sh)}
+body[data-view=lichchay] .dv-side{padding:14px}
+body[data-view=lichchay] .dv-days{gap:6px;margin:10px 0 14px}
+body[data-view=lichchay] .dv-d{min-height:46px;border-radius:12px;padding:6px 0;transition:background var(--dv-ease),color var(--dv-ease),box-shadow var(--dv-ease)}
+body[data-view=lichchay] .dv-d:hover:not(.sel){background:var(--p-50,#ecfdf5)}
+body[data-view=lichchay] .dv-d small{font-size:10px;letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+body[data-view=lichchay] .dv-d b{font-size:15px;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-d.sel{box-shadow:0 6px 14px -6px rgba(5,150,105,.55)}
+body[data-view=lichchay] .dv-d.tod:not(.sel){box-shadow:inset 0 0 0 1.5px var(--p,#059669)}
+body[data-view=lichchay] .dv-trips{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+body[data-view=lichchay] .dv-t{border-radius:12px;border-color:var(--dv-line);padding:9px 10px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:border-color var(--dv-ease),box-shadow var(--dv-ease),transform var(--dv-ease),background var(--dv-ease)}
+@media(hover:hover){body[data-view=lichchay] .dv-t:hover{transform:translateY(-1px);box-shadow:var(--dv-sh);border-color:#c7ded4}}
+body[data-view=lichchay] .dv-t.sel{border-color:var(--p,#059669);background:var(--p-50,#ecfdf5);box-shadow:0 0 0 3px var(--vt-s,#a7f3d0)}
+body[data-view=lichchay] .dv-t .tm{font-size:16px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-t .r{font-size:11.5px;font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-bar{height:6px;border-radius:999px;background:#eef1f5;margin-top:6px}
+body[data-view=lichchay] .dv-bar>div{border-radius:999px;transition:width .3s ease}
+body[data-view=lichchay] .dv-t.full .dv-bar>div{background:var(--dv-bad)}
+body[data-view=lichchay] .dv-tabs{gap:6px;padding:10px 12px;border-bottom:1px solid var(--dv-line)}
+body[data-view=lichchay] .dv-tabs button{min-height:40px;padding:8px 12px;border-radius:10px;border-bottom:0;font-weight:600;transition:background var(--dv-ease),color var(--dv-ease)}
+body[data-view=lichchay] .dv-tabs button:hover:not(.on){background:#f2f4f7}
+body[data-view=lichchay] .dv-tabs button.on{background:var(--p-50,#ecfdf5);color:var(--p-d,#047857)}
+body[data-view=lichchay] .dv-tabs b{font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-body{padding:16px}
+body[data-view=lichchay] .dv-grid{gap:10px}
+body[data-view=lichchay] .dv-grid .dv-seat{border-radius:12px}
+body[data-view=lichchay] .dv-seat .no{font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-seat .tag{border-radius:0 11px 0 10px}
+body[data-view=lichchay] .dv-tbl th{background:#f8fafc;color:#667085;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:9px 10px}
+body[data-view=lichchay] .dv-tbl td{padding:9px 10px}
+body[data-view=lichchay] .dv-tbl td.r,body[data-view=lichchay] .dv-tbl th.r{font-variant-numeric:tabular-nums}
+body[data-view=lichchay] .dv-tbl tbody tr{transition:background var(--dv-ease)}
+body[data-view=lichchay] .dv-tbl tbody tr:nth-child(even){background:#fafbfc}
+body[data-view=lichchay] .dv-tbl tbody tr:hover{background:var(--p-50,#ecfdf5)}
+body[data-view=lichchay] .dv-ma{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border-radius:8px}
+body[data-view=lichchay] .dv-hv{border-radius:12px}
+body[data-view=lichchay] .dv-more{border-radius:12px;border-color:var(--dv-line)}
+body[data-view=lichchay] .dv-side .btn,body[data-view=lichchay] .dv-main .btn,body[data-view=lichchay] .dv-selbar .btn{min-height:40px;border-radius:10px;transition:background var(--dv-ease),border-color var(--dv-ease),box-shadow var(--dv-ease)}
+body[data-view=lichchay] .dv-t:focus-visible,body[data-view=lichchay] .dv-d:focus-visible,body[data-view=lichchay] .dv-seat:focus-visible,body[data-view=lichchay] .dv-tabs button:focus-visible{outline:2px solid var(--p,#059669);outline-offset:2px}
+@media(max-width:700px){body[data-view=lichchay] .dv-tbl{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}body[data-view=lichchay] .dv-tbl th,body[data-view=lichchay] .dv-tbl td{white-space:nowrap}body[data-view=lichchay] .dv-tabs button{padding:8px 10px}}
+@media(prefers-reduced-motion:reduce){body[data-view=lichchay] .dv-d,body[data-view=lichchay] .dv-t,body[data-view=lichchay] .dv-tabs button,body[data-view=lichchay] .dv-bar>div,body[data-view=lichchay] .dv-tbl tbody tr{transition:none}body[data-view=lichchay] .dv-t:hover{transform:none}}`);
 
 /* ===== LỆNH TỪ XA CHO ADMIN: cập nhật / tải lại máy nhân viên (từng người hoặc tất cả) =====
    - Admin bấm nút trong bảng "Tình trạng hệ thống" (khiên): ghi lệnh vào tài liệu 'hf_cmd' (chỉ chữ, Rules hiện tại đã cho phép tiền tố hf_).
