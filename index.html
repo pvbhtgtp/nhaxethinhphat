@@ -12370,7 +12370,7 @@ const LVC = {
     const o = LVC.of(t.id), rev = LVC.rev(t);
     const cand = LVC.all().filter(x => x.tt === 'mo' && x.chuyen !== t.id && ((x.xeId && x.xeId === t.xeId) || (x.laiXe && x.laiXe === t.laiXe)) && String(x.ngay) <= String(t.ngay)).sort((a, b) => (a.ngay + a.gio).localeCompare(b.ngay + b.gio));
     const closed = LVC.closedBy(t.id);
-    const mine = o ? `<div class="lvc-box"><div class="h"><b>Lệnh của chuyến này</b><span class="badge ${o.tt === 'dong' ? 'b-green' : 'b-amber'}">${o.tt === 'dong' ? 'Đã đóng lệnh' : 'Đang mở · xe đang chạy'}</span></div><div class="lvc-no">${esc(o.so)}</div><div class="muted small">${esc(o.tuyen)} · ${esc(o.gio)} ${F.date(o.ngay)} · cấp bởi ${esc(o.nguoi || '')} lúc ${esc(dvLog.fmt(o.tg))}${o.tt === 'dong' ? `<br>Đã đóng tại <b>${esc(o.diemDong || '')}</b> lúc ${esc(dvLog.fmt(o.tgDong))} (lệnh về ${esc(o.soVe || '')})` : ''}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn pri" data-lv="print">${ic('printer')} In lệnh</button><button class="btn" data-lv="save">${ic('folder')} Lưu hồ sơ</button>${o.tt === 'mo' ? '<button class="btn danger" data-lv="cancel">Hủy lệnh</button>' : ''}</div></div>`
+    const mine = o ? `<div class="lvc-box"><div class="h"><b>Lệnh của chuyến này</b><span class="badge ${o.tt === 'dong' ? 'b-green' : 'b-amber'}">${o.tt === 'dong' ? 'Đã đóng lệnh' : 'Đang mở · xe đang chạy'}</span></div><div class="lvc-no">${esc(o.so)}</div><div class="muted small">${esc(o.tuyen)} · ${esc(o.gio)} ${F.date(o.ngay)} · cấp bởi ${esc(o.nguoi || '')} lúc ${esc(dvLog.fmt(o.tg))}${o.tt === 'dong' ? `<br>Đã đóng tại <b>${esc(o.diemDong || '')}</b> lúc ${esc(dvLog.fmt(o.tgDong))} (lệnh về ${esc(o.soVe || '')})` : ''}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn pri" data-lv="print">${ic('printer')} In lệnh</button><button class="btn" data-lv="save">${ic('folder')} Lưu hồ sơ</button>${LVS.btn(o)}${o.tt === 'mo' ? '<button class="btn danger" data-lv="cancel">Hủy lệnh</button>' : ''}</div></div>`
       : `<div class="lvc-box"><div class="h"><b>Lệnh của chuyến này</b><span class="badge b-gray">Chưa cấp</span></div><div class="muted small">Cấp lệnh tại điểm đi <b>${esc(V2U.ends(t).di)}</b>. Số lệnh tự lấy theo <b>giờ phút ngày</b> xuất bến: <b>${esc(LVC.so(t))}</b></div><div class="row" style="margin-top:8px"><button class="btn pri" data-lv="issue">🧾 Cấp lệnh &amp; in</button></div></div>`;
     const list = cand.length ? cand.map(x => `<label class="lvc-r"><input type="checkbox" data-lv-ck="${x.id}" ${x.tuyen === rev ? 'checked' : ''}><span><b>${esc(x.so)}</b><br><small>${esc(x.tuyen)} · ${esc(x.gio)} ${F.date(x.ngay)} · xe ${esc((DB.vehicles.find(v => v.id === x.xeId) || {}).bks || '')}</small></span></label>`).join('') : '<div class="muted small">Không có lệnh nào đang mở của xe / lái xe này.</div>';
     const m = Modal.open({ title: `🧾 Lệnh vận chuyển điện tử · ${esc(t.gio)} · ${esc(t.tuyen)}`, width: 680, body: `${mine}
@@ -12382,11 +12382,57 @@ const LVC = {
       if (k === 'issue') { if (!ATK.get(t.id) || ATK.get(t.id).ketLuan !== 'dat') { if (!await Modal.confirm('Chuyến này <b>chưa nghiệm thu an toàn đạt</b> trước khi khởi hành. Vẫn cấp lệnh?', { ok: 'Vẫn cấp lệnh', title: 'Chưa nghiệm thu an toàn' })) return; } const x = LVC.open(t); m.close(); App.render(); LVC.print(x); }
       else if (k === 'print') LVC.print(LVC.of(t.id));
       else if (k === 'save') LVC.archive(LVC.of(t.id));
+      else if (k === 'scan') LVS.run(LVC.of(t.id));
+      else if (k === 'scandup') LVS.warn(LVC.of(t.id), LVS.dup(LVC.of(t.id)));
       else if (k === 'cancel') { if (await Modal.confirm('Hủy lệnh vận chuyển này?', { ok: 'Hủy lệnh', danger: true })) { LVC.of(t.id).tt = 'huy'; Store.changed(); m.close(); App.render(); } }
       else if (k === 'closeSel') { const ids = [...m.el.querySelectorAll('[data-lv-ck]:checked')].map(x => x.dataset.lvCk); if (!ids.length) return toast('Hãy tick chọn lệnh cần đóng', 'err'); if (!await Modal.confirm('Lái xe đã <b>kiểm tra khoang hành khách</b>, bảo đảm <b>không còn hành khách trên xe</b> khi kết thúc hành trình?<br><span class="muted small">Theo điểm b khoản 8 Điều 11 Nghị định 158/2024/NĐ-CP</span>', { ok: 'Đã kiểm tra, đóng lệnh', title: 'Kiểm tra khoang hành khách' })) return; const n = LVC.close(ids, t); LVC.all().forEach(o => { if (ids.includes(o.id)) o.ktKhoang = dvLog.now(); }); Store.changed(); m.close(); App.render(); toast(`Đã đóng ${n} lệnh vận chuyển`, 'ok'); }
     });
   }
 };
+
+/* ===================== SCAN LỆNH VẬN CHUYỂN (bản giấy đã có xác nhận bến) → LƯU TRỮ HỒ SƠ =====================
+   Lưu vào: Năm › 08. Điều hành xe › Lệnh vận chuyển › Tháng MM-YYYY. Mỗi lệnh chỉ lưu 1 lần: đã có bản scan thì KHÔNG cho lưu tiếp.
+   Cần quyền Thêm hồ sơ (và nhóm 08. Điều hành xe nếu vai trò bị giới hạn nhóm) + đã kết nối Google Drive, giống các nút Lưu hồ sơ khác. */
+const LVS = {
+  ref: o => 'lvcscan:' + o.id,
+  path: o => { const y = String(o.ngay).slice(0, 4), m = String(o.ngay).slice(5, 7); return [y, '08. Điều hành xe', 'Lệnh vận chuyển', 'Tháng ' + m + '-' + y]; },
+  fname: o => String(o.so || o.id).replace(/[\\/:*?"<>|]+/g, '-') + '-scan.pdf',
+  /* đã có bản scan chưa: ưu tiên danh mục hồ sơ; máy chưa tải danh mục hồ sơ thì tin dấu đã lưu trên lệnh; Admin xóa tệp khỏi hồ sơ thì được scan lại */
+  dup(o) {
+    let h = null, n = 0; try { n = HS.H().length; h = HS.H().find(x => x.ref === LVS.ref(o)); } catch (e) { }
+    if (h) return { tg: h.tg, nguoi: h.nguoi };
+    if (o.scanHS && o.scanHS.tg && !n) return o.scanHS;
+    return null;
+  },
+  btn(o) { return LVS.dup(o) ? '<button class="btn" data-lv="scandup" title="Lệnh này đã có bản scan trong hồ sơ">✅ Đã scan vào hồ sơ</button>' : '<button class="btn" data-lv="scan" title="Chụp lệnh giấy đã có xác nhận bến và lưu vào hồ sơ (mỗi lệnh chỉ lưu 1 lần)">📷 Scan lệnh</button>'; },
+  warn(o, d) { toast('Lệnh ' + esc(o.so || '') + ' đã có bản scan trong hồ sơ' + (d && d.nguoi ? ', do ' + esc(d.nguoi) : '') + (d && d.tg ? ' lúc ' + esc(dvLog.fmt(d.tg)) : '') + '. Không lưu tiếp.', 'err', 6500); },
+  pick() { return new Promise(res => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true; i.style.display = 'none'; document.body.appendChild(i); let done = false; const fin = a => { if (done) return; done = true; i.remove(); res(a); }; i.onchange = () => fin([...i.files]); i.addEventListener('cancel', () => fin([])); i.click(); }); },
+  /* ảnh → 1 trang PDF (A4 dọc, hoặc ngang nếu ảnh chụp ngang), nền trắng, JPEG nhẹ */
+  async page(file) {
+    let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await new Promise((ok, no) => { const im = new Image(), u = URL.createObjectURL(file); im.onload = () => { ok(im); }; im.onerror = no; im.src = u; }); }
+    const bw = bmp.width, bh = bmp.height, land = bw > bh, W = land ? 1754 : 1240, H = land ? 1240 : 1754, k = Math.min(W / bw, H / bh), c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, (W - bw * k) / 2, (H - bh * k) / 2, bw * k, bh * k);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82)); return { w: W, h: H, d: new Uint8Array(await blob.arrayBuffer()), land };
+  },
+  async run(o) {
+    if (!o) return;
+    let d = LVS.dup(o); if (d) return LVS.warn(o, d);
+    if (!Auth.can('hoso', 'add')) return toast('Bạn chưa được cấp quyền thêm hồ sơ vào Lưu trữ hồ sơ, nên chưa lưu được bản scan lệnh. Liên hệ quản lý để được cấp.', 'err', 6500);
+    { const A = HS.allow(); if (A && !A.has(HS.norm('08. Điều hành xe'))) return toast('Nhóm hồ sơ “08. Điều hành xe” không nằm trong phạm vi được phép của tài khoản bạn, nên chưa lưu được.', 'err', 6500); }
+    if (!HS.google()) return toast('Cần kết nối Google Drive để lưu hồ sơ (module Management → Kho hồ sơ).', 'err', 7000);
+    const files = await LVS.pick(); if (!files.length) return;
+    d = LVS.dup(o); if (d) return LVS.warn(o, d);   // kiểm tra lại: có thể máy khác vừa lưu trong lúc chụp
+    try {
+      toast('Đang tạo PDF…', '', 1800); const pages = []; for (const f of files.slice(0, 8)) pages.push(await LVS.page(f));
+      const bytes = HS.makePdf(pages), b64 = HS.b64bytes(bytes); if (b64.length > HS.MAX * 1.34) throw new Error('PDF quá lớn (' + HS.size(bytes.length) + '), hãy chụp ít trang hơn');
+      const folder = HS.ensure(LVS.path(o));
+      await HS.store(b64, { folder, ten: 'Lệnh vận chuyển đã scan ' + o.so, tenFile: LVS.fname(o), mime: 'application/pdf', size: bytes.length, ref: LVS.ref(o), ghiChu: `${o.tuyen} · ${o.gio} · ${F.date(o.ngay)} · bản scan có xác nhận bến · ${pages.length} trang · ${HS.who()}` });
+      o.scanHS = { tg: dvLog.now(), nguoi: HS.who(), trang: pages.length }; Store.changed();
+      toast(`Đã lưu bản scan lệnh ${esc(o.so || '')} vào hồ sơ “${esc(HS.ptxt(folder))}”`, 'ok', 5000); if (App.cur === 'hoso') App.render();
+    } catch (e) { console.warn('LVS', e); toast('Không lưu được bản scan: ' + esc(e.message || e), 'err', 6500); }
+  }
+};
+{ const st0 = HS.store; if (st0 && !st0.__lvs) { HS.store = function (b64, o) { if (o && /^lvcscan:/.test(o.ref || '') && HS.H().some(h => h.ref === o.ref)) return Promise.reject(new Error('Lệnh này đã có bản scan trong hồ sơ, không lưu tiếp')); return st0.apply(this, arguments); }; HS.store.__lvs = 1; } }   // chốt chặn cuối: dù gọi từ đâu cũng không ghi đè bản scan lệnh đã có
 
 /* ===================== BẢNG KIỂM TRA AN TOÀN, NGHIỆM THU XE TRƯỚC KHI KHỞI HÀNH ===================== */
 const ATK = {
@@ -15426,7 +15472,7 @@ addCSS(`.sys-btn.bad{color:#dc2626}.sys-btn em{background:#dc2626}.sys-h{margin:
   setTimeout(() => { SYS.paint(); SYS.remote().catch(() => { }); if (SYS.L.length) SYS.flush(); try { const g = (DB.settings && DB.settings.gsync) || {}; if (GS.cfg().acct === true && g.acct !== true && PERM.admin() && GS.on) { DB.settings.gsync = Object.assign({}, g, { acct: true }); Store.changed(); return; } if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true && GS.on && !(DB.users || []).some(u => u.active !== false && (!u.fb || u.fbStale))) { DB.settings.gsync = Object.assign({}, DB.settings.gsync || {}, { acct: true }); Store.changed(); toast(`${ic('check')} Đã tự BẬT lại đăng nhập 1 lần cho nhân viên`, 'ok', 6000); SYS.paint(); } else if (PERM.admin() && GS.cfg().mode === 'fb' && g.acct !== true) toast(`${ic('alert')} <b>Đăng nhập 1 lần đang TẮT</b>: nhân viên không vào được app. Bật lại ở Cài đặt › Dữ liệu.`, 'err', 12000); } catch (e) { } }, 15000);
   setInterval(() => { SYS.paint(); if (PERM.admin()) SYS.remote().catch(() => { }); }, 15 * 60000);
 }
-const APP_BUILD = '2026-11-17T16:00';
+const APP_BUILD = '2026-11-18T08:00';
 /* CSS dùng chung bị lẫn vào module khi tách (hộp xem trước bản in, thanh trên cùng điện thoại; thẻ số liệu, tệp đính kèm sc-*, nhiên liệu nl-*, bảng giá) → trả về lõi */
 addCSS(`.sc-att{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.sc-a{position:relative;width:76px;height:76px}.sc-a>button:first-child{width:100%;height:100%;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;overflow:hidden;padding:0;cursor:pointer;display:grid;place-items:center;color:#dc2626;font-size:14px}.sc-a img{width:100%;height:100%;object-fit:cover}.sc-ax{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;color:#b42318}.sc-ax svg{width:12px;height:12px}
 .sc-bulk{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin-bottom:8px}.sc-bulk textarea{width:100%;font-family:inherit;font-size:13.5px;line-height:1.5;resize:vertical}.sc-bh{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}.sc-bulk[hidden]{display:none}
