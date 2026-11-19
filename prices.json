@@ -1,51 +1,51 @@
 {
-  "updatedAt": "2026-11-19T02:12:32.453Z",
+  "updatedAt": "2026-11-19T08:59:25.708Z",
   "source": "https://webgia.com/gia-xang-dau/petrolimex/",
   "unit": "dong/lit",
   "vung": 1,
-  "hieuLuc": "2026-11-12 15:56",
+  "hieuLuc": "2026-11-19 15:59",
   "gia": {
+    "E10 RON95-III": 19100,
+    "E5 RON92-II": 18570,
+    "DO 0,001S-V": 28140,
+    "DO 0,05S-II": 26340
+  },
+  "truoc": {
     "E10 RON95-III": 19840,
     "E5 RON92-II": 19390,
     "DO 0,001S-V": 28620,
     "DO 0,05S-II": 26820
   },
-  "truoc": {
-    "E10 RON95-III": 21150,
-    "E5 RON92-II": 20890,
-    "DO 0,001S-V": 30090,
-    "DO 0,05S-II": 28690
-  },
   "items": [
     {
       "name": "Xăng E10 RON 95 mức 5",
-      "vung1": 21840,
-      "vung2": 22270
+      "vung1": 21100,
+      "vung2": 21520
     },
     {
       "name": "Xăng E10 RON 95 mức 3",
-      "vung1": 19840,
-      "vung2": 20230
+      "vung1": 19100,
+      "vung2": 19480
     },
     {
       "name": "Xăng E5 RON 92 mức 2",
-      "vung1": 19390,
-      "vung2": 19770
+      "vung1": 18570,
+      "vung2": 18940
     },
     {
       "name": "Dầu DO 0,001S mức 5",
-      "vung1": 28620,
-      "vung2": 29190
+      "vung1": 28140,
+      "vung2": 28700
     },
     {
       "name": "Dầu DO 0,05S mức 2",
-      "vung1": 26820,
-      "vung2": 27350
+      "vung1": 26340,
+      "vung2": 26860
     },
     {
       "name": "Dầu hỏa 2-K",
-      "vung1": 26400,
-      "vung2": 26920
+      "vung1": 25850,
+      "vung2": 26360
     }
   ]
 }
